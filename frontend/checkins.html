@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Check-ins</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #f4f4f4;
+      padding: 20px;
+    }
+
+    h2 {
+      text-align: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+
+    th {
+      background: #007BFF;
+      color: white;
+    }
+
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+
+    .refresh {
+      display: block;
+      margin: 0 auto;
+      margin-top: 10px;
+      padding: 10px 20px;
+      background: #28a745;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    .refresh:hover {
+      background: #218838;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Lista de Check-ins</h2>
+
+  <button class="refresh" onclick="carregar()">Atualizar</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Reservation ID</th>
+        <th>Nome</th>
+        <th>CPF</th>
+        <th>Email</th>
+        <th>Status</th>
+        <th>Criado em</th>
+      </tr>
+    </thead>
+    <tbody id="tabela"></tbody>
+  </table>
+
+  <script>
+    async function carregar() {
+      const tabela = document.getElementById("tabela");
+      tabela.innerHTML = "<tr><td colspan='7'>Carregando...</td></tr>";
+
+      try {
+        const response = await fetch("http://localhost:3000/checkins");
+        const data = await response.json();
+
+        if (data.length === 0) {
+          tabela.innerHTML = "<tr><td colspan='7'>Nenhum registro</td></tr>";
+          return;
+        }
+
+        tabela.innerHTML = "";
+
+        data.forEach(item => {
+          const row = `
+            <tr>
+              <td>${item.id}</td>
+              <td>${item.reservation_id || "-"}</td>
+              <td>${item.full_name}</td>
+              <td>${item.cpf}</td>
+              <td>${item.email || "-"}</td>
+              <td>${item.status}</td>
+              <td>${item.created_at}</td>
+            </tr>
+          `;
+
+          tabela.innerHTML += row;
+        });
+      } catch (error) {
+        console.error(error);
+        tabela.innerHTML = "<tr><td colspan='7'>Erro ao carregar dados</td></tr>";
+      }
+    }
+
+    carregar();
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Pré Check-in</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      padding: 40px;
+    }
+
+    .container {
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #007BFF;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    .status {
+      margin-top: 15px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <h2>Pré Check-in</h2>
+
+    <input id="reservation_id" placeholder="ID da reserva Cloudbeds">
+    <input id="full_name" placeholder="Nome completo">
+    <input id="cpf" placeholder="CPF">
+    <input id="email" placeholder="Email">
+
+    <button onclick="enviar()">Enviar</button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    async function enviar() {
+      const reservation_id = document.getElementById("reservation_id").value;
+      const full_name = document.getElementById("full_name").value;
+      const cpf = document.getElementById("cpf").value;
+      const email = document.getElementById("email").value;
+
+      const status = document.getElementById("status");
+
+      try {
+        const response = await fetch("http://localhost:3000/checkin", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            reservation_id,
+            full_name,
+            cpf,
+            email
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          status.innerHTML = "<p style='color:red'>" + (data.error || "Erro no envio") + "</p>";
+          return;
+        }
+
+        status.innerHTML = "<p style='color:green'>" + data.message + " (ID " + data.id + ")</p>";
+
+      } catch (error) {
+        console.error(error);
+        status.innerHTML = "<p style='color:red'>Erro ao enviar: " + error.message + "</p>";
+      }
+    }
+  </script>
+
+</body>
+</html>
