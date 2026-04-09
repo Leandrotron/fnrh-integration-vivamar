@@ -6,9 +6,10 @@
 
   <style>
     body {
-      font-family: Arial;
+      font-family: Arial, sans-serif;
       background: #f4f4f4;
       padding: 20px;
+      margin: 0;
     }
 
     h2 {
@@ -26,6 +27,7 @@
       padding: 10px;
       border: 1px solid #ddd;
       text-align: left;
+      vertical-align: top;
     }
 
     th {
@@ -37,70 +39,274 @@
       background: #f9f9f9;
     }
 
-    .refresh {
-      display: block;
-      margin: 0 auto;
+    .toolbar {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
       margin-top: 10px;
-      padding: 10px 20px;
-      background: #28a745;
-      color: white;
+      flex-wrap: wrap;
+    }
+
+    .refresh,
+    .action-btn,
+    .copy-btn,
+    .wa-btn {
+      padding: 8px 10px;
       border: none;
       cursor: pointer;
+      color: white;
+      border-radius: 4px;
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 13px;
+    }
+
+    .refresh {
+      background: #28a745;
     }
 
     .refresh:hover {
       background: #218838;
     }
+
+    .action-btn {
+      background: #007BFF;
+    }
+
+    .action-btn:hover {
+      background: #0056b3;
+    }
+
+    .copy-btn {
+      background: #6f42c1;
+    }
+
+    .copy-btn:hover {
+      background: #59359c;
+    }
+
+    .wa-btn {
+      background: #25D366;
+      color: #fff;
+      text-decoration: none;
+    }
+
+    .wa-btn:hover {
+      background: #1da851;
+    }
+
+    .action-btn:disabled,
+    .copy-btn:disabled {
+      background: #999;
+      cursor: not-allowed;
+    }
+
+    .status-pill {
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: white;
+      font-size: 12px;
+      display: inline-block;
+    }
+
+    .validated {
+      background: #f0ad4e;
+    }
+
+    .sent {
+      background: #28a745;
+    }
+
+    .pending {
+      background: #6c757d;
+    }
+
+    .link-box,
+    .message-box {
+      font-size: 12px;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      padding: 6px;
+      border-radius: 4px;
+      margin-top: 6px;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .small-muted {
+      font-size: 12px;
+      color: #666;
+    }
   </style>
 </head>
 
 <body>
-
   <h2>Lista de Check-ins</h2>
 
-  <button class="refresh" onclick="carregar()">Atualizar</button>
+  <div class="toolbar">
+    <button class="refresh" onclick="carregar()">Atualizar</button>
+  </div>
 
   <table>
     <thead>
       <tr>
         <th>ID</th>
-        <th>Reservation ID</th>
+        <th>Property</th>
+        <th>Reserva</th>
+        <th>Sub-reserva</th>
         <th>Nome</th>
         <th>CPF</th>
         <th>Email</th>
+        <th>Telefone</th>
+        <th>Nascimento</th>
         <th>Status</th>
-        <th>Criado em</th>
+        <th>FNRH</th>
+        <th>Ações</th>
       </tr>
     </thead>
     <tbody id="tabela"></tbody>
   </table>
 
   <script>
+    function renderStatus(status) {
+      if (status === "validated") {
+        return `<span class="status-pill validated">validated</span>`;
+      }
+      if (status === "sent_to_fnrh") {
+        return `<span class="status-pill sent">sent_to_fnrh</span>`;
+      }
+      return `<span class="status-pill pending">${status || "pending"}</span>`;
+    }
+
+    function buildCheckinLink(item) {
+      const basePath = window.location.href.replace("checkins.html", "index.html");
+      const url = new URL(basePath);
+      url.searchParams.set("rid", item.reservation_id || "");
+      url.searchParams.set("srid", item.sub_reservation_id || "");
+      return url.toString();
+    }
+
+    function buildWhatsappMessage(item) {
+      const link = buildCheckinLink(item);
+
+      return `Olá! 😊
+
+Para agilizar seu check-in na Pousada Viva Mar, pedimos por gentileza que preencha sua ficha online pelo link abaixo:
+
+${link}
+
+Leva menos de 2 minutos.
+
+Se tiver qualquer dúvida, estamos à disposição.`;
+    }
+
+    async function copiarLink(item) {
+      const link = buildCheckinLink(item);
+
+      try {
+        await navigator.clipboard.writeText(link);
+        alert("Link copiado com sucesso.");
+      } catch (error) {
+        console.error(error);
+        alert("Não foi possível copiar automaticamente. Link:\n\n" + link);
+      }
+    }
+
+    async function copiarMensagem(item) {
+      const message = buildWhatsappMessage(item);
+
+      try {
+        await navigator.clipboard.writeText(message);
+        alert("Mensagem copiada com sucesso.");
+      } catch (error) {
+        console.error(error);
+        alert("Não foi possível copiar automaticamente.");
+      }
+    }
+
+    function buildWhatsappUrl(item) {
+      const message = buildWhatsappMessage(item);
+      return `https://wa.me/?text=${encodeURIComponent(message)}`;
+    }
+
+    async function enviarFNRH(id) {
+      try {
+        const response = await fetch(`http://localhost:3000/checkins/${id}/send-fnrh`, {
+          method: "POST"
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          alert(data.error || "Erro ao enviar");
+          return;
+        }
+
+        alert(data.message);
+        carregar();
+      } catch (error) {
+        console.error(error);
+        alert("Erro ao enviar para FNRH");
+      }
+    }
+
     async function carregar() {
       const tabela = document.getElementById("tabela");
-      tabela.innerHTML = "<tr><td colspan='7'>Carregando...</td></tr>";
+      tabela.innerHTML = "<tr><td colspan='12'>Carregando...</td></tr>";
 
       try {
         const response = await fetch("http://localhost:3000/checkins");
         const data = await response.json();
 
         if (data.length === 0) {
-          tabela.innerHTML = "<tr><td colspan='7'>Nenhum registro</td></tr>";
+          tabela.innerHTML = "<tr><td colspan='12'>Nenhum registro</td></tr>";
           return;
         }
 
         tabela.innerHTML = "";
 
         data.forEach(item => {
+          const botaoDesabilitado = item.status !== "validated" ? "disabled" : "";
+          const link = buildCheckinLink(item);
+          const message = buildWhatsappMessage(item);
+          const whatsappUrl = buildWhatsappUrl(item);
+
           const row = `
             <tr>
               <td>${item.id}</td>
+              <td>${item.property_id || "-"}</td>
               <td>${item.reservation_id || "-"}</td>
+              <td>${item.sub_reservation_id || "-"}</td>
               <td>${item.full_name}</td>
               <td>${item.cpf}</td>
               <td>${item.email || "-"}</td>
-              <td>${item.status}</td>
-              <td>${item.created_at}</td>
+              <td>${item.phone || "-"}</td>
+              <td>${item.birth_date || "-"}</td>
+              <td>${renderStatus(item.status)}</td>
+              <td>${item.fnrh_status || "pending"}</td>
+              <td>
+                <button class="action-btn" onclick="enviarFNRH(${item.id})" ${botaoDesabilitado}>
+                  Enviar FNRH
+                </button>
+
+                <button class="copy-btn" onclick='copiarLink(${JSON.stringify(item)})'>
+                  Copiar link
+                </button>
+
+                <button class="copy-btn" onclick='copiarMensagem(${JSON.stringify(item)})'>
+                  Copiar mensagem
+                </button>
+
+                <a class="wa-btn" href="${whatsappUrl}" target="_blank">
+                  Abrir no WhatsApp
+                </a>
+
+                <div class="small-muted">Link</div>
+                <div class="link-box">${link}</div>
+
+                <div class="small-muted" style="margin-top:6px;">Mensagem pronta</div>
+                <div class="message-box">${message}</div>
+              </td>
             </tr>
           `;
 
@@ -108,12 +314,11 @@
         });
       } catch (error) {
         console.error(error);
-        tabela.innerHTML = "<tr><td colspan='7'>Erro ao carregar dados</td></tr>";
+        tabela.innerHTML = "<tr><td colspan='12'>Erro ao carregar dados</td></tr>";
       }
     }
 
     carregar();
   </script>
-
 </body>
 </html>
