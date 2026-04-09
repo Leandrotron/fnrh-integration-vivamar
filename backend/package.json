@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node --check server.js && node --check database/db.js",
+    "test": "npm run check"
   },
   "keywords": [],
   "author": "",

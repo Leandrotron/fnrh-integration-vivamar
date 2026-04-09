@@ -74,6 +74,37 @@ docs/       → documentação do projeto
 
 ---
 
+## ▶️ Execução rápida (para retomar amanhã)
+
+### Backend
+
+```bash
+cd backend
+npm install
+npm run check
+npm start
+```
+
+Servidor esperado em: `http://localhost:3000`.
+
+### Frontend
+
+Abra os arquivos estáticos no navegador:
+
+- `frontend/index.html` (formulário de pré-check-in)
+- `frontend/checkins.html` (painel de check-ins)
+
+### Smoke test de API
+
+Com o backend rodando:
+
+```bash
+curl http://localhost:3000/
+curl http://localhost:3000/checkins
+```
+
+---
+
 ## 📊 Modelo de dados (resumo)
 
 Tabela principal: `checkins`
@@ -163,4 +194,3 @@ Este projeto pode evoluir para:
 ## 👨‍💻 Autor
 
 Desenvolvido internamente para a operação da Pousada Viva Mar.
-
