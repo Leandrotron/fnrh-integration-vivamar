@@ -274,6 +274,158 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
     }
   );
 });
+// =========================
+// NOVA ESTRUTURA (stays + guests) - FASE SEGURA
+// =========================
+
+// cria ou busca uma suíte (stay)
+app.post("/stays", (req, res) => {
+  const { reservation_id, sub_reservation_id } = req.body;
+
+  if (!reservation_id) {
+    return res.status(400).json({
+      error: "ID da reserva é obrigatório"
+    });
+  }
+
+  const reservationId = String(reservation_id).trim();
+  const subReservationId = String(sub_reservation_id || reservation_id).trim();
+
+  db.get(
+    `SELECT * FROM stays
+     WHERE property_id = ? AND reservation_id = ? AND sub_reservation_id = ?`,
+    [PROPERTY_ID, reservationId, subReservationId],
+    (err, row) => {
+      if (err) {
+        console.error("Erro ao consultar stay:", err);
+        return res.status(500).json({ error: "Erro no banco" });
+      }
+
+      if (row) {
+        return res.json({
+          message: "Stay já existe",
+          stay: row
+        });
+      }
+
+      db.run(
+        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id)
+         VALUES (?, ?, ?)`,
+        [PROPERTY_ID, reservationId, subReservationId],
+        function (err) {
+          if (err) {
+            console.error("Erro ao criar stay:", err);
+            return res.status(500).json({ error: "Erro ao criar stay" });
+          }
+
+          return res.json({
+            message: "Stay criado com sucesso",
+            stay: {
+              id: this.lastID,
+              property_id: PROPERTY_ID,
+              reservation_id: reservationId,
+              sub_reservation_id: subReservationId
+            }
+          });
+        }
+      );
+    }
+  );
+});
+console.log("ROTAS STAYS/GUESTS CARREGADAS");
+
+// lista stays
+app.get("/stays", (req, res) => {
+  db.all(
+    `SELECT * FROM stays
+     WHERE property_id = ?
+     ORDER BY created_at DESC`,
+    [PROPERTY_ID],
+    (err, rows) => {
+      if (err) {
+        console.error("Erro ao buscar stays:", err);
+        return res.status(500).json({ error: "Erro ao buscar stays" });
+      }
+
+      res.json(rows);
+    }
+  );
+});
+
+// cria hóspede vinculado a uma suíte
+app.post("/guests", (req, res) => {
+  const {
+    stay_id,
+    full_name,
+    cpf,
+    email,
+    phone,
+    birth_date,
+    is_adult,
+    is_main_guest
+  } = req.body;
+
+  if (!stay_id || !full_name) {
+    return res.status(400).json({
+      error: "stay_id e nome completo são obrigatórios"
+    });
+  }
+
+  const fullName = String(full_name).trim();
+  const cpfClean = cpf ? onlyDigits(cpf) : "";
+  const phoneClean = phone ? onlyDigits(phone) : "";
+  const emailClean = String(email || "").trim();
+  const birthDateClean = String(birth_date || "").trim();
+
+  db.run(
+    `INSERT INTO guests
+     (stay_id, full_name, cpf, email, phone, birth_date, is_adult, is_main_guest, status, fnrh_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      stay_id,
+      fullName,
+      cpfClean,
+      emailClean,
+      phoneClean,
+      birthDateClean,
+      is_adult ? 1 : 0,
+      is_main_guest ? 1 : 0,
+      "draft",
+      "pending"
+    ],
+    function (err) {
+      if (err) {
+        console.error("Erro ao criar hóspede:", err);
+        return res.status(500).json({ error: "Erro ao criar hóspede" });
+      }
+
+      return res.json({
+        message: "Hóspede criado com sucesso",
+        guest_id: this.lastID
+      });
+    }
+  );
+});
+
+// lista hóspedes de uma suíte
+app.get("/stays/:id/guests", (req, res) => {
+  const stayId = req.params.id;
+
+  db.all(
+    `SELECT * FROM guests
+     WHERE stay_id = ?
+     ORDER BY created_at ASC`,
+    [stayId],
+    (err, rows) => {
+      if (err) {
+        console.error("Erro ao buscar hóspedes:", err);
+        return res.status(500).json({ error: "Erro ao buscar hóspedes" });
+      }
+
+      res.json(rows);
+    }
+  );
+});
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);

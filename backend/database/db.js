@@ -3,6 +3,7 @@ const sqlite3 = require("sqlite3").verbose();
 const db = new sqlite3.Database("./database.sqlite");
 
 db.serialize(() => {
+  // estrutura atual
   db.run(`
     CREATE TABLE IF NOT EXISTS checkins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +22,46 @@ db.serialize(() => {
       fnrh_response TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-  `);
+  `, (err) => {
+    if (err) console.error("Erro ao criar tabela checkins:", err);
+    else console.log("✓ Tabela checkins pronta");
+  });
+
+  // nova estrutura: contexto da suíte
+  db.run(`
+    CREATE TABLE IF NOT EXISTS stays (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      property_id TEXT NOT NULL,
+      reservation_id TEXT NOT NULL,
+      sub_reservation_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (err) => {
+    if (err) console.error("Erro ao criar tabela stays:", err);
+    else console.log("✓ Tabela stays pronta");
+  });
+
+  // nova estrutura: hóspedes da suíte
+  db.run(`
+    CREATE TABLE IF NOT EXISTS guests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stay_id INTEGER NOT NULL,
+      full_name TEXT NOT NULL,
+      cpf TEXT,
+      email TEXT,
+      phone TEXT,
+      birth_date TEXT,
+      is_adult INTEGER DEFAULT 1,
+      is_main_guest INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'draft',
+      fnrh_status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (stay_id) REFERENCES stays(id)
+    )
+  `, (err) => {
+    if (err) console.error("Erro ao criar tabela guests:", err);
+    else console.log("✓ Tabela guests pronta");
+  });
 });
 
 module.exports = db;
