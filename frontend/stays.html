@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stays e Hóspedes - Pousada Viva Mar</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+      color: #222;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 20px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      background: #28a745;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #218838;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      padding: 16px;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      font-size: 20px;
+    }
+
+    .status {
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .stay-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+
+    .stay-card {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      transition: 0.15s ease;
+      background: #fafafa;
+    }
+
+    .stay-card:hover {
+      border-color: #28a745;
+      background: #f6fff8;
+    }
+
+    .stay-card.active {
+      border-color: #28a745;
+      background: #f0fff4;
+      box-shadow: inset 0 0 0 1px #28a745;
+    }
+
+    .stay-title {
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .stay-meta {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.4;
+    }
+
+    .empty {
+      color: #777;
+      font-size: 14px;
+      padding: 12px 0;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .detail-box {
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .detail-label {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .detail-value {
+      font-size: 15px;
+      font-weight: bold;
+    }
+
+    .guest-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .guest-card {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fafafa;
+    }
+
+    .guest-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .guest-name {
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: bold;
+      background: #e9ecef;
+      color: #333;
+    }
+
+    .badge.main {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .guest-meta {
+      font-size: 14px;
+      color: #444;
+      line-height: 1.6;
+    }
+
+    .guest-meta strong {
+      color: #222;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Stays e Hóspedes</h1>
+    <div class="subtitle">Visualização interna mínima da nova estrutura</div>
+
+    <div class="toolbar">
+      <button id="reloadBtn">Atualizar lista</button>
+    </div>
+
+    <div class="layout">
+      <section class="panel">
+        <h2>Stays</h2>
+        <div id="listStatus" class="status">Carregando...</div>
+        <div id="stayList" class="stay-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Detalhes</h2>
+        <div id="detailsEmpty" class="empty">Selecione uma stay para ver os hóspedes.</div>
+
+        <div id="detailsContent" style="display:none;">
+          <div class="detail-grid">
+            <div class="detail-box">
+              <div class="detail-label">ID da stay</div>
+              <div id="detailStayId" class="detail-value">-</div>
+            </div>
+
+            <div class="detail-box">
+              <div class="detail-label">Reserva</div>
+              <div id="detailReservation" class="detail-value">-</div>
+            </div>
+
+            <div class="detail-box">
+              <div class="detail-label">Suíte</div>
+              <div id="detailSubReservation" class="detail-value">-</div>
+            </div>
+
+            <div class="detail-box">
+              <div class="detail-label">Criada em</div>
+              <div id="detailCreatedAt" class="detail-value">-</div>
+            </div>
+
+            <div class="detail-box">
+              <div class="detail-label">Qtd. hóspedes</div>
+              <div id="detailGuestCount" class="detail-value">-</div>
+            </div>
+          </div>
+
+          <h3>Hóspedes</h3>
+          <div id="guestList" class="guest-list"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:3000";
+
+    let stays = [];
+    let selectedStayId = null;
+
+    async function fetchJson(url) {
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Erro ${res.status} ao buscar ${url}`);
+      }
+      return res.json();
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "-";
+      return value.replace("T", " ");
+    }
+
+    function renderStayList() {
+      const container = document.getElementById("stayList");
+      const status = document.getElementById("listStatus");
+
+      container.innerHTML = "";
+
+      if (!stays.length) {
+        status.textContent = "Nenhuma stay encontrada.";
+        container.innerHTML = `<div class="empty">Ainda não há stays salvas.</div>`;
+        return;
+      }
+
+      status.textContent = `${stays.length} stay(s) encontrada(s).`;
+
+      for (const stay of stays) {
+        const card = document.createElement("div");
+        card.className = "stay-card" + (stay.id === selectedStayId ? " active" : "");
+        card.innerHTML = `
+          <div class="stay-title">Stay #${stay.id}</div>
+          <div class="stay-meta">
+            <div><strong>Reserva:</strong> ${stay.reservation_id || "-"}</div>
+            <div><strong>Suíte:</strong> ${stay.sub_reservation_id || "-"}</div>
+            <div><strong>Criada em:</strong> ${formatDateTime(stay.created_at)}</div>
+          </div>
+        `;
+
+        card.addEventListener("click", () => {
+          selectedStayId = stay.id;
+          renderStayList();
+          loadStayDetails(stay);
+        });
+
+        container.appendChild(card);
+      }
+    }
+
+    function renderGuests(stay, guests) {
+      document.getElementById("detailsEmpty").style.display = "none";
+      document.getElementById("detailsContent").style.display = "block";
+
+      document.getElementById("detailStayId").textContent = stay.id ?? "-";
+      document.getElementById("detailReservation").textContent = stay.reservation_id ?? "-";
+      document.getElementById("detailSubReservation").textContent = stay.sub_reservation_id ?? "-";
+      document.getElementById("detailCreatedAt").textContent = formatDateTime(stay.created_at);
+      document.getElementById("detailGuestCount").textContent = guests.length;
+
+      const guestList = document.getElementById("guestList");
+      guestList.innerHTML = "";
+
+      if (!guests.length) {
+        guestList.innerHTML = `<div class="empty">Nenhum hóspede encontrado para esta stay.</div>`;
+        return;
+      }
+
+      for (const guest of guests) {
+        const card = document.createElement("div");
+        card.className = "guest-card";
+
+        card.innerHTML = `
+          <div class="guest-header">
+            <div class="guest-name">${guest.full_name || "-"}</div>
+            <div class="badge ${guest.is_main_guest ? "main" : ""}">
+              ${guest.is_main_guest ? "Titular" : "Acompanhante"}
+            </div>
+          </div>
+
+          <div class="guest-meta">
+            <div><strong>CPF:</strong> ${guest.cpf || "-"}</div>
+            <div><strong>Email:</strong> ${guest.email || "-"}</div>
+            <div><strong>Telefone:</strong> ${guest.phone || "-"}</div>
+            <div><strong>Nascimento:</strong> ${guest.birth_date || "-"}</div>
+            <div><strong>Status:</strong> ${guest.status || "-"}</div>
+            <div><strong>FNRH:</strong> ${guest.fnrh_status || "-"}</div>
+          </div>
+        `;
+
+        guestList.appendChild(card);
+      }
+    }
+
+    async function loadStayDetails(stay) {
+      const guestList = document.getElementById("guestList");
+      guestList.innerHTML = `<div class="empty">Carregando hóspedes...</div>`;
+
+      try {
+        const guests = await fetchJson(`${API_BASE}/stays/${stay.id}/guests`);
+        renderGuests(stay, guests);
+      } catch (error) {
+        console.error(error);
+        guestList.innerHTML = `<div class="empty">Erro ao carregar hóspedes.</div>`;
+      }
+    }
+
+    async function loadStays() {
+      const status = document.getElementById("listStatus");
+      status.textContent = "Carregando...";
+
+      try {
+        stays = await fetchJson(`${API_BASE}/stays`);
+        renderStayList();
+
+        if (stays.length) {
+          const stayToOpen =
+            stays.find(s => s.id === selectedStayId) || stays[0];
+
+          selectedStayId = stayToOpen.id;
+          renderStayList();
+          await loadStayDetails(stayToOpen);
+        } else {
+          document.getElementById("detailsEmpty").style.display = "block";
+          document.getElementById("detailsContent").style.display = "none";
+        }
+      } catch (error) {
+        console.error(error);
+        status.textContent = "Erro ao carregar stays.";
+        document.getElementById("stayList").innerHTML =
+          `<div class="empty">Não foi possível buscar as stays.</div>`;
+      }
+    }
+
+    document.getElementById("reloadBtn").addEventListener("click", loadStays);
+
+    loadStays();
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 console.log("SERVER COM SUB_RESERVATION_ID 🚀");
+require("dotenv").config();
 
 const db = require("./database/db");
 const express = require("express");
@@ -79,6 +80,97 @@ function buildFNRHPayload(checkin) {
       criadoEm: checkin.created_at
     }
   };
+}
+
+function buildFNRHStayPayload(stay, guests) {
+  return {
+    sistema: {
+      propertyId: stay.property_id,
+      stayId: stay.id,
+      reservationId: stay.reservation_id,
+      subReservationId: stay.sub_reservation_id
+    },
+    reserva: {
+      idReserva: stay.reservation_id,
+      idSubReserva: stay.sub_reservation_id,
+      dataEntrada: null,
+      dataSaida: null
+    },
+    hospedes: guests.map((guest) => ({
+      idLocal: guest.id,
+      titular: !!guest.is_main_guest,
+      nomeCompleto: guest.full_name || "",
+      cpf: guest.cpf || "",
+      dataNascimento: guest.birth_date || "",
+      telefone: guest.phone || "",
+      email: guest.email || ""
+    }))
+  };
+}
+
+async function sendToFNRH(payload) {
+  const mode = process.env.FNRH_MODE || "mock";
+
+  if (mode === "mock") {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        mode: "mock",
+        sent_at: new Date().toISOString(),
+        message: "Envio simulado com sucesso para FNRH",
+        payload
+      }
+    };
+  }
+
+  const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
+  const submitPath = String(process.env.FNRH_SUBMIT_PATH || "").trim();
+  const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+
+  if (!baseUrl || !submitPath || !apiKey) {
+    throw new Error("FNRH_MODE=real, mas faltam FNRH_BASE_URL, FNRH_SUBMIT_PATH ou FNRH_API_KEY");
+  }
+
+  const response = await fetch(`${baseUrl}${submitPath}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey
+    },
+    body: JSON.stringify(payload)
+  });
+
+  let body;
+  const text = await response.text();
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
+function updateGuestsFNRHStatus(guestIds, fnrhStatus, statusValue, callback) {
+  if (!guestIds.length) return callback();
+
+  const placeholders = guestIds.map(() => "?").join(",");
+
+  db.run(
+    `UPDATE guests
+     SET fnrh_status = ?, status = ?
+     WHERE id IN (${placeholders})`,
+    [fnrhStatus, statusValue, ...guestIds],
+    function (err) {
+      callback(err);
+    }
+  );
 }
 
 // =========================
@@ -377,34 +469,81 @@ app.post("/guests", (req, res) => {
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
 
-  db.run(
-    `INSERT INTO guests
-     (stay_id, full_name, cpf, email, phone, birth_date, is_adult, is_main_guest, status, fnrh_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      stay_id,
-      fullName,
-      cpfClean,
-      emailClean,
-      phoneClean,
-      birthDateClean,
-      is_adult ? 1 : 0,
-      is_main_guest ? 1 : 0,
-      "draft",
-      "pending"
-    ],
-    function (err) {
-      if (err) {
-        console.error("Erro ao criar hóspede:", err);
-        return res.status(500).json({ error: "Erro ao criar hóspede" });
-      }
+  // 🔍 1. tentar encontrar hóspede existente
+  const query = cpfClean
+    ? `SELECT * FROM guests WHERE stay_id = ? AND cpf = ?`
+    : `SELECT * FROM guests WHERE stay_id = ? AND full_name = ? AND birth_date = ?`;
 
-      return res.json({
-        message: "Hóspede criado com sucesso",
-        guest_id: this.lastID
-      });
+  const params = cpfClean
+    ? [stay_id, cpfClean]
+    : [stay_id, fullName, birthDateClean];
+
+  db.get(query, params, (err, existing) => {
+    if (err) {
+      console.error("Erro ao buscar hóspede:", err);
+      return res.status(500).json({ error: "Erro no banco" });
     }
-  );
+
+    // 🔄 2. se já existe → UPDATE
+    if (existing) {
+      db.run(
+        `UPDATE guests
+         SET email = ?, phone = ?, birth_date = ?, is_adult = ?, is_main_guest = ?
+         WHERE id = ?`,
+        [
+          emailClean,
+          phoneClean,
+          birthDateClean,
+          is_adult ? 1 : 0,
+          is_main_guest ? 1 : 0,
+          existing.id
+        ],
+        function (err) {
+          if (err) {
+            console.error("Erro ao atualizar hóspede:", err);
+            return res.status(500).json({ error: "Erro ao atualizar hóspede" });
+          }
+
+          return res.json({
+            message: "Hóspede atualizado",
+            guest_id: existing.id
+          });
+        }
+      );
+
+      return;
+    }
+
+    // 🆕 3. se não existe → INSERT
+    db.run(
+      `INSERT INTO guests
+       (stay_id, full_name, cpf, email, phone, birth_date, is_adult, is_main_guest, status, fnrh_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        stay_id,
+        fullName,
+        cpfClean,
+        emailClean,
+        phoneClean,
+        birthDateClean,
+        is_adult ? 1 : 0,
+        is_main_guest ? 1 : 0,
+        "draft",
+        "pending"
+      ],
+      function (err) {
+        if (err) {
+          console.error("Erro ao criar hóspede:", err);
+          return res.status(500).json({ error: "Erro ao criar hóspede" });
+        }
+
+        return res.json({
+          message: "Hóspede criado com sucesso",
+          guest_id: this.lastID
+        });
+      }
+    );
+  });
 });
 
 // lista hóspedes de uma suíte
@@ -423,6 +562,100 @@ app.get("/stays/:id/guests", (req, res) => {
       }
 
       res.json(rows);
+    }
+  );
+});
+
+app.post("/stays/:id/send-fnrh", (req, res) => {
+  const stayId = req.params.id;
+
+  db.get(
+    `SELECT * FROM stays
+     WHERE id = ? AND property_id = ?`,
+    [stayId, PROPERTY_ID],
+    async (err, stay) => {
+      if (err) {
+        console.error("Erro ao buscar stay:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar stay" });
+      }
+
+      if (!stay) {
+        return res.status(404).json({ error: "Stay não encontrada" });
+      }
+
+      db.all(
+        `SELECT * FROM guests
+         WHERE stay_id = ?
+         ORDER BY created_at ASC`,
+        [stayId],
+        async (err, guests) => {
+          if (err) {
+            console.error("Erro ao buscar hóspedes:", err);
+            return res.status(500).json({ error: "Erro no banco ao buscar hóspedes" });
+          }
+
+          if (!guests || !guests.length) {
+            return res.status(400).json({ error: "Stay sem hóspedes para envio" });
+          }
+
+          const missingMainGuest = !guests.some((g) => g.is_main_guest);
+          if (missingMainGuest) {
+            return res.status(400).json({ error: "Nenhum hóspede titular encontrado na stay" });
+          }
+
+          const payload = buildFNRHStayPayload(stay, guests);
+          const guestIds = guests.map((g) => g.id);
+
+          try {
+            const result = await sendToFNRH(payload);
+
+            if (result.ok) {
+              updateGuestsFNRHStatus(guestIds, "sent", "sent_to_fnrh", (updateErr) => {
+                if (updateErr) {
+                  console.error("Erro ao atualizar status FNRH dos hóspedes:", updateErr);
+                  return res.status(500).json({
+                    error: "Enviado, mas falhou ao atualizar status local"
+                  });
+                }
+
+                return res.json({
+                  message: "Stay enviada para FNRH com sucesso",
+                  stay_id: stay.id,
+                  fnrh_mode: process.env.FNRH_MODE || "mock",
+                  response_status: result.status,
+                  response_body: result.body
+                });
+              });
+            } else {
+              updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
+                if (updateErr) {
+                  console.error("Erro ao marcar falha FNRH:", updateErr);
+                }
+
+                return res.status(502).json({
+                  error: "Falha no envio para FNRH",
+                  stay_id: stay.id,
+                  fnrh_mode: process.env.FNRH_MODE || "mock",
+                  response_status: result.status,
+                  response_body: result.body
+                });
+              });
+            }
+          } catch (sendErr) {
+            console.error("Erro ao enviar para FNRH:", sendErr);
+
+            updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
+              if (updateErr) {
+                console.error("Erro ao marcar status de erro FNRH:", updateErr);
+              }
+
+              return res.status(500).json({
+                error: sendErr.message || "Erro interno ao enviar para FNRH"
+              });
+            });
+          }
+        }
+      );
     }
   );
 });

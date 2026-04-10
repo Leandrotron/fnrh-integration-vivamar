@@ -62,6 +62,12 @@ db.serialize(() => {
     if (err) console.error("Erro ao criar tabela guests:", err);
     else console.log("✓ Tabela guests pronta");
   });
+
+  // índice para otimizar busca de hóspedes por stay_id e cpf
+  db.run(`CREATE INDEX IF NOT EXISTS idx_guests_stay_cpf ON guests (stay_id, cpf)`, (err) => {
+    if (err) console.error("Erro ao criar índice idx_guests_stay_cpf:", err);
+    else console.log("✓ Índice idx_guests_stay_cpf criado");
+  });
 });
 
 module.exports = db;

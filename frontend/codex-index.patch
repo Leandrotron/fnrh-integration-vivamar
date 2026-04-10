@@ -1,0 +1,412 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 1a582fe40c39897294d83a7bc1a83ada09dfc757..ab3669008df63d5ec6a9c21c9dbb76e202611b6b 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -105,107 +105,131 @@
+       cursor: pointer;
+     }
+ 
+     button:hover {
+       background: #218838;
+     }
+ 
+     .status {
+       margin-top: 15px;
+       font-size: 14px;
+     }
+ 
+     .hidden {
+       display: none;
+     }
+ 
+     .info-box {
+       background: #f8f9fa;
+       padding: 10px;
+       border-radius: 6px;
+       font-size: 13px;
+       margin-bottom: 10px;
+       border: 1px solid #ddd;
+       text-align: left;
+     }
++
++    .guest-box {
++      margin-top: 14px;
++      border: 1px solid #ddd;
++      border-radius: 8px;
++      padding: 12px;
++      background: #fafafa;
++      text-align: left;
++    }
++
++    .guest-title {
++      margin: 0 0 8px;
++      font-size: 14px;
++      color: #333;
++    }
+   </style>
+ </head>
+ 
+ <body>
+   <div class="container">
+     <img src="logo.png" class="logo" alt="Pousada Viva Mar">
+ 
+     <h2>Finalize seu check-in</h2>
+     <div class="subtitle">Leva menos de 2 minutos 😊</div>
+ 
+     <div id="info" class="info-box hidden"></div>
+ 
+     <div id="reservation_fields">
+       <div class="field">
+         <label for="reservation_id">ID da reserva</label>
+         <input id="reservation_id" placeholder="ID da reserva">
+       </div>
+ 
+       <div class="field">
+         <label for="sub_reservation_id">ID da suíte</label>
+         <input id="sub_reservation_id" placeholder="ID da suíte">
+         <div class="field-note">Se houver só 1 suíte, pode repetir o mesmo número da reserva.</div>
+       </div>
++
++    </div>
++
++    <div class="field">
++      <label for="guest_count">Quantidade de hóspedes</label>
++      <input id="guest_count" type="number" min="1" max="10" value="1">
++      <div class="field-note">Incluindo o titular deste formulário.</div>
+     </div>
+ 
+     <div class="field">
+       <label for="full_name">Nome completo</label>
+       <input id="full_name" placeholder="Nome completo">
+       <div id="full_name_note" class="field-note"></div>
+     </div>
+ 
+     <div class="field">
+       <label for="cpf">CPF</label>
+       <input id="cpf" placeholder="000.000.000-00" maxlength="14">
+       <div id="cpf_note" class="field-note"></div>
+     </div>
+ 
+     <div class="field">
+       <label for="email">Email</label>
+       <input id="email" placeholder="Email">
+       <div id="email_note" class="field-note"></div>
+     </div>
+ 
+     <div class="field">
+       <label for="phone">Telefone</label>
+       <input id="phone" placeholder="(12) 99999-9999" maxlength="15">
+       <div id="phone_note" class="field-note"></div>
+     </div>
+ 
+     <div class="field">
+       <label for="birth_date">Data de nascimento</label>
+       <input id="birth_date" type="date">
+       <div id="birth_date_note" class="field-note"></div>
+     </div>
+ 
+     <button onclick="enviar()">Finalizar check-in</button>
+ 
++    <div id="extra_guests_container"></div>
++
+     <div id="status" class="status"></div>
+   </div>
+ 
+   <script>
+     function getParams() {
+       const p = new URLSearchParams(window.location.search);
+       return {
+         rid: p.get("rid"),
+         srid: p.get("srid")
+       };
+     }
+ 
+     function onlyDigits(value) {
+       return String(value || "").replace(/\D/g, "");
+     }
+ 
+     function formatCPF(value) {
+       const digits = onlyDigits(value).slice(0, 11);
+       return digits
+         .replace(/^(\d{3})(\d)/, "$1.$2")
+         .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+         .replace(/\.(\d{3})(\d)/, ".$1-$2");
+     }
+ 
+     function formatPhone(value) {
+@@ -333,123 +357,272 @@
+         applyFieldState("phone", "phone_note", "", "");
+         return true;
+       }
+ 
+       if (value.length < 10 || value.length > 11) {
+         applyFieldState("phone", "phone_note", "invalid", "Telefone incompleto.");
+         return false;
+       }
+ 
+       applyFieldState("phone", "phone_note", "valid", "Telefone ok.");
+       return true;
+     }
+ 
+     function validateBirthDate() {
+       const value = document.getElementById("birth_date").value;
+ 
+       if (!value) {
+         applyFieldState("birth_date", "birth_date_note", "", "");
+         return true;
+       }
+ 
+       applyFieldState("birth_date", "birth_date_note", "valid", "Data ok.");
+       return true;
+     }
+ 
++    function createExtraGuestFields(quantity) {
++      const container = document.getElementById("extra_guests_container");
++      container.innerHTML = "";
++
++      for (let i = 2; i <= quantity; i++) {
++        const box = document.createElement("div");
++        box.className = "guest-box";
++        box.innerHTML = `
++          <h3 class="guest-title">Hóspede ${i}</h3>
++          <div class="field">
++            <label for="guest_${i}_full_name">Nome completo</label>
++            <input id="guest_${i}_full_name" placeholder="Nome completo do hóspede ${i}">
++          </div>
++          <div class="field">
++            <label for="guest_${i}_cpf">CPF</label>
++            <input id="guest_${i}_cpf" placeholder="000.000.000-00" maxlength="14">
++          </div>
++          <div class="field">
++            <label for="guest_${i}_email">Email</label>
++            <input id="guest_${i}_email" placeholder="Email">
++          </div>
++          <div class="field">
++            <label for="guest_${i}_phone">Telefone</label>
++            <input id="guest_${i}_phone" placeholder="(12) 99999-9999" maxlength="15">
++          </div>
++          <div class="field">
++            <label for="guest_${i}_birth_date">Data de nascimento</label>
++            <input id="guest_${i}_birth_date" type="date">
++          </div>
++        `;
++
++        container.appendChild(box);
++      }
++    }
++
++    function getGuestCount() {
++      const raw = Number(document.getElementById("guest_count").value || 1);
++      if (!Number.isFinite(raw)) return 1;
++      return Math.min(10, Math.max(1, Math.floor(raw)));
++    }
++
++    function collectGuests() {
++      const quantity = getGuestCount();
++      const guests = [];
++
++      guests.push({
++        full_name: document.getElementById("full_name").value.trim(),
++        cpf: document.getElementById("cpf").value.trim(),
++        email: document.getElementById("email").value.trim(),
++        phone: document.getElementById("phone").value.trim(),
++        birth_date: document.getElementById("birth_date").value.trim(),
++        is_adult: 1,
++        is_main_guest: 1
++      });
++
++      for (let i = 2; i <= quantity; i++) {
++        guests.push({
++          full_name: (document.getElementById(`guest_${i}_full_name`)?.value || "").trim(),
++          cpf: (document.getElementById(`guest_${i}_cpf`)?.value || "").trim(),
++          email: (document.getElementById(`guest_${i}_email`)?.value || "").trim(),
++          phone: (document.getElementById(`guest_${i}_phone`)?.value || "").trim(),
++          birth_date: (document.getElementById(`guest_${i}_birth_date`)?.value || "").trim(),
++          is_adult: 1,
++          is_main_guest: 0
++        });
++      }
++
++      return guests;
++    }
++
++    function validateExtraGuests(guests) {
++      for (let i = 1; i < guests.length; i++) {
++        if (!guests[i].full_name) {
++          return `Preencha o nome completo do hóspede ${i + 1}.`;
++        }
++      }
++
++      return "";
++    }
++
+     function aplicarParametros() {
+       const { rid, srid } = getParams();
+ 
+       if (rid) {
+         document.getElementById("reservation_id").value = rid;
+       }
+ 
+       if (srid) {
+         document.getElementById("sub_reservation_id").value = srid;
+       }
+ 
+       if (rid || srid) {
+         document.getElementById("reservation_fields").style.display = "none";
+ 
+         document.getElementById("info").classList.remove("hidden");
+         document.getElementById("info").innerHTML = `
+           <strong>Reserva:</strong> ${rid || "-"}<br>
+           <strong>Suíte:</strong> ${srid || rid || "-"}
+         `;
+       }
+     }
+ 
+     document.getElementById("cpf").addEventListener("input", (e) => {
+       e.target.value = formatCPF(e.target.value);
+       validateCPF();
+     });
+ 
+     document.getElementById("phone").addEventListener("input", (e) => {
+       e.target.value = formatPhone(e.target.value);
+       validatePhone();
+     });
+ 
+     document.getElementById("full_name").addEventListener("blur", validateFullName);
+     document.getElementById("email").addEventListener("blur", validateEmail);
+     document.getElementById("birth_date").addEventListener("change", validateBirthDate);
++    document.getElementById("guest_count").addEventListener("input", (e) => {
++      const normalized = Math.min(10, Math.max(1, Number(e.target.value || 1)));
++      e.target.value = normalized;
++      createExtraGuestFields(normalized);
++    });
++
++    document.getElementById("extra_guests_container").addEventListener("input", (e) => {
++      if (e.target.id.includes("_cpf")) {
++        e.target.value = formatCPF(e.target.value);
++      }
++
++      if (e.target.id.includes("_phone")) {
++        e.target.value = formatPhone(e.target.value);
++      }
++    });
+ 
+     async function enviar() {
+       const reservation_id = document.getElementById("reservation_id").value.trim();
+       const sub_reservation_id = document.getElementById("sub_reservation_id").value.trim();
+       const full_name = document.getElementById("full_name").value.trim();
+       const cpf = document.getElementById("cpf").value.trim();
+       const email = document.getElementById("email").value.trim();
+       const phone = document.getElementById("phone").value.trim();
+       const birth_date = document.getElementById("birth_date").value.trim();
+ 
+       const status = document.getElementById("status");
+ 
+       const validName = validateFullName();
+       const validCpf = validateCPF();
+       const validEmail = validateEmail();
+       const validPhone = validatePhone();
+       const validBirthDate = validateBirthDate();
+ 
+       if (!reservation_id || !full_name || !cpf) {
+         status.innerHTML = "<span style='color:red'>Preencha os campos obrigatórios.</span>";
+         return;
+       }
+ 
+       if (!validName || !validCpf || !validEmail || !validPhone || !validBirthDate) {
+         status.innerHTML = "<span style='color:red'>Corrija os campos destacados antes de continuar.</span>";
+         return;
+       }
+ 
++      const guests = collectGuests();
++      const extraGuestValidationError = validateExtraGuests(guests);
++      if (extraGuestValidationError) {
++        status.innerHTML = `<span style='color:red'>${extraGuestValidationError}</span>`;
++        return;
++      }
++
+       try {
+         const data = {
+           reservation_id,
+           sub_reservation_id,
+           full_name,
+           cpf,
+           email,
+           phone,
+           birth_date
+         };
+ 
+         const res = await fetch("http://localhost:3000/checkin", {
+           method: "POST",
+           headers: { "Content-Type": "application/json" },
+           body: JSON.stringify(data)
+         });
+ 
+         const json = await res.json();
+ 
+         if (!res.ok) {
+           status.innerHTML = "<span style='color:red'>" + json.error + "</span>";
+           return;
+         }
+ 
+-        status.innerHTML = "<span style='color:green'>Check-in realizado com sucesso!</span>";
++        status.innerHTML = "<span style='color:green'>Check-in principal realizado com sucesso!</span>";
++
++        try {
++          const stayRes = await fetch("http://localhost:3000/stays", {
++            method: "POST",
++            headers: { "Content-Type": "application/json" },
++            body: JSON.stringify({
++              reservation_id,
++              sub_reservation_id
++            })
++          });
++
++          const stayJson = await stayRes.json();
++
++          if (!stayRes.ok || !stayJson?.stay?.id) {
++            throw new Error(stayJson?.error || "Não foi possível criar/obter a stay.");
++          }
++
++          const stay_id = stayJson.stay.id;
++
++          for (const guest of guests) {
++            const guestRes = await fetch("http://localhost:3000/guests", {
++              method: "POST",
++              headers: { "Content-Type": "application/json" },
++              body: JSON.stringify({
++                stay_id,
++                full_name: guest.full_name,
++                cpf: guest.cpf,
++                email: guest.email,
++                phone: guest.phone,
++                birth_date: guest.birth_date,
++                is_adult: guest.is_adult,
++                is_main_guest: guest.is_main_guest
++              })
++            });
++
++            const guestJson = await guestRes.json();
++            if (!guestRes.ok) {
++              throw new Error(guestJson?.error || "Falha ao criar hóspede na stay.");
++            }
++          }
++
++          status.innerHTML = "<span style='color:green'>Check-in e hóspedes da stay enviados com sucesso!</span>";
++        } catch (multiGuestError) {
++          console.error(multiGuestError);
++          status.innerHTML = "<span style='color:#b26a00'>Check-in principal salvo, mas houve falha ao salvar stay/hóspedes.</span>";
++        }
+       } catch (e) {
+         console.error(e);
+         status.innerHTML = "<span style='color:red'>Erro ao enviar.</span>";
+       }
+     }
+ 
++    createExtraGuestFields(1);
+     aplicarParametros();
+   </script>
+ </body>
+-</html>
+\ No newline at end of file
++</html>
