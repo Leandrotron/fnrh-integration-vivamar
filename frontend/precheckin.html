@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pré-check-in - Pousada Viva Mar</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+      margin: 0;
+      color: #222;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      padding: 24px;
+    }
+
+    .logo {
+      max-width: 220px;
+      display: block;
+      margin: 0 auto 12px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      text-align: center;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 18px;
+      font-size: 14px;
+    }
+
+    .info-box,
+    .guest-box {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+
+    .guest-box h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .field {
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: #444;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .field-note {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      color: #fff;
+      background: #28a745;
+    }
+
+    button:hover {
+      background: #218838;
+    }
+
+    .secondary-btn {
+      background: #007BFF;
+    }
+
+    .secondary-btn:hover {
+      background: #0056b3;
+    }
+
+    .danger-btn {
+      background: #dc3545;
+    }
+
+    .danger-btn:hover {
+      background: #bd2130;
+    }
+
+    .status {
+      min-height: 18px;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="logo.png" class="logo" alt="Pousada Viva Mar">
+
+    <h1>Pré-check-in</h1>
+    <div class="subtitle">Preencha os dados da sua hospedagem</div>
+
+    <div id="stayInfo" class="info-box">Carregando dados da stay...</div>
+
+    <div id="guestList"></div>
+
+    <div class="actions">
+      <button id="addGuestBtn" class="secondary-btn" type="button">Adicionar hóspede</button>
+      <button id="submitBtn" type="button">Enviar pré-check-in</button>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:3000";
+    let stayId = "";
+    let guestIndex = 0;
+
+    function getStayIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("stay") || "";
+    }
+
+    function onlyDigits(value) {
+      return String(value || "").replace(/\D/g, "");
+    }
+
+    function formatCPF(value) {
+      const digits = onlyDigits(value).slice(0, 11);
+      return digits
+        .replace(/^(\d{3})(\d)/, "$1.$2")
+        .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+        .replace(/\.(\d{3})(\d)/, ".$1-$2");
+    }
+
+    function formatPhone(value) {
+      const digits = onlyDigits(value).slice(0, 11);
+
+      if (digits.length <= 10) {
+        return digits
+          .replace(/^(\d{2})(\d)/, "($1) $2")
+          .replace(/(\d{4})(\d)/, "$1-$2");
+      }
+
+      return digits
+        .replace(/^(\d{2})(\d)/, "($1) $2")
+        .replace(/(\d{5})(\d)/, "$1-$2");
+    }
+
+    function setStatus(message, tone) {
+      const status = document.getElementById("status");
+      status.textContent = message || "";
+      status.style.color =
+        tone === "error" ? "#b42318" :
+        tone === "success" ? "#18794e" :
+        tone === "warning" ? "#9a6700" :
+        "#555";
+    }
+
+    function createGuestCard(defaultRole) {
+      guestIndex += 1;
+      const card = document.createElement("div");
+      card.className = "guest-box";
+      card.dataset.guestIndex = String(guestIndex);
+
+      card.innerHTML = `
+        <h3>Hóspede ${guestIndex}</h3>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_full_name">Nome completo</label>
+          <input id="guest_${guestIndex}_full_name" placeholder="Nome completo">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_cpf">CPF</label>
+          <input id="guest_${guestIndex}_cpf" placeholder="000.000.000-00" maxlength="14">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_email">E-mail</label>
+          <input id="guest_${guestIndex}_email" type="email" placeholder="email@exemplo.com">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_phone">Telefone</label>
+          <input id="guest_${guestIndex}_phone" placeholder="(12) 99999-9999" maxlength="15">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_role">Tipo do hóspede</label>
+          <select id="guest_${guestIndex}_role">
+            <option value="1">Titular</option>
+            <option value="0">Acompanhante</option>
+          </select>
+          <div class="field-note">Pelo menos um hóspede deve ser titular.</div>
+        </div>
+
+        <div class="actions">
+          <button class="danger-btn remove-guest-btn" type="button">Remover hóspede</button>
+        </div>
+      `;
+
+      card.querySelector(`#guest_${guestIndex}_role`).value = defaultRole;
+
+      card.querySelector(".remove-guest-btn").addEventListener("click", () => {
+        const cards = document.querySelectorAll(".guest-box");
+        if (cards.length <= 1) {
+          setStatus("Mantenha pelo menos um hóspede no formulário.", "warning");
+          return;
+        }
+
+        card.remove();
+        setStatus("");
+      });
+
+      card.querySelector(`#guest_${guestIndex}_cpf`).addEventListener("input", (event) => {
+        event.target.value = formatCPF(event.target.value);
+      });
+
+      card.querySelector(`#guest_${guestIndex}_phone`).addEventListener("input", (event) => {
+        event.target.value = formatPhone(event.target.value);
+      });
+
+      document.getElementById("guestList").appendChild(card);
+    }
+
+    function collectGuests() {
+      return Array.from(document.querySelectorAll(".guest-box")).map((card) => {
+        const index = card.dataset.guestIndex;
+        return {
+          full_name: document.getElementById(`guest_${index}_full_name`).value.trim(),
+          cpf: document.getElementById(`guest_${index}_cpf`).value.trim(),
+          email: document.getElementById(`guest_${index}_email`).value.trim(),
+          phone: document.getElementById(`guest_${index}_phone`).value.trim(),
+          is_main_guest: document.getElementById(`guest_${index}_role`).value === "1" ? 1 : 0,
+          is_adult: 1,
+          birth_date: ""
+        };
+      });
+    }
+
+    function validateGuests(guests) {
+      if (!guests.length) {
+        return "Adicione pelo menos um hóspede.";
+      }
+
+      const mainGuestCount = guests.filter((guest) => guest.is_main_guest).length;
+      if (!mainGuestCount) {
+        return "Defina pelo menos um hóspede titular.";
+      }
+
+      const cpfSet = new Set();
+      for (const guest of guests) {
+        if (!guest.full_name) {
+          return "Preencha o nome completo de todos os hóspedes.";
+        }
+
+        const cpfDigits = onlyDigits(guest.cpf);
+        if (!cpfDigits) {
+          return "Preencha o CPF de todos os hóspedes.";
+        }
+
+        if (cpfSet.has(cpfDigits)) {
+          return "Não repita o mesmo CPF em mais de um hóspede.";
+        }
+
+        cpfSet.add(cpfDigits);
+      }
+
+      return "";
+    }
+
+    async function loadStay() {
+      stayId = getStayIdFromUrl();
+
+      if (!stayId) {
+        setStatus("Link inválido: informe o parâmetro ?stay=ID.", "error");
+        document.getElementById("stayInfo").textContent = "Stay não informada.";
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/stays/${stayId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          document.getElementById("stayInfo").textContent = data.error || "Não foi possível carregar a stay.";
+          setStatus("Não foi possível carregar os dados da stay.", "error");
+          return;
+        }
+
+        document.getElementById("stayInfo").innerHTML = `
+          <strong>Stay:</strong> ${data.id}<br>
+          <strong>Reserva:</strong> ${data.reservation_id || "-"}<br>
+          <strong>Suíte:</strong> ${data.sub_reservation_id || "-"}
+        `;
+
+        document.getElementById("guestList").innerHTML = "";
+        guestIndex = 0;
+        createGuestCard("1");
+        setStatus("Stay carregada. Preencha os hóspedes e envie o pré-check-in.", "info");
+      } catch (error) {
+        console.error(error);
+        document.getElementById("stayInfo").textContent = "Erro de comunicação ao carregar a stay.";
+        setStatus("Erro de comunicação ao carregar a stay.", "error");
+      }
+    }
+
+    async function submitPrecheckin() {
+      if (!stayId) {
+        setStatus("Stay inválida para envio.", "error");
+        return;
+      }
+
+      const guests = collectGuests();
+      const validationError = validateGuests(guests);
+      if (validationError) {
+        setStatus(validationError, "error");
+        return;
+      }
+
+      const submitButton = document.getElementById("submitBtn");
+      submitButton.disabled = true;
+      setStatus("Enviando pré-check-in...", "info");
+
+      try {
+        for (const guest of guests) {
+          const response = await fetch(`${API_BASE}/guests`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              stay_id: stayId,
+              full_name: guest.full_name,
+              cpf: guest.cpf,
+              email: guest.email,
+              phone: guest.phone,
+              birth_date: guest.birth_date,
+              is_adult: guest.is_adult,
+              is_main_guest: guest.is_main_guest
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            setStatus(data.error || "Não foi possível salvar um dos hóspedes.", "error");
+            submitButton.disabled = false;
+            return;
+          }
+        }
+
+        setStatus("Pré-check-in enviado com sucesso. Obrigado!", "success");
+      } catch (error) {
+        console.error(error);
+        setStatus("Erro de comunicação ao enviar o pré-check-in.", "error");
+      } finally {
+        submitButton.disabled = false;
+      }
+    }
+
+    document.getElementById("addGuestBtn").addEventListener("click", () => {
+      createGuestCard("0");
+      setStatus("");
+    });
+
+    document.getElementById("submitBtn").addEventListener("click", submitPrecheckin);
+
+    loadStay();
+  </script>
+</body>
+</html>

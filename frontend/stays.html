@@ -188,6 +188,28 @@
       color: #155724;
     }
 
+    .badge.remove {
+      background: #f8d7da;
+      color: #721c24;
+      border: none;
+      cursor: pointer;
+    }
+
+    .badge.remove:hover {
+      background: #f1bfc4;
+    }
+
+    .badge.edit {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: none;
+      cursor: pointer;
+    }
+
+    .badge.edit:hover {
+      background: #b9e0e8;
+    }
+
     .guest-meta {
       font-size: 14px;
       color: #444;
@@ -198,12 +220,193 @@
       color: #222;
     }
 
+    .detail-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .secondary-btn {
+      background: #007BFF;
+    }
+
+    .secondary-btn:hover {
+      background: #0056b3;
+    }
+
+    .secondary-btn:disabled {
+      background: #9aa4af;
+      cursor: not-allowed;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .summary-box {
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .summary-title {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .status-pill {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: bold;
+      background: #e9ecef;
+      color: #333;
+    }
+
+    .status-pill.sent {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .status-pill.pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .status-pill.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .status-pill.info {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .action-status {
+      min-height: 18px;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .link-box {
+      margin-bottom: 18px;
+      padding: 14px;
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+    }
+
+    .link-title {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .link-value {
+      font-size: 14px;
+      color: #222;
+      word-break: break-all;
+      margin-bottom: 12px;
+    }
+
+    .link-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .inline-form {
+      margin-bottom: 18px;
+      padding: 14px;
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+    }
+
+    .inline-form h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-field.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .form-field label {
+      font-size: 13px;
+      color: #444;
+    }
+
+    .form-field input,
+    .form-field select {
+      width: 100%;
+      padding: 10px;
+      box-sizing: border-box;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .form-status {
+      min-height: 18px;
+      margin-top: 10px;
+      font-size: 14px;
+      color: #555;
+    }
+
     @media (max-width: 900px) {
       .layout {
         grid-template-columns: 1fr;
       }
 
       .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-row {
+        grid-template-columns: 1fr;
+      }
+
+      .form-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -257,7 +460,76 @@
             </div>
           </div>
 
+          <div class="detail-actions">
+            <button id="sendFnrhBtn" class="secondary-btn" type="button">Enviar stay para FNRH</button>
+            <button id="reloadDetailsBtn" type="button">Recarregar detalhes</button>
+          </div>
+
+          <div class="link-box">
+            <div class="link-title">Link público do pré-check-in</div>
+            <div id="precheckinLinkValue" class="link-value">Selecione uma stay para gerar o link.</div>
+            <div class="link-actions">
+              <button id="copyPrecheckinBtn" type="button">Copiar link</button>
+              <button id="openPrecheckinBtn" type="button" class="secondary-btn">Abrir link</button>
+            </div>
+          </div>
+
+          <div id="actionStatus" class="action-status"></div>
+
+          <div class="summary-row">
+            <div class="summary-box">
+              <div class="summary-title">Resumo dos hóspedes</div>
+              <div id="guestSummary" class="pill-row"></div>
+            </div>
+
+            <div class="summary-box">
+              <div class="summary-title">Status operacional</div>
+              <div id="fnrhSummary" class="pill-row"></div>
+            </div>
+          </div>
+
           <h3>Hóspedes</h3>
+          <div class="inline-form">
+            <h3 id="guestFormTitle">Adicionar hóspede à stay</h3>
+
+            <div class="form-grid">
+              <div class="form-field full-width">
+                <label for="newGuestFullName">Nome completo</label>
+                <input id="newGuestFullName" placeholder="Nome completo do hóspede">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestCpf">CPF</label>
+                <input id="newGuestCpf" placeholder="000.000.000-00" maxlength="14">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestPhone">Telefone</label>
+                <input id="newGuestPhone" placeholder="(12) 99999-9999" maxlength="15">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestEmail">E-mail</label>
+                <input id="newGuestEmail" type="email" placeholder="email@exemplo.com">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestRole">Tipo do hóspede</label>
+                <select id="newGuestRole">
+                  <option value="0">Acompanhante</option>
+                  <option value="1">Titular</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button id="addGuestBtn" type="button">Adicionar hóspede</button>
+              <button id="cancelEditBtn" type="button" class="secondary-btn" style="display:none;">Cancelar edição</button>
+            </div>
+
+            <div id="guestFormStatus" class="form-status"></div>
+          </div>
+
           <div id="guestList" class="guest-list"></div>
         </div>
       </section>
@@ -269,6 +541,8 @@
 
     let stays = [];
     let selectedStayId = null;
+    let selectedStayDetails = null;
+    let editingGuestId = null;
 
     async function fetchJson(url) {
       const res = await fetch(url);
@@ -281,6 +555,197 @@
     function formatDateTime(value) {
       if (!value) return "-";
       return value.replace("T", " ");
+    }
+
+    function onlyDigits(value) {
+      return String(value || "").replace(/\D/g, "");
+    }
+
+    function formatCPF(value) {
+      const digits = onlyDigits(value).slice(0, 11);
+      return digits
+        .replace(/^(\d{3})(\d)/, "$1.$2")
+        .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+        .replace(/\.(\d{3})(\d)/, ".$1-$2");
+    }
+
+    function formatPhone(value) {
+      const digits = onlyDigits(value).slice(0, 11);
+
+      if (digits.length <= 10) {
+        return digits
+          .replace(/^(\d{2})(\d)/, "($1) $2")
+          .replace(/(\d{4})(\d)/, "$1-$2");
+      }
+
+      return digits
+        .replace(/^(\d{2})(\d)/, "($1) $2")
+        .replace(/(\d{5})(\d)/, "$1-$2");
+    }
+
+    function setActionStatus(message, tone) {
+      const element = document.getElementById("actionStatus");
+      element.textContent = message || "";
+      element.style.color =
+        tone === "error" ? "#b42318" :
+        tone === "success" ? "#18794e" :
+        tone === "warning" ? "#9a6700" :
+        "#555";
+    }
+
+    function setGuestFormStatus(message, tone) {
+      const element = document.getElementById("guestFormStatus");
+      element.textContent = message || "";
+      element.style.color =
+        tone === "error" ? "#b42318" :
+        tone === "success" ? "#18794e" :
+        tone === "warning" ? "#9a6700" :
+        "#555";
+    }
+
+    function getPrecheckinLink(stayId) {
+      if (!stayId) return "";
+      const url = new URL("precheckin.html", window.location.href);
+      url.searchParams.set("stay", stayId);
+      return url.toString();
+    }
+
+    function resetGuestForm() {
+      editingGuestId = null;
+      document.getElementById("guestFormTitle").textContent = "Adicionar hóspede à stay";
+      document.getElementById("addGuestBtn").textContent = "Adicionar hóspede";
+      document.getElementById("cancelEditBtn").style.display = "none";
+      document.getElementById("newGuestFullName").value = "";
+      document.getElementById("newGuestCpf").value = "";
+      document.getElementById("newGuestPhone").value = "";
+      document.getElementById("newGuestEmail").value = "";
+      document.getElementById("newGuestRole").value = "0";
+      setGuestFormStatus("");
+    }
+
+    function startGuestEdit(guestId) {
+      const guest = (selectedStayDetails?.guests || []).find((item) => String(item.id) === String(guestId));
+      if (!guest) {
+        setGuestFormStatus("Não foi possível carregar os dados do hóspede para edição.", "error");
+        return;
+      }
+
+      editingGuestId = guest.id;
+      document.getElementById("guestFormTitle").textContent = "Editar hóspede da stay";
+      document.getElementById("addGuestBtn").textContent = "Salvar edição";
+      document.getElementById("cancelEditBtn").style.display = "inline-block";
+      document.getElementById("newGuestFullName").value = guest.full_name || "";
+      document.getElementById("newGuestCpf").value = formatCPF(guest.cpf || "");
+      document.getElementById("newGuestPhone").value = formatPhone(guest.phone || "");
+      document.getElementById("newGuestEmail").value = guest.email || "";
+      document.getElementById("newGuestRole").value = guest.is_main_guest ? "1" : "0";
+      setGuestFormStatus(`Editando ${guest.full_name || "hóspede"}.`, "info");
+    }
+
+    function renderPills(containerId, items) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = "";
+
+      for (const item of items) {
+        const pill = document.createElement("span");
+        pill.className = `status-pill ${item.variant || ""}`.trim();
+        pill.textContent = item.label;
+        container.appendChild(pill);
+      }
+    }
+
+    function getStayOperationalSummary(guests) {
+      const total = guests.length;
+      const mainGuests = guests.filter((guest) => guest.is_main_guest).length;
+      const companions = Math.max(0, total - mainGuests);
+      const sentCount = guests.filter((guest) => guest.fnrh_status === "sent").length;
+      const errorCount = guests.filter((guest) => guest.fnrh_status === "error").length;
+      const pendingCount = Math.max(0, total - sentCount - errorCount);
+
+      let overallLabel = "Aguardando preenchimento";
+      let overallVariant = "pending";
+
+      if (!total) {
+        overallLabel = "Sem hóspedes";
+      } else if (!mainGuests) {
+        overallLabel = "Sem titular definido";
+        overallVariant = "error";
+      } else if (sentCount === total) {
+        overallLabel = "Stay enviada";
+        overallVariant = "sent";
+      } else if (errorCount > 0) {
+        overallLabel = "Envio com erro";
+        overallVariant = "error";
+      } else {
+        overallLabel = "Pronta para envio";
+        overallVariant = "info";
+      }
+
+      return {
+        total,
+        mainGuests,
+        companions,
+        sentCount,
+        errorCount,
+        pendingCount,
+        canSend: total > 0 && mainGuests > 0,
+        overallLabel,
+        overallVariant
+      };
+    }
+
+    function updateDetailActions(stay, guests) {
+      const sendButton = document.getElementById("sendFnrhBtn");
+      const reloadButton = document.getElementById("reloadDetailsBtn");
+      const addGuestButton = document.getElementById("addGuestBtn");
+      const copyPrecheckinButton = document.getElementById("copyPrecheckinBtn");
+      const openPrecheckinButton = document.getElementById("openPrecheckinBtn");
+      const precheckinLinkValue = document.getElementById("precheckinLinkValue");
+      const summary = getStayOperationalSummary(guests);
+      const precheckinLink = getPrecheckinLink(stay?.id);
+
+      renderPills("guestSummary", [
+        { label: `${summary.total} hóspede(s)`, variant: "info" },
+        { label: `${summary.mainGuests} titular(es)`, variant: summary.mainGuests ? "sent" : "error" },
+        { label: `${summary.companions} acompanhante(s)`, variant: "pending" }
+      ]);
+
+      renderPills("fnrhSummary", [
+        { label: summary.overallLabel, variant: summary.overallVariant },
+        { label: `${summary.sentCount} enviado(s)`, variant: summary.sentCount ? "sent" : "info" },
+        { label: `${summary.pendingCount} pendente(s)`, variant: "pending" },
+        { label: `${summary.errorCount} erro(s)`, variant: summary.errorCount ? "error" : "info" }
+      ]);
+
+      sendButton.disabled = !summary.canSend;
+      reloadButton.disabled = !stay;
+      addGuestButton.disabled = !stay;
+      copyPrecheckinButton.disabled = !stay;
+      openPrecheckinButton.disabled = !stay;
+      precheckinLinkValue.textContent = precheckinLink || "Selecione uma stay para gerar o link.";
+
+      if (!stay) {
+        setActionStatus("");
+        setGuestFormStatus("Selecione uma stay para adicionar hóspedes.", "warning");
+        return;
+      }
+
+      if (!guests.length) {
+        setActionStatus("Adicione hóspedes a esta stay antes de enviar para a FNRH.", "warning");
+        return;
+      }
+
+      if (!summary.mainGuests) {
+        setActionStatus("Defina pelo menos um hóspede titular para liberar o envio da stay.", "warning");
+        return;
+      }
+
+      if (summary.sentCount === guests.length) {
+        setActionStatus("Todos os hóspedes desta stay já estão marcados como enviados para a FNRH.", "success");
+        return;
+      }
+
+      setActionStatus("Stay pronta para envio operacional pela tela interna.", "info");
     }
 
     function renderStayList() {
@@ -322,12 +787,17 @@
     function renderGuests(stay, guests) {
       document.getElementById("detailsEmpty").style.display = "none";
       document.getElementById("detailsContent").style.display = "block";
+      selectedStayDetails = { stay, guests };
 
       document.getElementById("detailStayId").textContent = stay.id ?? "-";
       document.getElementById("detailReservation").textContent = stay.reservation_id ?? "-";
       document.getElementById("detailSubReservation").textContent = stay.sub_reservation_id ?? "-";
       document.getElementById("detailCreatedAt").textContent = formatDateTime(stay.created_at);
       document.getElementById("detailGuestCount").textContent = guests.length;
+      updateDetailActions(stay, guests);
+      if (!editingGuestId) {
+        setGuestFormStatus(`Adicionando hóspedes à stay #${stay.id}.`, "info");
+      }
 
       const guestList = document.getElementById("guestList");
       guestList.innerHTML = "";
@@ -344,8 +814,16 @@
         card.innerHTML = `
           <div class="guest-header">
             <div class="guest-name">${guest.full_name || "-"}</div>
-            <div class="badge ${guest.is_main_guest ? "main" : ""}">
-              ${guest.is_main_guest ? "Titular" : "Acompanhante"}
+            <div class="pill-row">
+              <div class="badge ${guest.is_main_guest ? "main" : ""}">
+                ${guest.is_main_guest ? "Titular" : "Acompanhante"}
+              </div>
+              <button class="badge remove" type="button" data-guest-id="${guest.id}" data-guest-name="${guest.full_name || ""}">
+                Remover
+              </button>
+              <button class="badge edit" type="button" data-edit-guest-id="${guest.id}">
+                Editar
+              </button>
             </div>
           </div>
 
@@ -361,17 +839,36 @@
 
         guestList.appendChild(card);
       }
+
+      guestList.querySelectorAll("[data-guest-id]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const guestId = button.getAttribute("data-guest-id");
+          const guestName = button.getAttribute("data-guest-name") || "este hóspede";
+          await removeGuestFromSelectedStay(guestId, guestName);
+        });
+      });
+
+      guestList.querySelectorAll("[data-edit-guest-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const guestId = button.getAttribute("data-edit-guest-id");
+          startGuestEdit(guestId);
+        });
+      });
     }
 
     async function loadStayDetails(stay) {
       const guestList = document.getElementById("guestList");
       guestList.innerHTML = `<div class="empty">Carregando hóspedes...</div>`;
+      setActionStatus("Carregando detalhes da stay...", "info");
 
       try {
         const guests = await fetchJson(`${API_BASE}/stays/${stay.id}/guests`);
         renderGuests(stay, guests);
       } catch (error) {
         console.error(error);
+        selectedStayDetails = null;
+        updateDetailActions(stay, []);
+        setActionStatus("Não foi possível carregar os hóspedes desta stay.", "error");
         guestList.innerHTML = `<div class="empty">Erro ao carregar hóspedes.</div>`;
       }
     }
@@ -392,6 +889,9 @@
           renderStayList();
           await loadStayDetails(stayToOpen);
         } else {
+          selectedStayDetails = null;
+          updateDetailActions(null, []);
+          resetGuestForm();
           document.getElementById("detailsEmpty").style.display = "block";
           document.getElementById("detailsContent").style.display = "none";
         }
@@ -403,7 +903,234 @@
       }
     }
 
+    async function sendSelectedStayToFNRH() {
+      if (!selectedStayDetails?.stay?.id) {
+        setActionStatus("Selecione uma stay antes de enviar.", "warning");
+        return;
+      }
+
+      const sendButton = document.getElementById("sendFnrhBtn");
+      sendButton.disabled = true;
+      setActionStatus("Enviando stay para a FNRH...", "info");
+
+      try {
+        const response = await fetch(`${API_BASE}/stays/${selectedStayDetails.stay.id}/send-fnrh`, {
+          method: "POST"
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          setActionStatus(data.error || "Falha ao enviar a stay para a FNRH.", "error");
+          return;
+        }
+
+        const modeLabel = data.fnrh_mode ? ` (${data.fnrh_mode})` : "";
+        setActionStatus(`${data.message || "Stay enviada com sucesso."}${modeLabel}`, "success");
+        await loadStays();
+      } catch (error) {
+        console.error(error);
+        setActionStatus("Erro de comunicação ao enviar a stay para a FNRH.", "error");
+      } finally {
+        if (selectedStayDetails?.stay) {
+          updateDetailActions(selectedStayDetails.stay, selectedStayDetails.guests || []);
+        }
+      }
+    }
+
+    async function addGuestToSelectedStay() {
+      if (!selectedStayDetails?.stay?.id) {
+        setGuestFormStatus("Selecione uma stay antes de cadastrar um hóspede.", "warning");
+        return;
+      }
+
+      const fullName = document.getElementById("newGuestFullName").value.trim();
+      const cpf = document.getElementById("newGuestCpf").value.trim();
+      const cpfDigits = onlyDigits(cpf);
+      const phone = document.getElementById("newGuestPhone").value.trim();
+      const email = document.getElementById("newGuestEmail").value.trim();
+      const isMainGuest = document.getElementById("newGuestRole").value === "1" ? 1 : 0;
+
+      if (!fullName) {
+        setGuestFormStatus("Nome completo é obrigatório para adicionar o hóspede.", "error");
+        return;
+      }
+
+      if (!cpfDigits) {
+        setGuestFormStatus("CPF é obrigatório para adicionar o hóspede.", "error");
+        return;
+      }
+
+      const duplicatedGuest = (selectedStayDetails.guests || []).find((guest) => {
+        if (editingGuestId && String(guest.id) === String(editingGuestId)) {
+          return false;
+        }
+        return onlyDigits(guest.cpf) === cpfDigits;
+      });
+
+      if (duplicatedGuest) {
+        setGuestFormStatus(`Já existe um hóspede nesta stay com o CPF ${cpf}.`, "error");
+        return;
+      }
+
+      const currentGuest = editingGuestId
+        ? (selectedStayDetails.guests || []).find((guest) => String(guest.id) === String(editingGuestId))
+        : null;
+
+      const remainingMainGuests = (selectedStayDetails.guests || []).filter((guest) => {
+        if (editingGuestId && String(guest.id) === String(editingGuestId)) {
+          return false;
+        }
+        return guest.is_main_guest;
+      }).length;
+
+      if (currentGuest?.is_main_guest && !isMainGuest && remainingMainGuests === 0) {
+        setGuestFormStatus("A stay precisa manter pelo menos um hóspede titular.", "error");
+        return;
+      }
+
+      const addButton = document.getElementById("addGuestBtn");
+      const isEditing = !!editingGuestId;
+      addButton.disabled = true;
+      setGuestFormStatus(isEditing ? "Salvando edição do hóspede..." : "Salvando hóspede na stay...", "info");
+
+      try {
+        const url = isEditing ? `${API_BASE}/guests/${editingGuestId}` : `${API_BASE}/guests`;
+        const method = isEditing ? "PUT" : "POST";
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stay_id: selectedStayDetails.stay.id,
+            full_name: fullName,
+            cpf,
+            email,
+            phone,
+            birth_date: "",
+            is_adult: 1,
+            is_main_guest: isMainGuest
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          setGuestFormStatus(data.error || "Não foi possível salvar o hóspede.", "error");
+          return;
+        }
+
+        resetGuestForm();
+        await loadStayDetails(selectedStayDetails.stay);
+        setGuestFormStatus(
+          data.message || (isEditing ? "Hóspede atualizado com sucesso." : "Hóspede salvo com sucesso."),
+          "success"
+        );
+      } catch (error) {
+        console.error(error);
+        setGuestFormStatus(
+          isEditing ? "Erro de comunicação ao editar o hóspede." : "Erro de comunicação ao salvar o hóspede.",
+          "error"
+        );
+      } finally {
+        document.getElementById("addGuestBtn").disabled = false;
+      }
+    }
+
+    async function removeGuestFromSelectedStay(guestId, guestName) {
+      if (!selectedStayDetails?.stay?.id) {
+        setActionStatus("Selecione uma stay antes de remover hóspedes.", "warning");
+        return;
+      }
+
+      const guests = selectedStayDetails.guests || [];
+      const targetGuest = guests.find((guest) => String(guest.id) === String(guestId));
+      const mainGuestCount = guests.filter((guest) => guest.is_main_guest).length;
+
+      if (targetGuest?.is_main_guest && mainGuestCount <= 1) {
+        setActionStatus("Não é possível remover o único hóspede titular desta stay.", "warning");
+        return;
+      }
+
+      const confirmed = window.confirm(`Remover ${guestName} desta stay?`);
+      if (!confirmed) {
+        return;
+      }
+
+      setActionStatus("Removendo hóspede da stay...", "info");
+
+      try {
+        const response = await fetch(`${API_BASE}/guests/${guestId}`, {
+          method: "DELETE"
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        let data = {};
+
+        if (contentType.includes("application/json")) {
+          data = await response.json();
+        }
+
+        if (!response.ok) {
+          if (!contentType.includes("application/json")) {
+            setActionStatus("O backend atual ainda não reconhece a remoção de hóspedes. Reinicie o servidor e tente novamente.", "error");
+            return;
+          }
+
+          setActionStatus(data.error || "Não foi possível remover o hóspede.", "error");
+          return;
+        }
+
+        await loadStayDetails(selectedStayDetails.stay);
+        setActionStatus(data.message || "Hóspede removido com sucesso.", "success");
+      } catch (error) {
+        console.error(error);
+        setActionStatus("Erro de comunicação ao remover o hóspede.", "error");
+      }
+    }
+
+    async function copySelectedPrecheckinLink() {
+      const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
+      if (!link) {
+        setActionStatus("Selecione uma stay para copiar o link do pré-check-in.", "warning");
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(link);
+        setActionStatus("Link público do pré-check-in copiado.", "success");
+      } catch (error) {
+        console.error(error);
+        setActionStatus("Não foi possível copiar o link automaticamente.", "error");
+      }
+    }
+
+    function openSelectedPrecheckinLink() {
+      const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
+      if (!link) {
+        setActionStatus("Selecione uma stay para abrir o link do pré-check-in.", "warning");
+        return;
+      }
+
+      window.open(link, "_blank");
+    }
+
     document.getElementById("reloadBtn").addEventListener("click", loadStays);
+    document.getElementById("reloadDetailsBtn").addEventListener("click", () => {
+      if (selectedStayDetails?.stay) {
+        loadStayDetails(selectedStayDetails.stay);
+      }
+    });
+    document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
+    document.getElementById("addGuestBtn").addEventListener("click", addGuestToSelectedStay);
+    document.getElementById("cancelEditBtn").addEventListener("click", resetGuestForm);
+    document.getElementById("copyPrecheckinBtn").addEventListener("click", copySelectedPrecheckinLink);
+    document.getElementById("openPrecheckinBtn").addEventListener("click", openSelectedPrecheckinLink);
+    document.getElementById("newGuestCpf").addEventListener("input", (event) => {
+      event.target.value = formatCPF(event.target.value);
+    });
+    document.getElementById("newGuestPhone").addEventListener("input", (event) => {
+      event.target.value = formatPhone(event.target.value);
+    });
 
     loadStays();
   </script>
