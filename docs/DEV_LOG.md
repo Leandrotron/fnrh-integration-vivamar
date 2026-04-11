@@ -146,6 +146,12 @@ Interpretação:
 - A prioridade principal é FNRH, não PMS.
 - A modelagem está migrando de `checkins` para `stays + guests`.
 - O painel interno pode ser simples, desde que seja útil operacionalmente.
+- O projeto é trabalhado em duas máquinas, uma com Windows e outra com macOS.
+- O repositório deve permanecer portátil entre os dois sistemas.
+- `node_modules` é dependência local e não deve voltar ao versionamento.
+- `backend/.env` é arquivo local e deve ser recriado a partir de `backend/.env.example`.
+- `backend/database.sqlite` é arquivo local e não deve ser versionado.
+- Ao trocar de máquina, reinstalar dependências localmente antes de testar o backend.
 
 ---
 
@@ -253,6 +259,12 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Não tratar este projeto como greenfield.
 - Reiniciar o backend sempre que novas rotas forem adicionadas, para evitar testes contra servidor antigo em memória.
 - A página pública `precheckin.html` exige atualmente o parâmetro `?stay=ID`; sem ele, a stay não é carregada.
+- Em qualquer nova máquina ou novo ambiente local, assumir este fluxo mínimo antes de validar o projeto:
+  - `git pull`
+  - `npm install`
+  - `cd backend && npm install`
+  - recriar `backend/.env` a partir de `backend/.env.example`
+- Arquivos de sistema do macOS como `._*` e `.DS_Store` não fazem parte do projeto e devem continuar ignorados.
 
 ---
 
