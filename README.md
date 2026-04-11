@@ -54,6 +54,35 @@ docs/       → documentação do projeto
 
 ---
 
+## 💻 Troca de máquina
+
+Este projeto é trabalhado em duas máquinas, uma com Windows e outra com macOS.
+
+Regra prática:
+
+* o código vem do Git
+* as dependências são locais
+* `backend/.env` é local
+* `backend/database.sqlite` é local
+
+Fluxo mínimo ao abrir o projeto em outra máquina:
+
+```bash
+git pull
+npm install
+cd backend && npm install
+cp backend/.env.example backend/.env
+```
+
+Depois disso, para testar o backend localmente:
+
+```bash
+cd backend
+node server.js
+```
+
+---
+
 ## ⚙️ Stack
 
 ### Frontend
@@ -163,4 +192,3 @@ Este projeto pode evoluir para:
 ## 👨‍💻 Autor
 
 Desenvolvido internamente para a operação da Pousada Viva Mar.
-
