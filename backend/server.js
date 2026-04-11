@@ -444,6 +444,29 @@ app.get("/stays", (req, res) => {
   );
 });
 
+app.get("/stays/:id", (req, res) => {
+  const stayId = req.params.id;
+
+  db.get(
+    `SELECT id, property_id, reservation_id, sub_reservation_id, created_at
+     FROM stays
+     WHERE id = ? AND property_id = ?`,
+    [stayId, PROPERTY_ID],
+    (err, stay) => {
+      if (err) {
+        console.error("Erro ao buscar stay:", err);
+        return res.status(500).json({ error: "Erro ao buscar stay" });
+      }
+
+      if (!stay) {
+        return res.status(404).json({ error: "Stay não encontrada" });
+      }
+
+      return res.json(stay);
+    }
+  );
+});
+
 // cria hóspede vinculado a uma suíte
 app.post("/guests", (req, res) => {
   const {
@@ -562,6 +585,184 @@ app.get("/stays/:id/guests", (req, res) => {
       }
 
       res.json(rows);
+    }
+  );
+});
+
+app.delete("/guests/:id", (req, res) => {
+  const guestId = req.params.id;
+
+  db.get(
+    `SELECT guests.id, guests.stay_id, guests.is_main_guest
+     FROM guests
+     INNER JOIN stays ON stays.id = guests.stay_id
+     WHERE guests.id = ? AND stays.property_id = ?`,
+    [guestId, PROPERTY_ID],
+    (err, guest) => {
+      if (err) {
+        console.error("Erro ao buscar hóspede para remoção:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+      }
+
+      if (!guest) {
+        return res.status(404).json({ error: "Hóspede não encontrado" });
+      }
+
+      const deleteGuest = () => {
+        db.run(
+          "DELETE FROM guests WHERE id = ?",
+          [guestId],
+          function (deleteErr) {
+            if (deleteErr) {
+              console.error("Erro ao remover hóspede:", deleteErr);
+              return res.status(500).json({ error: "Erro ao remover hóspede" });
+            }
+
+            return res.json({
+              message: "Hóspede removido com sucesso",
+              guest_id: Number(guestId)
+            });
+          }
+        );
+      };
+
+      if (!guest.is_main_guest) {
+        return deleteGuest();
+      }
+
+      db.get(
+        `SELECT COUNT(*) AS main_guest_count
+         FROM guests
+         WHERE stay_id = ? AND is_main_guest = 1`,
+        [guest.stay_id],
+        (countErr, countRow) => {
+          if (countErr) {
+            console.error("Erro ao validar titulares antes da remoção:", countErr);
+            return res.status(500).json({ error: "Erro no banco ao validar titulares" });
+          }
+
+          if (Number(countRow?.main_guest_count || 0) <= 1) {
+            return res.status(400).json({
+              error: "Não é possível deixar a stay sem hóspede titular."
+            });
+          }
+
+          return deleteGuest();
+        }
+      );
+    }
+  );
+});
+
+app.put("/guests/:id", (req, res) => {
+  const guestId = req.params.id;
+  const {
+    full_name,
+    cpf,
+    email,
+    phone,
+    birth_date,
+    is_adult,
+    is_main_guest
+  } = req.body;
+
+  if (!full_name) {
+    return res.status(400).json({ error: "Nome completo é obrigatório" });
+  }
+
+  const fullName = String(full_name).trim();
+  const cpfClean = cpf ? onlyDigits(cpf) : "";
+  const phoneClean = phone ? onlyDigits(phone) : "";
+  const emailClean = String(email || "").trim();
+  const birthDateClean = String(birth_date || "").trim();
+
+  db.get(
+    `SELECT guests.*, stays.property_id
+     FROM guests
+     INNER JOIN stays ON stays.id = guests.stay_id
+     WHERE guests.id = ? AND stays.property_id = ?`,
+    [guestId, PROPERTY_ID],
+    (err, guest) => {
+      if (err) {
+        console.error("Erro ao buscar hóspede para edição:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+      }
+
+      if (!guest) {
+        return res.status(404).json({ error: "Hóspede não encontrado" });
+      }
+
+      db.get(
+        `SELECT id FROM guests
+         WHERE stay_id = ? AND cpf = ? AND id <> ?`,
+        [guest.stay_id, cpfClean, guestId],
+        (duplicateErr, duplicateGuest) => {
+          if (duplicateErr) {
+            console.error("Erro ao validar CPF duplicado:", duplicateErr);
+            return res.status(500).json({ error: "Erro no banco ao validar hóspede" });
+          }
+
+          if (cpfClean && duplicateGuest) {
+            return res.status(400).json({ error: "Já existe outro hóspede com este CPF na mesma stay" });
+          }
+
+          const executeUpdate = () => {
+            db.run(
+              `UPDATE guests
+               SET full_name = ?, cpf = ?, email = ?, phone = ?, birth_date = ?, is_adult = ?, is_main_guest = ?
+               WHERE id = ?`,
+              [
+                fullName,
+                cpfClean,
+                emailClean,
+                phoneClean,
+                birthDateClean,
+                is_adult ? 1 : 0,
+                is_main_guest ? 1 : 0,
+                guestId
+              ],
+              function (updateErr) {
+                if (updateErr) {
+                  console.error("Erro ao editar hóspede:", updateErr);
+                  return res.status(500).json({ error: "Erro ao editar hóspede" });
+                }
+
+                return res.json({
+                  message: "Hóspede atualizado com sucesso",
+                  guest_id: Number(guestId)
+                });
+              }
+            );
+          };
+
+          if (guest.is_main_guest && !is_main_guest) {
+            db.get(
+              `SELECT COUNT(*) AS main_guest_count
+               FROM guests
+               WHERE stay_id = ? AND is_main_guest = 1`,
+              [guest.stay_id],
+              (countErr, countRow) => {
+                if (countErr) {
+                  console.error("Erro ao validar titulares antes da edição:", countErr);
+                  return res.status(500).json({ error: "Erro no banco ao validar titulares" });
+                }
+
+                if (Number(countRow?.main_guest_count || 0) <= 1) {
+                  return res.status(400).json({
+                    error: "Não é possível deixar a stay sem hóspede titular."
+                  });
+                }
+
+                return executeUpdate();
+              }
+            );
+
+            return;
+          }
+
+          return executeUpdate();
+        }
+      );
     }
   );
 });
