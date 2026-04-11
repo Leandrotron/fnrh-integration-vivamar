@@ -458,6 +458,11 @@
               <div class="detail-label">Qtd. hóspedes</div>
               <div id="detailGuestCount" class="detail-value">-</div>
             </div>
+
+            <div class="detail-box">
+              <div class="detail-label">Pré-check-in</div>
+              <div id="detailPrecheckinStatus" class="detail-value">-</div>
+            </div>
           </div>
 
           <div class="detail-actions">
@@ -470,6 +475,7 @@
             <div id="precheckinLinkValue" class="link-value">Selecione uma stay para gerar o link.</div>
             <div class="link-actions">
               <button id="copyPrecheckinBtn" type="button">Copiar link</button>
+              <button id="copyWhatsappMessageBtn" type="button" class="secondary-btn">Copiar mensagem WhatsApp</button>
               <button id="openPrecheckinBtn" type="button" class="secondary-btn">Abrir link</button>
             </div>
           </div>
@@ -610,6 +616,18 @@
       return url.toString();
     }
 
+    function buildWhatsappPrecheckinMessage(link) {
+      if (!link) return "";
+
+      return `Olá! 😊
+
+Para agilizar seu check-in, pedimos que preencha seus dados no link abaixo:
+
+${link}
+
+Qualquer dúvida, estamos à disposição!`;
+    }
+
     function resetGuestForm() {
       editingGuestId = null;
       document.getElementById("guestFormTitle").textContent = "Adicionar hóspede à stay";
@@ -699,6 +717,7 @@
       const reloadButton = document.getElementById("reloadDetailsBtn");
       const addGuestButton = document.getElementById("addGuestBtn");
       const copyPrecheckinButton = document.getElementById("copyPrecheckinBtn");
+      const copyWhatsappMessageButton = document.getElementById("copyWhatsappMessageBtn");
       const openPrecheckinButton = document.getElementById("openPrecheckinBtn");
       const precheckinLinkValue = document.getElementById("precheckinLinkValue");
       const summary = getStayOperationalSummary(guests);
@@ -721,6 +740,7 @@
       reloadButton.disabled = !stay;
       addGuestButton.disabled = !stay;
       copyPrecheckinButton.disabled = !stay;
+      copyWhatsappMessageButton.disabled = !stay;
       openPrecheckinButton.disabled = !stay;
       precheckinLinkValue.textContent = precheckinLink || "Selecione uma stay para gerar o link.";
 
@@ -794,6 +814,9 @@
       document.getElementById("detailSubReservation").textContent = stay.sub_reservation_id ?? "-";
       document.getElementById("detailCreatedAt").textContent = formatDateTime(stay.created_at);
       document.getElementById("detailGuestCount").textContent = guests.length;
+      document.getElementById("detailPrecheckinStatus").textContent = guests.length
+        ? "Pré-check-in recebido"
+        : "Aguardando pré-check-in";
       updateDetailActions(stay, guests);
       if (!editingGuestId) {
         setGuestFormStatus(`Adicionando hóspedes à stay #${stay.id}.`, "info");
@@ -1104,6 +1127,22 @@
       }
     }
 
+    async function copySelectedWhatsappMessage() {
+      const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
+      if (!link) {
+        setActionStatus("Selecione uma stay para copiar a mensagem do WhatsApp.", "warning");
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(buildWhatsappPrecheckinMessage(link));
+        setActionStatus("Mensagem de WhatsApp copiada com sucesso.", "success");
+      } catch (error) {
+        console.error(error);
+        setActionStatus("Não foi possível copiar a mensagem do WhatsApp automaticamente.", "error");
+      }
+    }
+
     function openSelectedPrecheckinLink() {
       const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
       if (!link) {
@@ -1124,6 +1163,7 @@
     document.getElementById("addGuestBtn").addEventListener("click", addGuestToSelectedStay);
     document.getElementById("cancelEditBtn").addEventListener("click", resetGuestForm);
     document.getElementById("copyPrecheckinBtn").addEventListener("click", copySelectedPrecheckinLink);
+    document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copySelectedWhatsappMessage);
     document.getElementById("openPrecheckinBtn").addEventListener("click", openSelectedPrecheckinLink);
     document.getElementById("newGuestCpf").addEventListener("input", (event) => {
       event.target.value = formatCPF(event.target.value);

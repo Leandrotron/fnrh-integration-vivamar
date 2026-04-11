@@ -107,6 +107,11 @@
       background: #218838;
     }
 
+    button:disabled {
+      background: #9aa4af;
+      cursor: not-allowed;
+    }
+
     .secondary-btn {
       background: #007BFF;
     }
@@ -128,6 +133,32 @@
       margin-top: 14px;
       font-size: 14px;
     }
+
+    .summary-box {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 14px;
+    }
+
+    .summary-box h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .summary-total {
+      font-size: 14px;
+      color: #444;
+      margin-bottom: 10px;
+    }
+
+    .summary-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #222;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
@@ -147,12 +178,21 @@
     </div>
 
     <div id="status" class="status"></div>
+
+    <div id="submittedSummary" class="summary-box" style="display:none;">
+      <h3>Recebemos os dados abaixo:</h3>
+      <div id="submittedSummaryTotal" class="summary-total"></div>
+      <ul id="submittedSummaryList" class="summary-list"></ul>
+    </div>
   </div>
 
   <script>
     const API_BASE = "http://localhost:3000";
     let stayId = "";
     let guestIndex = 0;
+    let stayLoaded = false;
+    let isSubmitting = false;
+    let submissionCompleted = false;
 
     function getStayIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
@@ -195,7 +235,52 @@
         "#555";
     }
 
+    function setStayInfo(message, tone) {
+      const stayInfo = document.getElementById("stayInfo");
+      stayInfo.textContent = message || "";
+      stayInfo.style.color =
+        tone === "error" ? "#b42318" :
+        tone === "success" ? "#18794e" :
+        tone === "warning" ? "#9a6700" :
+        "#222";
+    }
+
+    function updateActionButtons() {
+      const addGuestButton = document.getElementById("addGuestBtn");
+      const submitButton = document.getElementById("submitBtn");
+
+      addGuestButton.disabled = !stayLoaded || isSubmitting || submissionCompleted;
+      submitButton.disabled = !stayLoaded || isSubmitting || submissionCompleted;
+    }
+
+    function clearSubmittedSummary() {
+      document.getElementById("submittedSummary").style.display = "none";
+      document.getElementById("submittedSummaryTotal").textContent = "";
+      document.getElementById("submittedSummaryList").innerHTML = "";
+    }
+
+    function renderSubmittedSummary(guests) {
+      const container = document.getElementById("submittedSummary");
+      const total = document.getElementById("submittedSummaryTotal");
+      const list = document.getElementById("submittedSummaryList");
+
+      total.textContent = `Total de hóspedes enviados: ${guests.length}`;
+      list.innerHTML = "";
+
+      guests.forEach((guest) => {
+        const item = document.createElement("li");
+        item.textContent = `${guest.full_name} - ${guest.is_main_guest ? "Titular" : "Acompanhante"}`;
+        list.appendChild(item);
+      });
+
+      container.style.display = "block";
+    }
+
     function createGuestCard(defaultRole) {
+      if (!stayLoaded || submissionCompleted) {
+        return;
+      }
+
       guestIndex += 1;
       const card = document.createElement("div");
       card.className = "guest-box";
@@ -310,23 +395,33 @@
 
     async function loadStay() {
       stayId = getStayIdFromUrl();
+      stayLoaded = false;
+      submissionCompleted = false;
+      isSubmitting = false;
+      document.getElementById("guestList").innerHTML = "";
+      clearSubmittedSummary();
+      setStayInfo("Carregando dados da stay...", "info");
+      setStatus("Carregando stay...", "info");
+      updateActionButtons();
 
       if (!stayId) {
-        setStatus("Link inválido: informe o parâmetro ?stay=ID.", "error");
-        document.getElementById("stayInfo").textContent = "Stay não informada.";
+        setStayInfo("Este link de pré-check-in está incompleto. Peça à recepção para enviar o link correto da sua hospedagem.", "error");
+        setStatus("Não foi possível abrir o pré-check-in porque o link está sem a identificação da stay.", "error");
         return;
       }
 
       try {
         const response = await fetch(`${API_BASE}/stays/${stayId}`);
-        const data = await response.json();
+        const contentType = response.headers.get("content-type") || "";
+        const data = contentType.includes("application/json") ? await response.json() : {};
 
         if (!response.ok) {
-          document.getElementById("stayInfo").textContent = data.error || "Não foi possível carregar a stay.";
-          setStatus("Não foi possível carregar os dados da stay.", "error");
+          setStayInfo(data.error || "Não encontramos esta hospedagem. Confirme o link enviado pela recepção.");
+          setStatus("Não foi possível carregar os dados da stay. Verifique o link recebido e tente novamente.", "error");
           return;
         }
 
+        stayLoaded = true;
         document.getElementById("stayInfo").innerHTML = `
           <strong>Stay:</strong> ${data.id}<br>
           <strong>Reserva:</strong> ${data.reservation_id || "-"}<br>
@@ -336,17 +431,24 @@
         document.getElementById("guestList").innerHTML = "";
         guestIndex = 0;
         createGuestCard("1");
-        setStatus("Stay carregada. Preencha os hóspedes e envie o pré-check-in.", "info");
+        setStatus("Stay carregada com sucesso. Preencha os hóspedes e envie o pré-check-in.", "success");
+        updateActionButtons();
       } catch (error) {
         console.error(error);
-        document.getElementById("stayInfo").textContent = "Erro de comunicação ao carregar a stay.";
+        setStayInfo("Não foi possível carregar sua hospedagem agora. Tente novamente em instantes ou fale com a recepção.");
         setStatus("Erro de comunicação ao carregar a stay.", "error");
       }
+
+      updateActionButtons();
     }
 
     async function submitPrecheckin() {
-      if (!stayId) {
+      if (!stayLoaded || !stayId) {
         setStatus("Stay inválida para envio.", "error");
+        return;
+      }
+
+      if (isSubmitting || submissionCompleted) {
         return;
       }
 
@@ -358,8 +460,9 @@
       }
 
       const submitButton = document.getElementById("submitBtn");
-      submitButton.disabled = true;
-      setStatus("Enviando pré-check-in...", "info");
+      isSubmitting = true;
+      updateActionButtons();
+      setStatus("Enviando pré-check-in... Aguarde um momento.", "info");
 
       try {
         for (const guest of guests) {
@@ -382,17 +485,23 @@
 
           if (!response.ok) {
             setStatus(data.error || "Não foi possível salvar um dos hóspedes.", "error");
-            submitButton.disabled = false;
             return;
           }
         }
 
-        setStatus("Pré-check-in enviado com sucesso. Obrigado!", "success");
+        submissionCompleted = true;
+        document.getElementById("guestList").querySelectorAll("input, select, button").forEach((field) => {
+          field.disabled = true;
+        });
+        renderSubmittedSummary(guests);
+        setStayInfo("Pré-check-in recebido com sucesso. Nossa equipe já pode dar continuidade ao seu atendimento.", "success");
+        setStatus("Pré-check-in enviado com sucesso. Obrigado! Seus dados foram recebidos.", "success");
       } catch (error) {
         console.error(error);
         setStatus("Erro de comunicação ao enviar o pré-check-in.", "error");
       } finally {
-        submitButton.disabled = false;
+        isSubmitting = false;
+        updateActionButtons();
       }
     }
 

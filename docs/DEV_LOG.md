@@ -205,6 +205,8 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Painel `stays.html` ganhou capacidade operacional de envio FNRH, inclusão, edição e remoção de hóspedes.
 - Regras de integridade de hóspede titular foram reforçadas no frontend e no backend.
 - Início da prova de conceito do pré-check-in público por link com `precheckin.html?stay=ID`.
+- Fluxo público de pré-check-in evoluiu para uma experiência mais robusta para hóspedes leigos.
+- Painel interno passou a expor melhor o link público, a mensagem pronta de WhatsApp e o status de recebimento do pré-check-in.
 
 ### Alterações realizadas
 
@@ -231,6 +233,15 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Exibição da URL no formato `precheckin.html?stay=ID` para a stay selecionada.
 - Inclusão de botões para copiar o link e abrir o pré-check-in em nova aba.
 - Tratamento do estado sem seleção com botões desabilitados e mensagem orientativa.
+- Inclusão de botão para copiar mensagem pronta de WhatsApp com o link público do pré-check-in em `frontend/stays.html`.
+- Inclusão de indicador simples no painel de detalhes da `stays.html` para mostrar se a stay já recebeu pré-check-in ou ainda está aguardando.
+- Reforço da UX de `frontend/precheckin.html` com:
+  - tratamento amigável para ausência de `?stay=ID`
+  - tratamento amigável para stay inválida ou inexistente
+  - feedback de carregamento e erro mais claros
+  - prevenção de envio duplicado
+  - travamento do formulário após envio bem-sucedido
+- Inclusão de resumo final informativo na `frontend/precheckin.html` após envio, listando hóspedes enviados e seus tipos.
 
 ### Decisões do dia
 
@@ -251,7 +262,7 @@ Ao final de cada sessão, atualizar as seções abaixo.
 
 ### Próximo passo recomendado
 
-- Evoluir a página pública de pré-check-in com mais robustez operacional, agora que o link já pode ser compartilhado a partir do painel interno.
+- Validar o fluxo completo em uso operacional real e observar se já vale distinguir, no futuro, hóspedes adicionados manualmente dos hóspedes vindos do pré-check-in público.
 
 ### Alertas e cuidados
 
@@ -286,4 +297,4 @@ Se houver investigação detalhada de bug, manter também o registro no `PROBLEM
 ## Última Atualização
 
 - Data: 2026-04-11
-- Situação geral: MVP funcional, arquitetura híbrida `checkins` + `stays/guests`, FNRH em modo `mock`, painel interno de stays operacional e primeira versão do pré-check-in público iniciada
+- Situação geral: MVP funcional, arquitetura híbrida `checkins` + `stays/guests`, FNRH em modo `mock`, painel interno de stays operacional, link público de pré-check-in integrado ao painel e página pública com UX reforçada, confirmação e resumo final
