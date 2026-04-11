@@ -9,10 +9,19 @@ yarn-error.log*
 
 # Env
 .env
+.env.*
+backend/.env
+!backend/.env.example
 
 # Sistema
 .DS_Store
 Thumbs.db
+._*
+
+# Local database
+*.sqlite
+*.sqlite3
+backend/database.sqlite
 
 # Build (caso use depois)
 dist/
