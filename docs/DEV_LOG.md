@@ -207,6 +207,9 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Início da prova de conceito do pré-check-in público por link com `precheckin.html?stay=ID`.
 - Fluxo público de pré-check-in evoluiu para uma experiência mais robusta para hóspedes leigos.
 - Painel interno passou a expor melhor o link público, a mensagem pronta de WhatsApp e o status de recebimento do pré-check-in.
+- O fluxo público de `precheckin.html` foi testado manualmente com mais profundidade nesta sessão.
+- Os testes manuais evidenciaram ambiguidades de UX no retorno de sucesso/erro e na regra de titular por lote.
+- A sessão terminou com ajustes pontuais para reduzir ambiguidade no pré-check-in público, sem refactor grande.
 
 ### Alterações realizadas
 
@@ -242,6 +245,15 @@ Ao final de cada sessão, atualizar as seções abaixo.
   - prevenção de envio duplicado
   - travamento do formulário após envio bem-sucedido
 - Inclusão de resumo final informativo na `frontend/precheckin.html` após envio, listando hóspedes enviados e seus tipos.
+- Validação mínima de CPF com exatamente 11 dígitos adicionada em `frontend/precheckin.html` e `frontend/stays.html`.
+- Reforço no backend para impedir CPF duplicado na mesma stay também em `POST /guests`, mantendo a validação em `PUT /guests/:id`.
+- Ajuste da UX de `frontend/precheckin.html` para não comunicar sucesso quando a tentativa atual falha.
+- Inclusão de aviso na `frontend/precheckin.html` quando a stay já possui hóspedes registrados, esclarecendo que os dados anteriores não aparecem preenchidos na tela.
+- Ajuste do envio da `frontend/precheckin.html` para distinguir:
+  - sucesso total
+  - falha total
+  - envio parcial
+- Ajuste da regra de titular na `frontend/precheckin.html` para considerar se a stay já possui titular, permitindo envio apenas de acompanhantes quando isso já estiver atendido.
 
 ### Decisões do dia
 
@@ -259,10 +271,17 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Avaliar proteção adicional no backend para o fluxo público, quando a prova de conceito estiver estável.
 - Validar comportamento do link público com IDs inválidos.
 - Reavaliar a montagem da URL caso a estrutura de pastas públicas mude no futuro.
+- Revalidar manualmente o fluxo público de pré-check-in cobrindo:
+  - sucesso total
+  - falha total
+  - envio parcial
+  - stay sem titular prévio
+  - stay com titular prévio e envio só de acompanhantes
+- Observar se a UX de sucesso parcial ainda precisa de refinamento para evitar reenvio manual de hóspedes já salvos.
 
 ### Próximo passo recomendado
 
-- Validar o fluxo completo em uso operacional real e observar se já vale distinguir, no futuro, hóspedes adicionados manualmente dos hóspedes vindos do pré-check-in público.
+- Revalidar o fluxo público completo em uso operacional real, agora com foco em sucesso parcial, mensagens finais e regra de titular por stay, antes de qualquer nova evolução.
 
 ### Alertas e cuidados
 
@@ -296,5 +315,5 @@ Se houver investigação detalhada de bug, manter também o registro no `PROBLEM
 
 ## Última Atualização
 
-- Data: 2026-04-11
-- Situação geral: MVP funcional, arquitetura híbrida `checkins` + `stays/guests`, FNRH em modo `mock`, painel interno de stays operacional, link público de pré-check-in integrado ao painel e página pública com UX reforçada, confirmação e resumo final
+- Data: 2026-04-12
+- Situação geral: MVP funcional, arquitetura híbrida `checkins` + `stays/guests`, FNRH em modo `mock`, painel interno de stays operacional, link público de pré-check-in integrado ao painel, validações de CPF reforçadas e fluxo público ajustado para comunicar melhor sucesso total, falha total e envio parcial

@@ -507,6 +507,12 @@ app.post("/guests", (req, res) => {
       return res.status(500).json({ error: "Erro no banco" });
     }
 
+    if (cpfClean && existing) {
+      return res.status(400).json({
+        error: "Já existe um hóspede com este CPF na mesma stay"
+      });
+    }
+
     // 🔄 2. se já existe → UPDATE
     if (existing) {
       db.run(
@@ -703,7 +709,7 @@ app.put("/guests/:id", (req, res) => {
           }
 
           if (cpfClean && duplicateGuest) {
-            return res.status(400).json({ error: "Já existe outro hóspede com este CPF na mesma stay" });
+            return res.status(400).json({ error: "Já existe um hóspede com este CPF na mesma stay" });
           }
 
           const executeUpdate = () => {

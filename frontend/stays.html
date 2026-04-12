@@ -984,6 +984,11 @@ Qualquer dúvida, estamos à disposição!`;
         return;
       }
 
+      if (cpfDigits.length !== 11) {
+        setGuestFormStatus("O CPF do hóspede deve ter exatamente 11 dígitos.", "error");
+        return;
+      }
+
       const duplicatedGuest = (selectedStayDetails.guests || []).find((guest) => {
         if (editingGuestId && String(guest.id) === String(editingGuestId)) {
           return false;

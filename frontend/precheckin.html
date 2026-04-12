@@ -180,7 +180,7 @@
     <div id="status" class="status"></div>
 
     <div id="submittedSummary" class="summary-box" style="display:none;">
-      <h3>Recebemos os dados abaixo:</h3>
+      <h3 id="submittedSummaryTitle">Recebemos os dados abaixo:</h3>
       <div id="submittedSummaryTotal" class="summary-total"></div>
       <ul id="submittedSummaryList" class="summary-list"></ul>
     </div>
@@ -193,6 +193,9 @@
     let stayLoaded = false;
     let isSubmitting = false;
     let submissionCompleted = false;
+    let currentStayData = null;
+    let existingGuests = [];
+    let existingGuestCount = 0;
 
     function getStayIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
@@ -245,6 +248,17 @@
         "#222";
     }
 
+    function renderStayLoadedInfo(stay = currentStayData) {
+      if (!stay) return;
+
+      document.getElementById("stayInfo").innerHTML = `
+        <strong>Stay:</strong> ${stay.id}<br>
+        <strong>Reserva:</strong> ${stay.reservation_id || "-"}<br>
+        <strong>Suíte:</strong> ${stay.sub_reservation_id || "-"}
+      `;
+      document.getElementById("stayInfo").style.color = "#222";
+    }
+
     function updateActionButtons() {
       const addGuestButton = document.getElementById("addGuestBtn");
       const submitButton = document.getElementById("submitBtn");
@@ -255,21 +269,41 @@
 
     function clearSubmittedSummary() {
       document.getElementById("submittedSummary").style.display = "none";
+      document.getElementById("submittedSummaryTitle").textContent = "Recebemos os dados abaixo:";
       document.getElementById("submittedSummaryTotal").textContent = "";
       document.getElementById("submittedSummaryList").innerHTML = "";
     }
 
-    function renderSubmittedSummary(guests) {
+    function renderSubmittedSummary(result) {
       const container = document.getElementById("submittedSummary");
+      const title = document.getElementById("submittedSummaryTitle");
       const total = document.getElementById("submittedSummaryTotal");
       const list = document.getElementById("submittedSummaryList");
+      const successfulGuests = result.successfulGuests || [];
+      const failedGuests = result.failedGuests || [];
 
-      total.textContent = `Total de hóspedes enviados: ${guests.length}`;
+      if (result.mode === "success") {
+        title.textContent = "Recebemos os dados abaixo:";
+        total.textContent = `Total de hóspedes enviados: ${successfulGuests.length}`;
+      } else if (result.mode === "partial") {
+        title.textContent = "Resultado parcial desta tentativa";
+        total.textContent = `${successfulGuests.length} hóspede(s) enviado(s) com sucesso e ${failedGuests.length} não enviado(s).`;
+      } else {
+        title.textContent = "Nenhum hóspede foi enviado nesta tentativa";
+        total.textContent = `${failedGuests.length} hóspede(s) não enviado(s).`;
+      }
+
       list.innerHTML = "";
 
-      guests.forEach((guest) => {
+      successfulGuests.forEach((guest) => {
         const item = document.createElement("li");
-        item.textContent = `${guest.full_name} - ${guest.is_main_guest ? "Titular" : "Acompanhante"}`;
+        item.textContent = `${guest.full_name} - ${guest.is_main_guest ? "Titular" : "Acompanhante"} - enviado com sucesso`;
+        list.appendChild(item);
+      });
+
+      failedGuests.forEach((guest) => {
+        const item = document.createElement("li");
+        item.textContent = `${guest.full_name} - ${guest.is_main_guest ? "Titular" : "Acompanhante"} - não enviado: ${guest.reason}`;
         list.appendChild(item);
       });
 
@@ -368,8 +402,9 @@
       }
 
       const mainGuestCount = guests.filter((guest) => guest.is_main_guest).length;
-      if (!mainGuestCount) {
-        return "Defina pelo menos um hóspede titular.";
+      const stayAlreadyHasMainGuest = existingGuests.some((guest) => guest.is_main_guest);
+      if (!stayAlreadyHasMainGuest && !mainGuestCount) {
+        return "Defina pelo menos um hóspede titular para esta hospedagem.";
       }
 
       const cpfSet = new Set();
@@ -381,6 +416,10 @@
         const cpfDigits = onlyDigits(guest.cpf);
         if (!cpfDigits) {
           return "Preencha o CPF de todos os hóspedes.";
+        }
+
+        if (cpfDigits.length !== 11) {
+          return "O CPF de todos os hóspedes deve ter exatamente 11 dígitos.";
         }
 
         if (cpfSet.has(cpfDigits)) {
@@ -398,6 +437,9 @@
       stayLoaded = false;
       submissionCompleted = false;
       isSubmitting = false;
+      currentStayData = null;
+      existingGuests = [];
+      existingGuestCount = 0;
       document.getElementById("guestList").innerHTML = "";
       clearSubmittedSummary();
       setStayInfo("Carregando dados da stay...", "info");
@@ -422,16 +464,38 @@
         }
 
         stayLoaded = true;
-        document.getElementById("stayInfo").innerHTML = `
-          <strong>Stay:</strong> ${data.id}<br>
-          <strong>Reserva:</strong> ${data.reservation_id || "-"}<br>
-          <strong>Suíte:</strong> ${data.sub_reservation_id || "-"}
-        `;
+        currentStayData = data;
+        renderStayLoadedInfo(data);
+
+        try {
+          const existingGuestsResponse = await fetch(`${API_BASE}/stays/${stayId}/guests`);
+          if (existingGuestsResponse.ok) {
+            const rows = await existingGuestsResponse.json();
+            existingGuests = rows;
+            existingGuestCount = rows.length;
+          } else {
+            existingGuests = [];
+            existingGuestCount = 0;
+          }
+        } catch (guestLoadError) {
+          console.error(guestLoadError);
+          existingGuests = [];
+          existingGuestCount = 0;
+        }
 
         document.getElementById("guestList").innerHTML = "";
         guestIndex = 0;
         createGuestCard("1");
-        setStatus("Stay carregada com sucesso. Preencha os hóspedes e envie o pré-check-in.", "success");
+
+        if (existingGuestCount > 0) {
+          setStatus(
+            `Esta hospedagem já possui ${existingGuestCount} hóspede(s) registrado(s). Os dados já enviados não aparecem preenchidos nesta tela. Se já existir hóspede titular, este link pode ser usado para enviar apenas acompanhantes.`,
+            "warning"
+          );
+        } else {
+          setStatus("Stay carregada com sucesso. Preencha os hóspedes e envie o pré-check-in.", "success");
+        }
+
         updateActionButtons();
       } catch (error) {
         console.error(error);
@@ -453,8 +517,11 @@
       }
 
       const guests = collectGuests();
+      clearSubmittedSummary();
+      setStayInfo("Processando o pré-check-in. Aguarde um momento.", "info");
       const validationError = validateGuests(guests);
       if (validationError) {
+        renderStayLoadedInfo();
         setStatus(validationError, "error");
         return;
       }
@@ -465,6 +532,9 @@
       setStatus("Enviando pré-check-in... Aguarde um momento.", "info");
 
       try {
+        const successfulGuests = [];
+        const failedGuests = [];
+
         for (const guest of guests) {
           const response = await fetch(`${API_BASE}/guests`, {
             method: "POST",
@@ -484,20 +554,69 @@
           const data = await response.json();
 
           if (!response.ok) {
-            setStatus(data.error || "Não foi possível salvar um dos hóspedes.", "error");
-            return;
+            failedGuests.push({
+              ...guest,
+              reason: data.error || "Não foi possível salvar este hóspede."
+            });
+            continue;
           }
+
+          successfulGuests.push(guest);
+          existingGuests.push({
+            ...guest,
+            id: data.guest_id || null
+          });
+          existingGuestCount = existingGuests.length;
         }
 
-        submissionCompleted = true;
-        document.getElementById("guestList").querySelectorAll("input, select, button").forEach((field) => {
-          field.disabled = true;
+        if (successfulGuests.length === guests.length) {
+          submissionCompleted = true;
+          document.getElementById("guestList").querySelectorAll("input, select, button").forEach((field) => {
+            field.disabled = true;
+          });
+          renderSubmittedSummary({
+            mode: "success",
+            successfulGuests,
+            failedGuests
+          });
+          setStayInfo("Pré-check-in recebido com sucesso. Nossa equipe já pode dar continuidade ao seu atendimento.", "success");
+          setStatus("Pré-check-in enviado com sucesso. Obrigado! Seus dados foram recebidos.", "success");
+          return;
+        }
+
+        if (!successfulGuests.length) {
+          renderSubmittedSummary({
+            mode: "error",
+            successfulGuests,
+            failedGuests
+          });
+          setStayInfo(
+            "Não foi possível concluir o pré-check-in. Revise os dados informados e tente novamente.",
+            "error"
+          );
+          setStatus("Nenhum hóspede foi enviado nesta tentativa.", "error");
+          return;
+        }
+
+        renderSubmittedSummary({
+          mode: "partial",
+          successfulGuests,
+          failedGuests
         });
-        renderSubmittedSummary(guests);
-        setStayInfo("Pré-check-in recebido com sucesso. Nossa equipe já pode dar continuidade ao seu atendimento.", "success");
-        setStatus("Pré-check-in enviado com sucesso. Obrigado! Seus dados foram recebidos.", "success");
+        setStayInfo(
+          "Recebemos parte do pré-check-in. Revise os hóspedes não enviados e tente novamente para concluir.",
+          "warning"
+        );
+        setStatus(
+          `${successfulGuests.length} hóspede(s) enviado(s) com sucesso e ${failedGuests.length} com pendência nesta tentativa.`,
+          "warning"
+        );
       } catch (error) {
         console.error(error);
+        setStayInfo(
+          "Não foi possível concluir o pré-check-in agora. Tente novamente em instantes ou fale com a recepção.",
+          "error"
+        );
         setStatus("Erro de comunicação ao enviar o pré-check-in.", "error");
       } finally {
         isSubmitting = false;
