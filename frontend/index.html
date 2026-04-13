@@ -154,18 +154,30 @@
 
     <div id="info" class="info-box hidden"></div>
 
-    <div id="reservation_fields">
-      <div class="field">
-        <label for="reservation_id">ID da reserva</label>
-        <input id="reservation_id" placeholder="ID da reserva">
+      <div id="reservation_fields">
+        <div class="field">
+          <label for="reservation_id">ID da reserva</label>
+          <input id="reservation_id" placeholder="ID da reserva">
+        </div>
+
+        <div class="field">
+          <label for="sub_reservation_id">ID da suíte</label>
+          <input id="sub_reservation_id" placeholder="ID da suíte">
+          <div class="field-note">Se houver só 1 suíte, pode repetir o mesmo número da reserva.</div>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="sub_reservation_id">ID da suíte</label>
-        <input id="sub_reservation_id" placeholder="ID da suíte">
-        <div class="field-note">Se houver só 1 suíte, pode repetir o mesmo número da reserva.</div>
+      <div id="stay_date_fields">
+        <div class="field">
+          <label for="data_entrada">Data de entrada</label>
+          <input id="data_entrada" type="date">
+        </div>
+
+        <div class="field">
+          <label for="data_saida">Data de saída</label>
+          <input id="data_saida" type="date">
+        </div>
       </div>
-    </div>
 
     <div class="field">
       <label for="guest_count">Quantidade de hóspedes</label>
@@ -509,14 +521,16 @@
       }
     });
 
-    async function enviar() {
-      const reservation_id = document.getElementById("reservation_id").value.trim();
-      const sub_reservation_id = document.getElementById("sub_reservation_id").value.trim();
-      const full_name = document.getElementById("full_name").value.trim();
-      const cpf = document.getElementById("cpf").value.trim();
-      const email = document.getElementById("email").value.trim();
-      const phone = document.getElementById("phone").value.trim();
-      const birth_date = document.getElementById("birth_date").value.trim();
+      async function enviar() {
+        const reservation_id = document.getElementById("reservation_id").value.trim();
+        const sub_reservation_id = document.getElementById("sub_reservation_id").value.trim();
+        const data_entrada = document.getElementById("data_entrada").value.trim();
+        const data_saida = document.getElementById("data_saida").value.trim();
+        const full_name = document.getElementById("full_name").value.trim();
+        const cpf = document.getElementById("cpf").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const phone = document.getElementById("phone").value.trim();
+        const birth_date = document.getElementById("birth_date").value.trim();
 
       const status = document.getElementById("status");
 
@@ -575,7 +589,9 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               reservation_id,
-              sub_reservation_id
+              sub_reservation_id,
+              data_entrada,
+              data_saida
             })
           });
 

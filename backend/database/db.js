@@ -2,6 +2,26 @@ const sqlite3 = require("sqlite3").verbose();
 
 const db = new sqlite3.Database("./database.sqlite");
 
+function ensureColumn(tableName, columnName, definition) {
+  db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
+    if (err) {
+      console.error(`Erro ao inspecionar colunas de ${tableName}:`, err);
+      return;
+    }
+
+    const hasColumn = columns.some((column) => column.name === columnName);
+    if (hasColumn) return;
+
+    db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`, (alterErr) => {
+      if (alterErr) {
+        console.error(`Erro ao adicionar coluna ${columnName} em ${tableName}:`, alterErr);
+      } else {
+        console.log(`✓ Coluna ${columnName} adicionada em ${tableName}`);
+      }
+    });
+  });
+}
+
 db.serialize(() => {
   // estrutura atual
   db.run(`
@@ -34,6 +54,8 @@ db.serialize(() => {
       property_id TEXT NOT NULL,
       reservation_id TEXT NOT NULL,
       sub_reservation_id TEXT NOT NULL,
+      data_entrada TEXT,
+      data_saida TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
@@ -42,6 +64,9 @@ db.serialize(() => {
   });
 
   // nova estrutura: hóspedes da suíte
+  ensureColumn("stays", "data_entrada", "TEXT");
+  ensureColumn("stays", "data_saida", "TEXT");
+
   db.run(`
     CREATE TABLE IF NOT EXISTS guests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

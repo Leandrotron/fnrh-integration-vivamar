@@ -254,6 +254,8 @@ Ao final de cada sessão, atualizar as seções abaixo.
   - falha total
   - envio parcial
 - Ajuste da regra de titular na `frontend/precheckin.html` para considerar se a stay já possui titular, permitindo envio apenas de acompanhantes quando isso já estiver atendido.
+- Foi feita uma análise de lacunas entre o payload atual de `stays + guests` e a integração futura com a FNRH.
+- A análise confirmou que ainda não houve integração real; o projeto segue em modo `mock`.
 
 ### Decisões do dia
 
@@ -268,6 +270,8 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Continuar evoluindo a arquitetura sem perder compatibilidade com o estado atual.
 - Melhorar a experiência da página pública para não depender de montagem manual da URL.
 - Avaliar validação mais forte de CPF no backend de hóspedes.
+- Mapear e decidir coleta dos principais faltantes para FNRH no fluxo `stays + guests`: datas reais de entrada/saída, documento alternativo, nacionalidade, residência/endereço e domínios oficiais.
+- Registrar melhor, em momento oportuno, a modelagem operacional de reservas com múltiplos quartos dentro da mesma stay.
 - Avaliar proteção adicional no backend para o fluxo público, quando a prova de conceito estiver estável.
 - Validar comportamento do link público com IDs inválidos.
 - Reavaliar a montagem da URL caso a estrutura de pastas públicas mude no futuro.
@@ -283,6 +287,24 @@ Ao final de cada sessão, atualizar as seções abaixo.
 
 - Revalidar o fluxo público completo em uso operacional real, agora com foco em sucesso parcial, mensagens finais e regra de titular por stay, antes de qualquer nova evolução.
 
+### Observação de modelagem futura
+
+- O sistema atualmente permite múltiplos hóspedes titulares (`is_main_guest = true`) na mesma stay.
+- No contexto operacional da pousada, isso não é necessariamente um erro:
+  pode representar uma única reserva contendo múltiplos quartos.
+- Isso é útil para identificar responsáveis por grupos diferentes dentro da mesma reserva.
+- Porém, o modelo atual ainda não vincula explicitamente hóspedes a quartos específicos.
+- Isso pode gerar ambiguidade operacional na entrega de chaves e na alocação real dos hóspedes.
+
+### Direção futura possível
+
+- Avaliar evolução do modelo para suportar agrupamento por quarto, sem refactor grande neste momento.
+- Conceito desejado no futuro:
+  - stay = reserva/grupo
+  - quarto/unidade = subdivisão operacional da stay
+  - hóspedes vinculados ao seu respectivo quarto
+- Se essa evolução acontecer, a abordagem preferencial é incremental e simples no início, evitando reestruturação ampla prematura.
+
 ### Alertas e cuidados
 
 - Não remover o fluxo legado sem verificar dependências reais no frontend e no uso operacional.
@@ -295,6 +317,50 @@ Ao final de cada sessão, atualizar as seções abaixo.
   - `cd backend && npm install`
   - recriar `backend/.env` a partir de `backend/.env.example`
 - Arquivos de sistema do macOS como `._*` e `.DS_Store` não fazem parte do projeto e devem continuar ignorados.
+
+### Integração FNRH — progresso real
+
+- Integração com a API real ativada com sucesso.
+- Autenticação Basic e `cpf_solicitante` validados.
+- O endpoint `/hospedagem/registrar` está respondendo corretamente com status `201`.
+- A reserva está sendo criada com sucesso na FNRH.
+
+### Ajustes realizados
+
+- Inclusão de `data_entrada` e `data_saida` no modelo de `stays`.
+- Ajuste do builder para usar:
+  - `numero_reserva`
+  - `numero_sub_reserva`
+  - `data_entrada`
+  - `data_saida`
+- Evolução da estrutura de hóspedes para formato aninhado:
+  - `dados_hospede`
+  - `dados_pessoais`
+  - `documento_id`
+  - `contato`
+
+### Estado atual
+
+- A reserva está sendo criada com sucesso.
+- `dados_hospedes` ainda retorna vazio na resposta real.
+- Isso indica que a estrutura de hóspede ainda não atende completamente o contrato da FNRH.
+
+### Observações importantes
+
+- A API da FNRH aceita a reserva mesmo com hóspedes inválidos ou incompletos.
+- A ausência de erro explícito para hóspedes sugere validação parcial silenciosa nessa etapa.
+- A integração principal já foi validada com sucesso.
+- O arquivo `docs/FNRH Integration Notes.md` existe, mas ainda precisa ser enriquecido na próxima sessão.
+
+### Próximo passo recomendado
+
+- Identificar os campos mínimos obrigatórios de pessoa que a FNRH exige para aceitar hóspedes.
+- O foco mais provável é:
+  - `genero_id`
+  - estrutura mais completa de `dados_pessoais`
+- Continuar a evolução de forma incremental, guiada pela resposta real da API.
+- Não refatorar o sistema.
+- Não antecipar campos sem validação real da API.
 
 ---
 

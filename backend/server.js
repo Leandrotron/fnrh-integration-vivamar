@@ -21,8 +21,12 @@ function onlyDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function normalizeCPF(cpf) {
+  return onlyDigits(cpf);
+}
+
 function isValidCPF(cpf) {
-  cpf = onlyDigits(cpf);
+  cpf = normalizeCPF(cpf);
 
   if (!cpf || cpf.length !== 11) return false;
   if (/^(\d)\1{10}$/.test(cpf)) return false;
@@ -60,7 +64,23 @@ function splitName(fullName) {
   return { firstName, lastName };
 }
 
-function buildFNRHPayload(checkin) {
+function maskValue(value, visibleStart = 4, visibleEnd = 2) {
+  const stringValue = String(value || "");
+
+  if (!stringValue) return "";
+  if (stringValue.length <= visibleStart + visibleEnd) {
+    return `${stringValue.slice(0, 1)}***`;
+  }
+
+  return `${stringValue.slice(0, visibleStart)}***${stringValue.slice(-visibleEnd)}`;
+}
+
+function buildBasicAuthorization(user, apiKey) {
+  const credentials = Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64");
+  return `Basic ${credentials}`;
+}
+
+function buildLegacyCheckinFNRHPayload(checkin) {
   return {
     hospede: {
       nomeCompleto: checkin.full_name,
@@ -80,6 +100,61 @@ function buildFNRHPayload(checkin) {
       criadoEm: checkin.created_at
     }
   };
+}
+
+function buildFNRHPayload(stay, guests) {
+  const safeGuests = Array.isArray(guests) ? guests : [];
+
+  const payload = {
+    reserva: {
+      numero_reserva: stay?.reservation_id || "",
+      numero_sub_reserva: stay?.sub_reservation_id || "",
+      data_entrada: stay?.data_entrada || "",
+      data_saida: stay?.data_saida || ""
+      // A documentacao e os erros reais da API indicam o uso desses campos na reserva.
+    },
+    hospedagem: {
+      stayIdLocal: stay?.id || null,
+      propertyId: stay?.property_id || "",
+      criadoEm: stay?.created_at || null
+      // O modelo atual nao tem unidade/quarto explicito dentro da stay.
+    },
+    dados_hospede: safeGuests.map((guest) => {
+      const payloadGuest = {
+        is_principal: !!guest?.is_main_guest,
+        // Mantido fixo no envio inicial, alinhado ao fluxo atual de registro da hospedagem.
+        situacao_hospede: "PRECHECKIN_PENDENTE",
+        dados_pessoais: {
+          ...(guest?.full_name ? { nome: guest.full_name } : {}),
+          ...(guest?.birth_date ? { data_nascimento: guest.birth_date } : {}),
+          // Assuncao minima explicita para o caso atual de hospede brasileiro.
+          PaisNacionalidade_id: "BR",
+          ...(guest?.cpf
+            ? {
+                documento_id: {
+                  numero_documento: guest.cpf,
+                  tipo_documento_id: "CPF"
+                }
+              }
+            : {}),
+          contato: {
+            ...(guest?.email ? { email: guest.email } : {}),
+            ...(guest?.phone ? { telefone: guest.phone } : {}),
+            // Assuncao minima explicita para o caso atual de residencia no Brasil.
+            PaisResidencia_id: "BR"
+          }
+        }
+      };
+
+      // O modelo atual ainda nao possui nome_social, genero, endereco completo,
+      // documento alternativo nem responsavel_id para cenarios mais completos.
+      return payloadGuest;
+    })
+  };
+
+  console.log("FNRH PAYLOAD PREVIEW:", JSON.stringify(payload, null, 2));
+
+  return payload;
 }
 
 function buildFNRHStayPayload(stay, guests) {
@@ -110,6 +185,7 @@ function buildFNRHStayPayload(stay, guests) {
 
 async function sendToFNRH(payload) {
   const mode = process.env.FNRH_MODE || "mock";
+  console.log("[FNRH] mode:", mode);
 
   if (mode === "mock") {
     return {
@@ -119,27 +195,69 @@ async function sendToFNRH(payload) {
         mode: "mock",
         sent_at: new Date().toISOString(),
         message: "Envio simulado com sucesso para FNRH",
-        payload
+        payload,
+        payloadPreview: payload
       }
     };
   }
 
   const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
   const submitPath = String(process.env.FNRH_SUBMIT_PATH || "").trim();
+  const user = String(process.env.FNRH_USER || "").trim();
   const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+  const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
+  const finalUrl = `${baseUrl}${submitPath}`;
 
-  if (!baseUrl || !submitPath || !apiKey) {
-    throw new Error("FNRH_MODE=real, mas faltam FNRH_BASE_URL, FNRH_SUBMIT_PATH ou FNRH_API_KEY");
+  const missingVars = [
+    !baseUrl && "FNRH_BASE_URL",
+    !submitPath && "FNRH_SUBMIT_PATH",
+    !user && "FNRH_USER",
+    !apiKey && "FNRH_API_KEY",
+    !cpfSolicitante && "FNRH_CPF_SOLICITANTE"
+  ].filter(Boolean);
+
+  if (missingVars.length) {
+    const configurationError = new Error(
+      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+    );
+    configurationError.fnrhStatus = null;
+    configurationError.fnrhBody = { error: configurationError.message };
+    throw configurationError;
   }
 
-  const response = await fetch(`${baseUrl}${submitPath}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey
-    },
-    body: JSON.stringify(payload)
+  const authorization = buildBasicAuthorization(user, apiKey);
+  const requestHeaders = {
+    "Content-Type": "application/json",
+    Authorization: authorization,
+    cpf_solicitante: cpfSolicitante
+  };
+
+  console.log("[FNRH] request url:", finalUrl);
+  console.log("[FNRH] request headers:", {
+    "Content-Type": "application/json",
+    Authorization: `Basic ${maskValue(Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64"), 8, 4)}`,
+    FNRH_USER: maskValue(user, 4, 4),
+    FNRH_API_KEY: maskValue(apiKey, 3, 2),
+    cpf_solicitante: maskValue(cpfSolicitante, 3, 2)
   });
+  console.log("[FNRH] request payload:", JSON.stringify(payload, null, 2));
+
+  let response;
+
+  try {
+    response = await fetch(finalUrl, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify(payload)
+    });
+  } catch (networkError) {
+    console.error("[FNRH] network error:", networkError);
+    networkError.fnrhStatus = null;
+    networkError.fnrhBody = {
+      error: networkError.message || "Erro de rede ao enviar para a FNRH"
+    };
+    throw networkError;
+  }
 
   let body;
   const text = await response.text();
@@ -149,6 +267,9 @@ async function sendToFNRH(payload) {
   } catch {
     body = { raw: text };
   }
+
+  console.log("[FNRH] response status:", response.status);
+  console.log("[FNRH] response body:", body);
 
   return {
     ok: response.ok,
@@ -216,7 +337,7 @@ app.post("/checkin", (req, res) => {
   const reservationId = String(reservation_id).trim();
   const subReservationId = String(sub_reservation_id || reservation_id).trim();
   const fullName = String(full_name).trim();
-  const cpfClean = onlyDigits(cpf);
+  const cpfClean = normalizeCPF(cpf);
   const phoneClean = onlyDigits(phone);
   const birthDateClean = String(birth_date || "").trim();
   const emailClean = String(email || "").trim();
@@ -334,7 +455,7 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
         });
       }
 
-      const payload = buildFNRHPayload(row);
+      const payload = buildLegacyCheckinFNRHPayload(row);
       console.log("PAYLOAD FNRH:", payload);
 
       const fakeResponse = JSON.stringify({
@@ -372,7 +493,7 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
 
 // cria ou busca uma suíte (stay)
 app.post("/stays", (req, res) => {
-  const { reservation_id, sub_reservation_id } = req.body;
+  const { reservation_id, sub_reservation_id, data_entrada, data_saida } = req.body;
 
   if (!reservation_id) {
     return res.status(400).json({
@@ -382,6 +503,20 @@ app.post("/stays", (req, res) => {
 
   const reservationId = String(reservation_id).trim();
   const subReservationId = String(sub_reservation_id || reservation_id).trim();
+  const dataEntrada = String(data_entrada || "").trim();
+  const dataSaida = String(data_saida || "").trim();
+
+  if (dataEntrada && !isValidBirthDate(dataEntrada)) {
+    return res.status(400).json({
+      error: "Data de entrada inválida"
+    });
+  }
+
+  if (dataSaida && !isValidBirthDate(dataSaida)) {
+    return res.status(400).json({
+      error: "Data de saída inválida"
+    });
+  }
 
   db.get(
     `SELECT * FROM stays
@@ -401,9 +536,9 @@ app.post("/stays", (req, res) => {
       }
 
       db.run(
-        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id)
-         VALUES (?, ?, ?)`,
-        [PROPERTY_ID, reservationId, subReservationId],
+        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida)
+         VALUES (?, ?, ?, ?, ?)`,
+        [PROPERTY_ID, reservationId, subReservationId, dataEntrada, dataSaida],
         function (err) {
           if (err) {
             console.error("Erro ao criar stay:", err);
@@ -412,15 +547,17 @@ app.post("/stays", (req, res) => {
 
           return res.json({
             message: "Stay criado com sucesso",
-            stay: {
-              id: this.lastID,
-              property_id: PROPERTY_ID,
-              reservation_id: reservationId,
-              sub_reservation_id: subReservationId
-            }
-          });
-        }
-      );
+              stay: {
+                id: this.lastID,
+                property_id: PROPERTY_ID,
+                reservation_id: reservationId,
+                sub_reservation_id: subReservationId,
+                data_entrada: dataEntrada,
+                data_saida: dataSaida
+              }
+            });
+          }
+        );
     }
   );
 });
@@ -448,7 +585,7 @@ app.get("/stays/:id", (req, res) => {
   const stayId = req.params.id;
 
   db.get(
-    `SELECT id, property_id, reservation_id, sub_reservation_id, created_at
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, created_at
      FROM stays
      WHERE id = ? AND property_id = ?`,
     [stayId, PROPERTY_ID],
@@ -487,10 +624,14 @@ app.post("/guests", (req, res) => {
   }
 
   const fullName = String(full_name).trim();
-  const cpfClean = cpf ? onlyDigits(cpf) : "";
+  const cpfClean = normalizeCPF(cpf);
   const phoneClean = phone ? onlyDigits(phone) : "";
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
+
+  if (cpfClean && !isValidCPF(cpfClean)) {
+    return res.status(400).json({ error: "CPF inválido" });
+  }
 
   // 🔍 1. tentar encontrar hóspede existente
   const query = cpfClean
@@ -677,10 +818,16 @@ app.put("/guests/:id", (req, res) => {
   }
 
   const fullName = String(full_name).trim();
-  const cpfClean = cpf ? onlyDigits(cpf) : "";
+  const cpfClean = normalizeCPF(cpf);
   const phoneClean = phone ? onlyDigits(phone) : "";
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
+
+  if (cpfClean && !isValidCPF(cpfClean)) {
+    return res.status(400).json({
+      error: "CPF inválido"
+    });
+  }
 
   db.get(
     `SELECT guests.*, stays.property_id
@@ -810,7 +957,7 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
             return res.status(400).json({ error: "Nenhum hóspede titular encontrado na stay" });
           }
 
-          const payload = buildFNRHStayPayload(stay, guests);
+          const payload = buildFNRHPayload(stay, guests);
           const guestIds = guests.map((g) => g.id);
 
           try {
@@ -857,7 +1004,11 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
               }
 
               return res.status(500).json({
-                error: sendErr.message || "Erro interno ao enviar para FNRH"
+                error: sendErr.message || "Erro interno ao enviar para FNRH",
+                stay_id: stay.id,
+                fnrh_mode: process.env.FNRH_MODE || "mock",
+                response_status: sendErr.fnrhStatus ?? null,
+                response_body: sendErr.fnrhBody || null
               });
             });
           }

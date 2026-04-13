@@ -146,6 +146,13 @@
       font-weight: bold;
     }
 
+    .detail-help {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #666;
+      line-height: 1.4;
+    }
+
     .guest-list {
       display: flex;
       flex-direction: column;
@@ -462,6 +469,7 @@
             <div class="detail-box">
               <div class="detail-label">Pré-check-in</div>
               <div id="detailPrecheckinStatus" class="detail-value">-</div>
+              <div id="detailPrecheckinHelp" class="detail-help">-</div>
             </div>
           </div>
 
@@ -712,6 +720,30 @@ Qualquer dúvida, estamos à disposição!`;
       };
     }
 
+    function getPrecheckinStatusSummary(guests) {
+      const total = guests.length;
+      const mainGuests = guests.filter((guest) => guest.is_main_guest).length;
+
+      if (!total) {
+        return {
+          label: "Aguardando pré-check-in",
+          help: "Nenhum hóspede registrado nesta stay."
+        };
+      }
+
+      if (!mainGuests) {
+        return {
+          label: "Pré-check-in recebido parcialmente",
+          help: "Há hóspedes registrados, mas ainda sem titular definido."
+        };
+      }
+
+      return {
+        label: "Pré-check-in recebido",
+        help: `Há ${total} hóspede(s) registrado(s), incluindo ${mainGuests} titular(es).`
+      };
+    }
+
     function updateDetailActions(stay, guests) {
       const sendButton = document.getElementById("sendFnrhBtn");
       const reloadButton = document.getElementById("reloadDetailsBtn");
@@ -814,9 +846,9 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("detailSubReservation").textContent = stay.sub_reservation_id ?? "-";
       document.getElementById("detailCreatedAt").textContent = formatDateTime(stay.created_at);
       document.getElementById("detailGuestCount").textContent = guests.length;
-      document.getElementById("detailPrecheckinStatus").textContent = guests.length
-        ? "Pré-check-in recebido"
-        : "Aguardando pré-check-in";
+      const precheckinSummary = getPrecheckinStatusSummary(guests);
+      document.getElementById("detailPrecheckinStatus").textContent = precheckinSummary.label;
+      document.getElementById("detailPrecheckinHelp").textContent = precheckinSummary.help;
       updateDetailActions(stay, guests);
       if (!editingGuestId) {
         setGuestFormStatus(`Adicionando hóspedes à stay #${stay.id}.`, "info");
