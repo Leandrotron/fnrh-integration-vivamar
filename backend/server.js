@@ -284,7 +284,7 @@ async function sendToFNRH(payload) {
   }
 
   console.log("[FNRH] response status:", response.status);
-  console.log("[FNRH] response body:", body);
+  console.log("[FNRH] response body:", JSON.stringify(body, null, 2));
 
   return {
     ok: response.ok,

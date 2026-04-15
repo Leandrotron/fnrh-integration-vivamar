@@ -410,6 +410,59 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Melhorar a UX do painel interno para reduzir erro humano.
 - Avaliar futura integração com o fluxo público de pré-check-in.
 
+### Marco importante
+
+- Integração real com a FNRH validada com sucesso em nível MVP.
+- Resposta `201` confirmando criação de reserva.
+- `dados_hospedes` deixou de vir vazio.
+- Ficha do hóspede já está visível no painel oficial da FNRH.
+
+### Ajustes realizados hoje
+
+- Evolução do modelo de `guest` para suportar:
+  - `cidade_id`
+  - `estado_id`
+  - `cep`
+  - `logradouro`
+  - `numero`
+  - `complemento`
+  - `bairro`
+  - `genero_id`
+  - `raca_id`
+  - `deficiencia_id`
+- Painel interno (`stays.html`) ajustado para:
+  - editar dados da stay
+  - editar dados de endereço/residência do hóspede
+  - exibir e preparar gênero, raça e deficiência
+  - melhorar ajuda visual em campos críticos da FNRH
+- Builder FNRH ajustado para priorizar dados reais do `guest` com fallback temporário.
+- Log da resposta da FNRH no backend ajustado para exibir o objeto completo, evitando resumos como `[Object]`.
+
+### Estado atual
+
+- Integração FNRH funcional em nível MVP.
+- Reserva e hóspede já processados com sucesso.
+- O sistema já gera ficha visível no painel oficial.
+- Ainda existem pontos de refinamento de precisão dos dados e UX operacional.
+
+### Observações importantes
+
+- Alguns testes ainda retornaram erro de duplicidade por reutilização de `numero_reserva`.
+- A conferência da ficha indicou necessidade de validar com cuidado se alguns campos estão sendo refletidos exatamente como esperado na FNRH.
+- O projeto já deixou a fase de "conectar" e entrou na fase de "refinar dados e fluxo operacional".
+- O arquivo `docs/FNRH Integration Notes.md` existe e é útil como apoio, mas ainda pode ser refinado depois.
+
+### Próximos passos recomendados
+
+- Revisar os logs agora mais completos da resposta da FNRH durante novos testes reais.
+- Validar com uma reserva realmente nova os campos que ainda parecem estar sendo refletidos de forma imperfeita.
+- Reduzir dependência de fallbacks temporários:
+  - `genero_id`
+  - `raca_id`
+  - `deficiencia_id`
+- Avaliar futura evolução do fluxo público de pré-check-in.
+- Continuar sem refactor grande.
+
 ---
 
 ## Instrução De Atualização No Fim Do Dia
