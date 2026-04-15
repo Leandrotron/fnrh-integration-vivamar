@@ -63,10 +63,10 @@ db.serialize(() => {
     else console.log("✓ Tabela stays pronta");
   });
 
-  // nova estrutura: hóspedes da suíte
   ensureColumn("stays", "data_entrada", "TEXT");
   ensureColumn("stays", "data_saida", "TEXT");
 
+  // nova estrutura: hóspedes da suíte
   db.run(`
     CREATE TABLE IF NOT EXISTS guests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +76,16 @@ db.serialize(() => {
       email TEXT,
       phone TEXT,
       birth_date TEXT,
+      genero_id TEXT,
+      raca_id TEXT,
+      deficiencia_id TEXT,
+      cidade_id TEXT,
+      estado_id TEXT,
+      cep TEXT,
+      logradouro TEXT,
+      numero TEXT,
+      complemento TEXT,
+      bairro TEXT,
       is_adult INTEGER DEFAULT 1,
       is_main_guest INTEGER DEFAULT 0,
       status TEXT DEFAULT 'draft',
@@ -87,6 +97,17 @@ db.serialize(() => {
     if (err) console.error("Erro ao criar tabela guests:", err);
     else console.log("✓ Tabela guests pronta");
   });
+
+  ensureColumn("guests", "cidade_id", "TEXT");
+  ensureColumn("guests", "estado_id", "TEXT");
+  ensureColumn("guests", "cep", "TEXT");
+  ensureColumn("guests", "logradouro", "TEXT");
+  ensureColumn("guests", "numero", "TEXT");
+  ensureColumn("guests", "complemento", "TEXT");
+  ensureColumn("guests", "bairro", "TEXT");
+  ensureColumn("guests", "genero_id", "TEXT");
+  ensureColumn("guests", "raca_id", "TEXT");
+  ensureColumn("guests", "deficiencia_id", "TEXT");
 
   // índice para otimizar busca de hóspedes por stay_id e cpf
   db.run(`CREATE INDEX IF NOT EXISTS idx_guests_stay_cpf ON guests (stay_id, cpf)`, (err) => {

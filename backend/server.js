@@ -120,17 +120,25 @@ function buildFNRHPayload(stay, guests) {
       // O modelo atual nao tem unidade/quarto explicito dentro da stay.
     },
     dados_hospede: safeGuests.map((guest) => {
-      const payloadGuest = {
-        is_principal: !!guest?.is_main_guest,
-        // Mantido fixo no envio inicial, alinhado ao fluxo atual de registro da hospedagem.
-        situacao_hospede: "PRECHECKIN_PENDENTE",
-        dados_pessoais: {
-          ...(guest?.full_name ? { nome: guest.full_name } : {}),
-          ...(guest?.birth_date ? { data_nascimento: guest.birth_date } : {}),
-          // Assuncao minima explicita para o caso atual de hospede brasileiro.
-          PaisNacionalidade_id: "BR",
-          ...(guest?.cpf
-            ? {
+        const payloadGuest = {
+          is_principal: !!guest?.is_main_guest,
+          // Mantido fixo no envio inicial, alinhado ao fluxo atual de registro da hospedagem.
+          situacao_hospede: "PRECHECKIN_PENDENTE",
+          dados_pessoais: {
+            ...(guest?.full_name ? { nome: guest.full_name } : {}),
+            // A documentacao de pessoa usa nome_social; vazio e um default seguro aqui.
+            nome_social: "",
+            ...(guest?.birth_date ? { data_nascimento: guest.birth_date } : {}),
+            // Fallbacks temporarios para manter compatibilidade com hospedes antigos
+            // que ainda nao tenham esses dados preenchidos no sistema.
+            genero_id: guest?.genero_id || "HOMEM",
+            raca_id: guest?.raca_id || "NAOINFORMAR",
+            deficiencia_id: guest?.deficiencia_id || "NAO",
+            tipo_deficiencia_id: "",
+            // Assuncao minima explicita para o caso atual de hospede brasileiro.
+            PaisNacionalidade_id: "BR",
+            ...(guest?.cpf
+              ? {
                 documento_id: {
                   numero_documento: guest.cpf,
                   tipo_documento_id: "CPF"
@@ -140,17 +148,24 @@ function buildFNRHPayload(stay, guests) {
           contato: {
             ...(guest?.email ? { email: guest.email } : {}),
             ...(guest?.phone ? { telefone: guest.phone } : {}),
+            ...(guest?.cidade_id ? { cidade_id: guest.cidade_id } : {}),
+            ...(guest?.estado_id ? { estado_id: guest.estado_id } : {}),
+            ...(guest?.cep ? { cep: guest.cep } : {}),
+            ...(guest?.logradouro ? { logradouro: guest.logradouro } : {}),
+            ...(guest?.numero ? { numero: guest.numero } : {}),
+            ...(guest?.complemento ? { complemento: guest.complemento } : {}),
+            ...(guest?.bairro ? { bairro: guest.bairro } : {}),
             // Assuncao minima explicita para o caso atual de residencia no Brasil.
             PaisResidencia_id: "BR"
           }
         }
-      };
+        };
 
-      // O modelo atual ainda nao possui nome_social, genero, endereco completo,
-      // documento alternativo nem responsavel_id para cenarios mais completos.
-      return payloadGuest;
-    })
-  };
+        // O modelo atual ainda nao coleta genero_id, endereco completo,
+        // documento alternativo nem responsavel_id para cenarios mais completos.
+        return payloadGuest;
+      })
+    };
 
   console.log("FNRH PAYLOAD PREVIEW:", JSON.stringify(payload, null, 2));
 
@@ -604,6 +619,63 @@ app.get("/stays/:id", (req, res) => {
   );
 });
 
+app.put("/stays/:id", (req, res) => {
+  const stayId = req.params.id;
+  const { reservation_id, sub_reservation_id, data_entrada, data_saida } = req.body;
+
+  if (!reservation_id) {
+    return res.status(400).json({
+      error: "ID da reserva e obrigatorio"
+    });
+  }
+
+  const reservationId = String(reservation_id).trim();
+  const subReservationId = String(sub_reservation_id || reservation_id).trim();
+  const dataEntrada = String(data_entrada || "").trim();
+  const dataSaida = String(data_saida || "").trim();
+
+  if (dataEntrada && !isValidBirthDate(dataEntrada)) {
+    return res.status(400).json({
+      error: "Data de entrada invalida"
+    });
+  }
+
+  if (dataSaida && !isValidBirthDate(dataSaida)) {
+    return res.status(400).json({
+      error: "Data de saida invalida"
+    });
+  }
+
+  db.run(
+    `UPDATE stays
+     SET reservation_id = ?, sub_reservation_id = ?, data_entrada = ?, data_saida = ?
+     WHERE id = ? AND property_id = ?`,
+    [reservationId, subReservationId, dataEntrada, dataSaida, stayId, PROPERTY_ID],
+    function (err) {
+      if (err) {
+        console.error("Erro ao atualizar stay:", err);
+        return res.status(500).json({ error: "Erro ao atualizar stay" });
+      }
+
+      if (!this.changes) {
+        return res.status(404).json({ error: "Stay nao encontrada" });
+      }
+
+      return res.json({
+        message: "Stay atualizada com sucesso",
+        stay: {
+          id: Number(stayId),
+          property_id: PROPERTY_ID,
+          reservation_id: reservationId,
+          sub_reservation_id: subReservationId,
+          data_entrada: dataEntrada,
+          data_saida: dataSaida
+        }
+      });
+    }
+  );
+});
+
 // cria hóspede vinculado a uma suíte
 app.post("/guests", (req, res) => {
   const {
@@ -613,6 +685,16 @@ app.post("/guests", (req, res) => {
     email,
     phone,
     birth_date,
+    genero_id,
+    raca_id,
+    deficiencia_id,
+    cidade_id,
+    estado_id,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
     is_adult,
     is_main_guest
   } = req.body;
@@ -628,6 +710,16 @@ app.post("/guests", (req, res) => {
   const phoneClean = phone ? onlyDigits(phone) : "";
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
+  const generoIdClean = String(genero_id || "").trim();
+  const racaIdClean = String(raca_id || "").trim();
+  const deficienciaIdClean = String(deficiencia_id || "").trim();
+  const cidadeIdClean = String(cidade_id || "").trim();
+  const estadoIdClean = String(estado_id || "").trim();
+  const cepClean = onlyDigits(cep);
+  const logradouroClean = String(logradouro || "").trim();
+  const numeroClean = String(numero || "").trim();
+  const complementoClean = String(complemento || "").trim();
+  const bairroClean = String(bairro || "").trim();
 
   if (cpfClean && !isValidCPF(cpfClean)) {
     return res.status(400).json({ error: "CPF inválido" });
@@ -658,12 +750,22 @@ app.post("/guests", (req, res) => {
     if (existing) {
       db.run(
         `UPDATE guests
-         SET email = ?, phone = ?, birth_date = ?, is_adult = ?, is_main_guest = ?
+         SET email = ?, phone = ?, birth_date = ?, genero_id = ?, raca_id = ?, deficiencia_id = ?, cidade_id = ?, estado_id = ?, cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, is_adult = ?, is_main_guest = ?
          WHERE id = ?`,
         [
           emailClean,
           phoneClean,
           birthDateClean,
+          generoIdClean,
+          racaIdClean,
+          deficienciaIdClean,
+          cidadeIdClean,
+          estadoIdClean,
+          cepClean,
+          logradouroClean,
+          numeroClean,
+          complementoClean,
+          bairroClean,
           is_adult ? 1 : 0,
           is_main_guest ? 1 : 0,
           existing.id
@@ -687,8 +789,8 @@ app.post("/guests", (req, res) => {
     // 🆕 3. se não existe → INSERT
     db.run(
       `INSERT INTO guests
-       (stay_id, full_name, cpf, email, phone, birth_date, is_adult, is_main_guest, status, fnrh_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (stay_id, full_name, cpf, email, phone, birth_date, genero_id, raca_id, deficiencia_id, cidade_id, estado_id, cep, logradouro, numero, complemento, bairro, is_adult, is_main_guest, status, fnrh_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         stay_id,
         fullName,
@@ -696,6 +798,16 @@ app.post("/guests", (req, res) => {
         emailClean,
         phoneClean,
         birthDateClean,
+        generoIdClean,
+        racaIdClean,
+        deficienciaIdClean,
+        cidadeIdClean,
+        estadoIdClean,
+        cepClean,
+        logradouroClean,
+        numeroClean,
+        complementoClean,
+        bairroClean,
         is_adult ? 1 : 0,
         is_main_guest ? 1 : 0,
         "draft",
@@ -809,6 +921,16 @@ app.put("/guests/:id", (req, res) => {
     email,
     phone,
     birth_date,
+    genero_id,
+    raca_id,
+    deficiencia_id,
+    cidade_id,
+    estado_id,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
     is_adult,
     is_main_guest
   } = req.body;
@@ -822,6 +944,16 @@ app.put("/guests/:id", (req, res) => {
   const phoneClean = phone ? onlyDigits(phone) : "";
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
+  const generoIdClean = String(genero_id || "").trim();
+  const racaIdClean = String(raca_id || "").trim();
+  const deficienciaIdClean = String(deficiencia_id || "").trim();
+  const cidadeIdClean = String(cidade_id || "").trim();
+  const estadoIdClean = String(estado_id || "").trim();
+  const cepClean = onlyDigits(cep);
+  const logradouroClean = String(logradouro || "").trim();
+  const numeroClean = String(numero || "").trim();
+  const complementoClean = String(complemento || "").trim();
+  const bairroClean = String(bairro || "").trim();
 
   if (cpfClean && !isValidCPF(cpfClean)) {
     return res.status(400).json({
@@ -862,7 +994,7 @@ app.put("/guests/:id", (req, res) => {
           const executeUpdate = () => {
             db.run(
               `UPDATE guests
-               SET full_name = ?, cpf = ?, email = ?, phone = ?, birth_date = ?, is_adult = ?, is_main_guest = ?
+               SET full_name = ?, cpf = ?, email = ?, phone = ?, birth_date = ?, genero_id = ?, raca_id = ?, deficiencia_id = ?, cidade_id = ?, estado_id = ?, cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, is_adult = ?, is_main_guest = ?
                WHERE id = ?`,
               [
                 fullName,
@@ -870,6 +1002,16 @@ app.put("/guests/:id", (req, res) => {
                 emailClean,
                 phoneClean,
                 birthDateClean,
+                generoIdClean,
+                racaIdClean,
+                deficienciaIdClean,
+                cidadeIdClean,
+                estadoIdClean,
+                cepClean,
+                logradouroClean,
+                numeroClean,
+                complementoClean,
+                bairroClean,
                 is_adult ? 1 : 0,
                 is_main_guest ? 1 : 0,
                 guestId

@@ -341,6 +341,19 @@
       flex-wrap: wrap;
     }
 
+    .stay-edit-box {
+      margin-bottom: 18px;
+      padding: 14px;
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+    }
+
+    .stay-edit-box h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
     .inline-form {
       margin-bottom: 18px;
       padding: 14px;
@@ -373,6 +386,19 @@
     .form-field label {
       font-size: 13px;
       color: #444;
+    }
+
+    .field-help {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.35;
+    }
+
+    .form-note {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: #666;
+      line-height: 1.4;
     }
 
     .form-field input,
@@ -478,6 +504,41 @@
             <button id="reloadDetailsBtn" type="button">Recarregar detalhes</button>
           </div>
 
+          <div class="stay-edit-box">
+            <h3>Editar stay selecionada</h3>
+            <div class="form-note">
+              Ajuste os dados essenciais usados na FNRH sem precisar criar uma nova stay para cada teste.
+            </div>
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="editStayReservationId">reservation_id</label>
+                <input id="editStayReservationId" placeholder="ID da reserva">
+              </div>
+
+              <div class="form-field">
+                <label for="editStaySubReservationId">sub_reservation_id</label>
+                <input id="editStaySubReservationId" placeholder="ID da sub-reserva">
+              </div>
+
+              <div class="form-field">
+                <label for="editStayDataEntrada">data_entrada</label>
+                <input id="editStayDataEntrada" type="date">
+              </div>
+
+              <div class="form-field">
+                <label for="editStayDataSaida">data_saida</label>
+                <input id="editStayDataSaida" type="date">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button id="saveStayBtn" type="button">Salvar stay</button>
+            </div>
+
+            <div id="stayFormStatus" class="form-status"></div>
+          </div>
+
           <div class="link-box">
             <div class="link-title">Link público do pré-check-in</div>
             <div id="precheckinLinkValue" class="link-value">Selecione uma stay para gerar o link.</div>
@@ -505,6 +566,10 @@
           <h3>Hóspedes</h3>
           <div class="inline-form">
             <h3 id="guestFormTitle">Adicionar hóspede à stay</h3>
+            <div class="form-note">
+              Revise com atenção os dados usados na FNRH. `cidade_id` deve ser o código IBGE e `estado_id` deve ser a UF.
+              Os campos de gênero, raça e deficiência abaixo são preparatórios e ainda não entram no salvamento nesta etapa.
+            </div>
 
             <div class="form-grid">
               <div class="form-field full-width">
@@ -525,6 +590,81 @@
               <div class="form-field">
                 <label for="newGuestEmail">E-mail</label>
                 <input id="newGuestEmail" type="email" placeholder="email@exemplo.com">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestBirthDate">Data de nascimento</label>
+                <input id="newGuestBirthDate" type="date">
+                <div class="field-help">Use a data real do hóspede.</div>
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestCidadeId">cidade_id (código IBGE)</label>
+                <input id="newGuestCidadeId" placeholder="Código IBGE da cidade">
+                <div class="field-help">Informe o código IBGE numérico da cidade.</div>
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestEstadoId">estado_id (UF, ex: SP)</label>
+                <input id="newGuestEstadoId" placeholder="UF, ex: SP">
+                <div class="field-help">Use apenas a sigla da UF, como SP ou RJ.</div>
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestGeneroId">Gênero (FNRH)</label>
+                <select id="newGuestGeneroId">
+                  <option value="">Selecionar depois</option>
+                  <option value="HOMEM">HOMEM</option>
+                  <option value="MULHER">MULHER</option>
+                  <option value="OUTRO">OUTRO</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestRacaId">Raça (FNRH)</label>
+                <select id="newGuestRacaId">
+                  <option value="">Selecionar depois</option>
+                  <option value="AMARELA">AMARELA</option>
+                  <option value="BRANCA">BRANCA</option>
+                  <option value="INDIGENA">INDIGENA</option>
+                  <option value="PARDA">PARDA</option>
+                  <option value="PRETA">PRETA</option>
+                  <option value="NAOINFORMAR">NAOINFORMAR</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestDeficienciaId">Deficiência (FNRH)</label>
+                <select id="newGuestDeficienciaId">
+                  <option value="">Selecionar depois</option>
+                  <option value="NAO">NAO</option>
+                  <option value="SIM">SIM</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestCep">CEP</label>
+                <input id="newGuestCep" placeholder="00000-000" maxlength="9">
+              </div>
+
+              <div class="form-field full-width">
+                <label for="newGuestLogradouro">Logradouro</label>
+                <input id="newGuestLogradouro" placeholder="Rua, avenida, travessa...">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestNumero">NÃºmero</label>
+                <input id="newGuestNumero" placeholder="123">
+              </div>
+
+              <div class="form-field">
+                <label for="newGuestComplemento">Complemento</label>
+                <input id="newGuestComplemento" placeholder="Apto, bloco, fundos...">
+              </div>
+
+              <div class="form-field full-width">
+                <label for="newGuestBairro">Bairro</label>
+                <input id="newGuestBairro" placeholder="Nome do bairro">
               </div>
 
               <div class="form-field">
@@ -617,6 +757,16 @@
         "#555";
     }
 
+    function setStayFormStatus(message, tone) {
+      const element = document.getElementById("stayFormStatus");
+      element.textContent = message || "";
+      element.style.color =
+        tone === "error" ? "#b42318" :
+        tone === "success" ? "#18794e" :
+        tone === "warning" ? "#9a6700" :
+        "#555";
+    }
+
     function getPrecheckinLink(stayId) {
       if (!stayId) return "";
       const url = new URL("precheckin.html", window.location.href);
@@ -645,8 +795,27 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("newGuestCpf").value = "";
       document.getElementById("newGuestPhone").value = "";
       document.getElementById("newGuestEmail").value = "";
+      document.getElementById("newGuestBirthDate").value = "";
+      document.getElementById("newGuestCidadeId").value = "";
+      document.getElementById("newGuestEstadoId").value = "";
+      document.getElementById("newGuestGeneroId").value = "";
+      document.getElementById("newGuestRacaId").value = "";
+      document.getElementById("newGuestDeficienciaId").value = "";
+      document.getElementById("newGuestCep").value = "";
+      document.getElementById("newGuestLogradouro").value = "";
+      document.getElementById("newGuestNumero").value = "";
+      document.getElementById("newGuestComplemento").value = "";
+      document.getElementById("newGuestBairro").value = "";
       document.getElementById("newGuestRole").value = "0";
       setGuestFormStatus("");
+    }
+
+    function populateStayForm(stay) {
+      document.getElementById("editStayReservationId").value = stay?.reservation_id || "";
+      document.getElementById("editStaySubReservationId").value = stay?.sub_reservation_id || "";
+      document.getElementById("editStayDataEntrada").value = stay?.data_entrada || "";
+      document.getElementById("editStayDataSaida").value = stay?.data_saida || "";
+      setStayFormStatus("");
     }
 
     function startGuestEdit(guestId) {
@@ -664,6 +833,17 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("newGuestCpf").value = formatCPF(guest.cpf || "");
       document.getElementById("newGuestPhone").value = formatPhone(guest.phone || "");
       document.getElementById("newGuestEmail").value = guest.email || "";
+      document.getElementById("newGuestBirthDate").value = guest.birth_date || "";
+      document.getElementById("newGuestCidadeId").value = guest.cidade_id || "";
+      document.getElementById("newGuestEstadoId").value = guest.estado_id || "";
+      document.getElementById("newGuestGeneroId").value = guest.genero_id || "";
+      document.getElementById("newGuestRacaId").value = guest.raca_id || "";
+      document.getElementById("newGuestDeficienciaId").value = guest.deficiencia_id || "";
+      document.getElementById("newGuestCep").value = guest.cep || "";
+      document.getElementById("newGuestLogradouro").value = guest.logradouro || "";
+      document.getElementById("newGuestNumero").value = guest.numero || "";
+      document.getElementById("newGuestComplemento").value = guest.complemento || "";
+      document.getElementById("newGuestBairro").value = guest.bairro || "";
       document.getElementById("newGuestRole").value = guest.is_main_guest ? "1" : "0";
       setGuestFormStatus(`Editando ${guest.full_name || "hóspede"}.`, "info");
     }
@@ -747,6 +927,7 @@ Qualquer dúvida, estamos à disposição!`;
     function updateDetailActions(stay, guests) {
       const sendButton = document.getElementById("sendFnrhBtn");
       const reloadButton = document.getElementById("reloadDetailsBtn");
+      const saveStayButton = document.getElementById("saveStayBtn");
       const addGuestButton = document.getElementById("addGuestBtn");
       const copyPrecheckinButton = document.getElementById("copyPrecheckinBtn");
       const copyWhatsappMessageButton = document.getElementById("copyWhatsappMessageBtn");
@@ -770,6 +951,7 @@ Qualquer dúvida, estamos à disposição!`;
 
       sendButton.disabled = !summary.canSend;
       reloadButton.disabled = !stay;
+      saveStayButton.disabled = !stay;
       addGuestButton.disabled = !stay;
       copyPrecheckinButton.disabled = !stay;
       copyWhatsappMessageButton.disabled = !stay;
@@ -777,7 +959,9 @@ Qualquer dúvida, estamos à disposição!`;
       precheckinLinkValue.textContent = precheckinLink || "Selecione uma stay para gerar o link.";
 
       if (!stay) {
+        populateStayForm(null);
         setActionStatus("");
+        setStayFormStatus("Selecione uma stay para editar os dados.", "warning");
         setGuestFormStatus("Selecione uma stay para adicionar hóspedes.", "warning");
         return;
       }
@@ -849,6 +1033,7 @@ Qualquer dúvida, estamos à disposição!`;
       const precheckinSummary = getPrecheckinStatusSummary(guests);
       document.getElementById("detailPrecheckinStatus").textContent = precheckinSummary.label;
       document.getElementById("detailPrecheckinHelp").textContent = precheckinSummary.help;
+      populateStayForm(stay);
       updateDetailActions(stay, guests);
       if (!editingGuestId) {
         setGuestFormStatus(`Adicionando hóspedes à stay #${stay.id}.`, "info");
@@ -887,6 +1072,13 @@ Qualquer dúvida, estamos à disposição!`;
             <div><strong>Email:</strong> ${guest.email || "-"}</div>
             <div><strong>Telefone:</strong> ${guest.phone || "-"}</div>
             <div><strong>Nascimento:</strong> ${guest.birth_date || "-"}</div>
+            <div><strong>cidade_id:</strong> ${guest.cidade_id || "-"}</div>
+            <div><strong>estado_id:</strong> ${guest.estado_id || "-"}</div>
+            <div><strong>CEP:</strong> ${guest.cep || "-"}</div>
+            <div><strong>Logradouro:</strong> ${guest.logradouro || "-"}</div>
+            <div><strong>NÃºmero:</strong> ${guest.numero || "-"}</div>
+            <div><strong>Complemento:</strong> ${guest.complemento || "-"}</div>
+            <div><strong>Bairro:</strong> ${guest.bairro || "-"}</div>
             <div><strong>Status:</strong> ${guest.status || "-"}</div>
             <div><strong>FNRH:</strong> ${guest.fnrh_status || "-"}</div>
           </div>
@@ -993,6 +1185,55 @@ Qualquer dúvida, estamos à disposição!`;
       }
     }
 
+    async function saveSelectedStay() {
+      if (!selectedStayDetails?.stay?.id) {
+        setStayFormStatus("Selecione uma stay antes de salvar alterações.", "warning");
+        return;
+      }
+
+      const reservationId = document.getElementById("editStayReservationId").value.trim();
+      const subReservationId = document.getElementById("editStaySubReservationId").value.trim();
+      const dataEntrada = document.getElementById("editStayDataEntrada").value.trim();
+      const dataSaida = document.getElementById("editStayDataSaida").value.trim();
+
+      if (!reservationId) {
+        setStayFormStatus("reservation_id é obrigatório.", "error");
+        return;
+      }
+
+      const saveButton = document.getElementById("saveStayBtn");
+      saveButton.disabled = true;
+      setStayFormStatus("Salvando dados da stay...", "info");
+
+      try {
+        const response = await fetch(`${API_BASE}/stays/${selectedStayDetails.stay.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reservation_id: reservationId,
+            sub_reservation_id: subReservationId,
+            data_entrada: dataEntrada,
+            data_saida: dataSaida
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          setStayFormStatus(data.error || "Não foi possível salvar a stay.", "error");
+          return;
+        }
+
+        setStayFormStatus(data.message || "Stay atualizada com sucesso.", "success");
+        await loadStays();
+      } catch (error) {
+        console.error(error);
+        setStayFormStatus("Erro de comunicação ao salvar a stay.", "error");
+      } finally {
+        document.getElementById("saveStayBtn").disabled = false;
+      }
+    }
+
     async function addGuestToSelectedStay() {
       if (!selectedStayDetails?.stay?.id) {
         setGuestFormStatus("Selecione uma stay antes de cadastrar um hóspede.", "warning");
@@ -1004,6 +1245,17 @@ Qualquer dúvida, estamos à disposição!`;
       const cpfDigits = onlyDigits(cpf);
       const phone = document.getElementById("newGuestPhone").value.trim();
       const email = document.getElementById("newGuestEmail").value.trim();
+      const birthDate = document.getElementById("newGuestBirthDate").value.trim();
+      const cidadeId = document.getElementById("newGuestCidadeId").value.trim();
+      const estadoId = document.getElementById("newGuestEstadoId").value.trim();
+      const generoId = document.getElementById("newGuestGeneroId").value.trim();
+      const racaId = document.getElementById("newGuestRacaId").value.trim();
+      const deficienciaId = document.getElementById("newGuestDeficienciaId").value.trim();
+      const cep = document.getElementById("newGuestCep").value.trim();
+      const logradouro = document.getElementById("newGuestLogradouro").value.trim();
+      const numero = document.getElementById("newGuestNumero").value.trim();
+      const complemento = document.getElementById("newGuestComplemento").value.trim();
+      const bairro = document.getElementById("newGuestBairro").value.trim();
       const isMainGuest = document.getElementById("newGuestRole").value === "1" ? 1 : 0;
 
       if (!fullName) {
@@ -1066,7 +1318,17 @@ Qualquer dúvida, estamos à disposição!`;
             cpf,
             email,
             phone,
-            birth_date: "",
+            birth_date: birthDate,
+            genero_id: generoId,
+            raca_id: racaId,
+            deficiencia_id: deficienciaId,
+            cidade_id: cidadeId,
+            estado_id: estadoId,
+            cep,
+            logradouro,
+            numero,
+            complemento,
+            bairro,
             is_adult: 1,
             is_main_guest: isMainGuest
           })
@@ -1196,6 +1458,7 @@ Qualquer dúvida, estamos à disposição!`;
         loadStayDetails(selectedStayDetails.stay);
       }
     });
+    document.getElementById("saveStayBtn").addEventListener("click", saveSelectedStay);
     document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
     document.getElementById("addGuestBtn").addEventListener("click", addGuestToSelectedStay);
     document.getElementById("cancelEditBtn").addEventListener("click", resetGuestForm);
@@ -1207,6 +1470,10 @@ Qualquer dúvida, estamos à disposição!`;
     });
     document.getElementById("newGuestPhone").addEventListener("input", (event) => {
       event.target.value = formatPhone(event.target.value);
+    });
+    document.getElementById("newGuestCep").addEventListener("input", (event) => {
+      const digits = onlyDigits(event.target.value).slice(0, 8);
+      event.target.value = digits.replace(/^(\d{5})(\d)/, "$1-$2");
     });
 
     loadStays();

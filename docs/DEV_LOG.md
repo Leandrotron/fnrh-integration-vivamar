@@ -362,6 +362,54 @@ Ao final de cada sessão, atualizar as seções abaixo.
 - Não refatorar o sistema.
 - Não antecipar campos sem validação real da API.
 
+### Marco: Integração FNRH funcional (MVP)
+
+- Integração real com a FNRH validada com sucesso.
+- Resposta `201` confirmando criação de reserva.
+- `dados_hospedes` retornando preenchido, com pelo menos um hóspede processado corretamente.
+- Validação completa do payload principal (`reserva` + `hóspede`) concluída em nível MVP.
+
+### Caminho percorrido até o marco
+
+- Correção progressiva dos campos obrigatórios exigidos pela API:
+  - `numero_reserva`
+  - `data_entrada`
+  - `data_saida`
+  - `genero_id`
+  - `raca_id`
+  - `deficiencia_id`
+  - `cidade_id`
+  - `estado_id`
+  - estrutura de `contato`
+- Evolução do modelo de `guest` para suportar:
+  - endereço/residência
+  - gênero
+  - raça
+  - deficiência
+- Ajustes no painel interno para permitir edição mais completa de:
+  - hóspedes
+  - stays
+
+### Estado atual
+
+- Integração FNRH funcional em nível MVP.
+- Dados reais de hóspede já sendo aceitos pela API.
+- Builder usando dados do `guest` com fallback temporário para compatibilidade.
+- Painel interno já permite preparar dados mais completos antes do envio.
+
+### Próximos passos
+
+- Validar visualmente no painel da FNRH:
+  - hóspedes
+  - fichas
+- Melhorar o log da resposta FNRH para evitar saídas resumidas como `[Object]`.
+- Reduzir dependência de valores temporários:
+  - `genero_id`
+  - `raca_id`
+  - `deficiencia_id`
+- Melhorar a UX do painel interno para reduzir erro humano.
+- Avaliar futura integração com o fluxo público de pré-check-in.
+
 ---
 
 ## Instrução De Atualização No Fim Do Dia
