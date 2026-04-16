@@ -227,11 +227,76 @@
       color: #222;
     }
 
+    .fnrh-completeness {
+      margin: 8px 0 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid #d7e7db;
+      background: #f3fbf5;
+      color: #1f5130;
+    }
+
+    .fnrh-completeness.incomplete {
+      border-color: #f1d7a7;
+      background: #fff8ea;
+      color: #7a4b00;
+    }
+
+    .fnrh-fallback-warning {
+      margin: -2px 0 10px;
+      font-size: 12px;
+      color: #8a5a00;
+      line-height: 1.4;
+    }
+
     .detail-actions {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
       margin-bottom: 18px;
+      align-items: center;
+    }
+
+    .button-help {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.4;
+    }
+
+    .button-help.warning {
+      color: #8a5a00;
+    }
+
+    .operational-alert {
+      margin-bottom: 16px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #f1bfc4;
+      background: #fff1f3;
+    }
+
+    .operational-alert-title {
+      font-size: 12px;
+      color: #8f1d2c;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      font-weight: bold;
+    }
+
+    .operational-alert-message {
+      font-size: 15px;
+      font-weight: bold;
+      color: #721c24;
+      margin-bottom: 4px;
+    }
+
+    .operational-alert-help {
+      font-size: 13px;
+      color: #8f1d2c;
+      line-height: 1.5;
     }
 
     .secondary-btn {
@@ -267,6 +332,35 @@
       margin-bottom: 8px;
       text-transform: uppercase;
       letter-spacing: 0.4px;
+    }
+
+    .readiness-box {
+      margin-bottom: 18px;
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .readiness-message {
+      font-size: 14px;
+      font-weight: bold;
+      color: #2c3e50;
+      margin-bottom: 6px;
+    }
+
+    .readiness-message.incomplete {
+      color: #8a5a00;
+    }
+
+    .readiness-message.empty {
+      color: #666;
+    }
+
+    .readiness-stats {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.5;
     }
 
     .pill-row {
@@ -394,6 +488,10 @@
       line-height: 1.35;
     }
 
+    .field-help.warning {
+      color: #8a5a00;
+    }
+
     .form-note {
       margin: 0 0 12px;
       font-size: 12px;
@@ -410,6 +508,18 @@
       border: 1px solid #ccc;
       font-size: 14px;
       background: #fff;
+    }
+
+    .form-field.attention label {
+      color: #8a5a00;
+      font-weight: bold;
+    }
+
+    .form-field.attention select,
+    .form-field.attention input {
+      border-color: #f1d7a7;
+      background: #fff8ea;
+      box-shadow: 0 0 0 1px rgba(241, 215, 167, 0.5);
     }
 
     .form-actions {
@@ -466,6 +576,12 @@
         <div id="detailsEmpty" class="empty">Selecione uma stay para ver os hóspedes.</div>
 
         <div id="detailsContent" style="display:none;">
+          <div id="operationalAlert" class="operational-alert" style="display:none;">
+            <div class="operational-alert-title">Alerta operacional</div>
+            <div id="operationalAlertMessage" class="operational-alert-message">Stay sem titular definido</div>
+            <div id="operationalAlertHelp" class="operational-alert-help">Defina pelo menos um hóspede titular para evitar inconsistência operacional e liberar envio correto para a FNRH</div>
+          </div>
+
           <div class="detail-grid">
             <div class="detail-box">
               <div class="detail-label">ID da stay</div>
@@ -501,6 +617,7 @@
 
           <div class="detail-actions">
             <button id="sendFnrhBtn" class="secondary-btn" type="button">Enviar stay para FNRH</button>
+            <div id="sendFnrhHelp" class="button-help"></div>
             <button id="reloadDetailsBtn" type="button">Recarregar detalhes</button>
           </div>
 
@@ -511,7 +628,7 @@
             </div>
 
             <div class="form-grid">
-              <div class="form-field">
+              <div id="newGuestRoleField" class="form-field">
                 <label for="editStayReservationId">reservation_id</label>
                 <input id="editStayReservationId" placeholder="ID da reserva">
               </div>
@@ -564,6 +681,29 @@
           </div>
 
           <h3>Hóspedes</h3>
+          <div class="readiness-box">
+            <div class="summary-title">Prontidão FNRH</div>
+            <div id="fnrhReadinessMessage" class="readiness-message">Selecione uma stay para ver o resumo.</div>
+            <div id="fnrhReadinessStats" class="readiness-stats">Completos: 0 | Incompletos: 0 | Total: 0</div>
+          </div>
+
+          <div class="readiness-box">
+            <div class="summary-title">Último envio FNRH</div>
+            <div class="readiness-box">
+              <div class="summary-title">Precisão dos dados FNRH</div>
+              <div id="fnrhFallbackMessage" class="readiness-message">Selecione uma stay para ver o resumo.</div>
+              <div id="fnrhFallbackStats" class="readiness-stats">Sem fallback: 0 | Com possível fallback: 0 | Total: 0</div>
+              <div id="fnrhFallbackFields" class="readiness-stats"></div>
+            </div>
+            <div id="fnrhLastLabel" class="status-pill" style="display:none;"></div>
+            <div id="fnrhLastStatus" class="readiness-message empty">Nenhum envio realizado ainda</div>
+            <div id="fnrhLastMessage" class="readiness-stats">Mensagem: -</div>
+            <div id="fnrhLastSentAt" class="readiness-stats">Enviado em: -</div>
+            <div id="fnrhLastGuestCountSent" class="readiness-stats"></div>
+            <div id="fnrhLastGuestCountConfirmed" class="readiness-stats"></div>
+            <div id="fnrhLastGuestDivergence" class="readiness-stats"></div>
+          </div>
+
           <div class="inline-form">
             <h3 id="guestFormTitle">Adicionar hóspede à stay</h3>
             <div class="form-note">
@@ -602,12 +742,14 @@
                 <label for="newGuestCidadeId">cidade_id (código IBGE)</label>
                 <input id="newGuestCidadeId" placeholder="Código IBGE da cidade">
                 <div class="field-help">Informe o código IBGE numérico da cidade.</div>
+                <div class="field-help">Código IBGE — importante para envio correto à FNRH</div>
               </div>
 
               <div class="form-field">
                 <label for="newGuestEstadoId">estado_id (UF, ex: SP)</label>
                 <input id="newGuestEstadoId" placeholder="UF, ex: SP">
                 <div class="field-help">Use apenas a sigla da UF, como SP ou RJ.</div>
+                <div class="field-help">UF — importante para envio correto à FNRH</div>
               </div>
 
               <div class="form-field">
@@ -618,6 +760,7 @@
                   <option value="MULHER">MULHER</option>
                   <option value="OUTRO">OUTRO</option>
                 </select>
+                <div class="field-help">Importante para envio correto à FNRH</div>
               </div>
 
               <div class="form-field">
@@ -631,6 +774,7 @@
                   <option value="PRETA">PRETA</option>
                   <option value="NAOINFORMAR">NAOINFORMAR</option>
                 </select>
+                <div class="field-help">Importante para envio correto à FNRH</div>
               </div>
 
               <div class="form-field">
@@ -640,6 +784,7 @@
                   <option value="NAO">NAO</option>
                   <option value="SIM">SIM</option>
                 </select>
+                <div class="field-help">Importante para envio correto à FNRH</div>
               </div>
 
               <div class="form-field">
@@ -673,6 +818,7 @@
                   <option value="0">Acompanhante</option>
                   <option value="1">Titular</option>
                 </select>
+                <div id="newGuestRoleHelp" class="field-help" style="display:none;">Selecione um hóspede como titular</div>
               </div>
             </div>
 
@@ -697,6 +843,7 @@
     let selectedStayId = null;
     let selectedStayDetails = null;
     let editingGuestId = null;
+    let isReloadingStays = false;
 
     async function fetchJson(url) {
       const res = await fetch(url);
@@ -811,9 +958,9 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     function populateStayForm(stay) {
+      console.log("populateStayForm", stay?.id);
       document.getElementById("editStayReservationId").value = stay?.reservation_id || "";
       document.getElementById("editStaySubReservationId").value = stay?.sub_reservation_id || "";
-      document.getElementById("editStayDataEntrada").value = stay?.data_entrada || "";
       document.getElementById("editStayDataSaida").value = stay?.data_saida || "";
       setStayFormStatus("");
     }
@@ -926,6 +1073,9 @@ Qualquer dúvida, estamos à disposição!`;
 
     function updateDetailActions(stay, guests) {
       const sendButton = document.getElementById("sendFnrhBtn");
+      const sendHelp = document.getElementById("sendFnrhHelp");
+      const roleField = document.getElementById("newGuestRole")?.closest(".form-field");
+      const roleHelp = document.getElementById("newGuestRoleHelp");
       const reloadButton = document.getElementById("reloadDetailsBtn");
       const saveStayButton = document.getElementById("saveStayBtn");
       const addGuestButton = document.getElementById("addGuestBtn");
@@ -935,6 +1085,23 @@ Qualquer dúvida, estamos à disposição!`;
       const precheckinLinkValue = document.getElementById("precheckinLinkValue");
       const summary = getStayOperationalSummary(guests);
       const precheckinLink = getPrecheckinLink(stay?.id);
+      const guestsWithPossibleFallback = guests.filter((guest) => [
+        !guest.genero_id,
+        !guest.raca_id,
+        !guest.deficiencia_id,
+        !guest.cidade_id,
+        !guest.estado_id
+      ].some(Boolean)).length;
+      const incompleteGuests = guests.filter((guest) => [
+        !guest.genero_id,
+        !guest.raca_id,
+        !guest.deficiencia_id,
+        !guest.cidade_id,
+        !guest.estado_id,
+        !guest.cpf,
+        !guest.birth_date
+      ].some(Boolean)).length;
+      const hasIncompleteGuests = incompleteGuests > 0;
 
       renderPills("guestSummary", [
         { label: `${summary.total} hóspede(s)`, variant: "info" },
@@ -949,7 +1116,12 @@ Qualquer dúvida, estamos à disposição!`;
         { label: `${summary.errorCount} erro(s)`, variant: summary.errorCount ? "error" : "info" }
       ]);
 
-      sendButton.disabled = !summary.canSend;
+      sendButton.textContent = hasIncompleteGuests
+        ? "Enviar para FNRH mesmo com pendências"
+        : "Enviar para FNRH";
+      sendButton.disabled = !stay || summary.total === 0;
+      sendHelp.textContent = "";
+      sendHelp.className = "button-help";
       reloadButton.disabled = !stay;
       saveStayButton.disabled = !stay;
       addGuestButton.disabled = !stay;
@@ -957,8 +1129,13 @@ Qualquer dúvida, estamos à disposição!`;
       copyWhatsappMessageButton.disabled = !stay;
       openPrecheckinButton.disabled = !stay;
       precheckinLinkValue.textContent = precheckinLink || "Selecione uma stay para gerar o link.";
+      roleField.classList.remove("attention");
+      roleHelp.style.display = "none";
+      roleHelp.className = "field-help";
 
       if (!stay) {
+        sendButton.textContent = "Enviar para FNRH";
+        sendHelp.textContent = "";
         populateStayForm(null);
         setActionStatus("");
         setStayFormStatus("Selecione uma stay para editar os dados.", "warning");
@@ -967,8 +1144,24 @@ Qualquer dúvida, estamos à disposição!`;
       }
 
       if (!guests.length) {
+        sendButton.textContent = "Enviar para FNRH";
+        sendHelp.textContent = "Cadastre ao menos um hóspede antes do envio";
         setActionStatus("Adicione hóspedes a esta stay antes de enviar para a FNRH.", "warning");
         return;
+      }
+
+      if (summary.mainGuests === 0) {
+        roleField.classList.add("attention");
+        roleHelp.style.display = "block";
+        roleHelp.className = "field-help warning";
+      }
+
+      if (hasIncompleteGuests) {
+        sendHelp.textContent = "Existem hóspedes com dados incompletos";
+        sendHelp.className = "button-help warning";
+      } else if (guestsWithPossibleFallback > 0) {
+        sendHelp.textContent = "Envio possível, mas alguns dados ainda podem depender de fallback";
+        sendHelp.className = "button-help warning";
       }
 
       if (!summary.mainGuests) {
@@ -1000,7 +1193,7 @@ Qualquer dúvida, estamos à disposição!`;
 
       for (const stay of stays) {
         const card = document.createElement("div");
-        card.className = "stay-card" + (stay.id === selectedStayId ? " active" : "");
+        card.className = "stay-card" + (String(stay.id) === String(selectedStayId) ? " active" : "");
         card.innerHTML = `
           <div class="stay-title">Stay #${stay.id}</div>
           <div class="stay-meta">
@@ -1011,6 +1204,11 @@ Qualquer dúvida, estamos à disposição!`;
         `;
 
         card.addEventListener("click", () => {
+          if (isReloadingStays) {
+            console.log("selectStay ignored during reload:", stay.id);
+            return;
+          }
+          console.log("selectStay called:", stay.id);
           selectedStayId = stay.id;
           renderStayList();
           loadStayDetails(stay);
@@ -1021,6 +1219,7 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     function renderGuests(stay, guests) {
+      console.log("renderGuests", stay?.id);
       document.getElementById("detailsEmpty").style.display = "none";
       document.getElementById("detailsContent").style.display = "block";
       selectedStayDetails = { stay, guests };
@@ -1031,12 +1230,158 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("detailCreatedAt").textContent = formatDateTime(stay.created_at);
       document.getElementById("detailGuestCount").textContent = guests.length;
       const precheckinSummary = getPrecheckinStatusSummary(guests);
+      const operationalSummary = getStayOperationalSummary(guests);
+      const operationalAlert = document.getElementById("operationalAlert");
+      const operationalAlertMessage = document.getElementById("operationalAlertMessage");
+      const operationalAlertHelp = document.getElementById("operationalAlertHelp");
+      const fnrhReadinessMessage = document.getElementById("fnrhReadinessMessage");
+      const fnrhReadinessStats = document.getElementById("fnrhReadinessStats");
+      const fnrhFallbackMessage = document.getElementById("fnrhFallbackMessage");
+      const fnrhFallbackStats = document.getElementById("fnrhFallbackStats");
+      const fnrhFallbackFields = document.getElementById("fnrhFallbackFields");
+      const fnrhLastLabel = document.getElementById("fnrhLastLabel");
+      const fnrhLastStatus = document.getElementById("fnrhLastStatus");
+      const fnrhLastMessage = document.getElementById("fnrhLastMessage");
+      const fnrhLastSentAt = document.getElementById("fnrhLastSentAt");
+      const fnrhLastGuestCountSent = document.getElementById("fnrhLastGuestCountSent");
+      const fnrhLastGuestCountConfirmed = document.getElementById("fnrhLastGuestCountConfirmed");
+      const fnrhLastGuestDivergence = document.getElementById("fnrhLastGuestDivergence");
       document.getElementById("detailPrecheckinStatus").textContent = precheckinSummary.label;
       document.getElementById("detailPrecheckinHelp").textContent = precheckinSummary.help;
+
+      if (operationalSummary.total > 0 && operationalSummary.mainGuests === 0) {
+        operationalAlert.style.display = "block";
+        operationalAlertMessage.textContent = "Stay sem titular definido";
+        operationalAlertHelp.textContent = "Defina pelo menos um hóspede titular para evitar inconsistência operacional e liberar envio correto para a FNRH";
+      } else {
+        operationalAlert.style.display = "none";
+      }
+
       populateStayForm(stay);
       updateDetailActions(stay, guests);
       if (!editingGuestId) {
         setGuestFormStatus(`Adicionando hóspedes à stay #${stay.id}.`, "info");
+      }
+
+      let completeGuests = 0;
+      let incompleteGuests = 0;
+      let guestsWithPossibleFallback = 0;
+      const fallbackFieldCounts = {
+        genero_id: 0,
+        raca_id: 0,
+        deficiencia_id: 0,
+        cidade_id: 0,
+        estado_id: 0
+      };
+
+      for (const guest of guests) {
+        const possibleFallbackFields = [
+          !guest.genero_id && "genero_id",
+          !guest.raca_id && "raca_id",
+          !guest.deficiencia_id && "deficiencia_id",
+          !guest.cidade_id && "cidade_id",
+          !guest.estado_id && "estado_id"
+        ].filter(Boolean);
+        const missingCriticalFields = [
+          !guest.genero_id && "genero_id",
+          !guest.raca_id && "raca_id",
+          !guest.deficiencia_id && "deficiencia_id",
+          !guest.cidade_id && "cidade_id",
+          !guest.estado_id && "estado_id",
+          !guest.cpf && "cpf",
+          !guest.birth_date && "birth_date"
+        ].filter(Boolean);
+
+        if (missingCriticalFields.length === 0) {
+          completeGuests += 1;
+        } else {
+          incompleteGuests += 1;
+        }
+
+        if (possibleFallbackFields.length > 0) {
+          guestsWithPossibleFallback += 1;
+        }
+
+        for (const fieldName of possibleFallbackFields) {
+          fallbackFieldCounts[fieldName] += 1;
+        }
+      }
+
+      if (!guests.length) {
+        fnrhReadinessMessage.textContent = "Nenhum hóspede cadastrado";
+        fnrhReadinessMessage.className = "readiness-message empty";
+      } else if (incompleteGuests === 0) {
+        fnrhReadinessMessage.textContent = "Todos os hóspedes estão completos para envio";
+        fnrhReadinessMessage.className = "readiness-message";
+      } else {
+        fnrhReadinessMessage.textContent = "Existem hóspedes com pendências para envio";
+        fnrhReadinessMessage.className = "readiness-message incomplete";
+      }
+
+      fnrhReadinessStats.textContent = `Completos: ${completeGuests} | Incompletos: ${incompleteGuests} | Total: ${guests.length}`;
+
+      if (!guests.length) {
+        fnrhFallbackMessage.textContent = "Nenhum hóspede cadastrado";
+        fnrhFallbackMessage.className = "readiness-message empty";
+      } else if (guestsWithPossibleFallback === 0) {
+        fnrhFallbackMessage.textContent = "Nenhum sinal de fallback nos hóspedes cadastrados";
+        fnrhFallbackMessage.className = "readiness-message";
+      } else {
+        fnrhFallbackMessage.textContent = "Existem hóspedes com possível uso de fallback FNRH";
+        fnrhFallbackMessage.className = "readiness-message incomplete";
+      }
+
+      fnrhFallbackStats.textContent = `Sem fallback: ${Math.max(0, guests.length - guestsWithPossibleFallback)} | Com possível fallback: ${guestsWithPossibleFallback} | Total: ${guests.length}`;
+
+      if (!guests.length) {
+        fnrhFallbackFields.textContent = "";
+      } else {
+        const totalFallbackSignals = Object.values(fallbackFieldCounts).reduce((sum, count) => sum + count, 0);
+        fnrhFallbackFields.textContent = totalFallbackSignals === 0
+          ? "Nenhum campo com sinal de fallback na stay"
+          : `Possível fallback por campo: genero_id: ${fallbackFieldCounts.genero_id} | raca_id: ${fallbackFieldCounts.raca_id} | deficiencia_id: ${fallbackFieldCounts.deficiencia_id} | cidade_id: ${fallbackFieldCounts.cidade_id} | estado_id: ${fallbackFieldCounts.estado_id}`;
+      }
+
+      if (stay?.fnrh_last_status || stay?.fnrh_last_message || stay?.fnrh_last_sent_at) {
+        const sentGuestCount = Number(stay?.fnrh_last_guest_count_sent ?? 0);
+        const confirmedGuestCount = Number(stay?.fnrh_last_guest_count_confirmed ?? 0);
+        const isPartialSuccess = stay?.fnrh_last_status === "success" && sentGuestCount !== confirmedGuestCount;
+        const lastLabelText = stay?.fnrh_last_status === "error"
+          ? "Erro"
+          : isPartialSuccess
+            ? "Sucesso parcial"
+            : "Sucesso total";
+        const lastLabelVariant = stay?.fnrh_last_status === "error"
+          ? "error"
+          : isPartialSuccess
+            ? "pending"
+            : "sent";
+
+        fnrhLastLabel.textContent = lastLabelText;
+        fnrhLastLabel.className = `status-pill ${lastLabelVariant}`.trim();
+        fnrhLastLabel.style.display = "inline-block";
+        fnrhLastStatus.textContent = `Status: ${stay?.fnrh_last_status || "-"}`;
+        fnrhLastStatus.className = `readiness-message ${stay?.fnrh_last_status === "error" ? "incomplete" : ""}`.trim();
+        fnrhLastMessage.textContent = `Mensagem: ${stay?.fnrh_last_message || "-"}`;
+        fnrhLastSentAt.textContent = `Enviado em: ${formatDateTime(stay?.fnrh_last_sent_at)}`;
+        fnrhLastGuestCountSent.textContent = `Hóspedes enviados: ${sentGuestCount}`;
+        fnrhLastGuestCountConfirmed.textContent = `Hóspedes confirmados: ${confirmedGuestCount}`;
+        fnrhLastGuestDivergence.textContent = sentGuestCount === confirmedGuestCount
+          ? "Processamento de hóspedes sem divergência"
+          : "Atenção: quantidade confirmada diferente da quantidade enviada";
+        fnrhLastGuestDivergence.className = `readiness-stats ${sentGuestCount === confirmedGuestCount ? "" : "readiness-message incomplete"}`.trim();
+      } else {
+        fnrhLastLabel.textContent = "";
+        fnrhLastLabel.className = "status-pill";
+        fnrhLastLabel.style.display = "none";
+        fnrhLastStatus.textContent = "Nenhum envio realizado ainda";
+        fnrhLastStatus.className = "readiness-message empty";
+        fnrhLastMessage.textContent = "Mensagem: -";
+        fnrhLastSentAt.textContent = "Enviado em: -";
+        fnrhLastGuestCountSent.textContent = "";
+        fnrhLastGuestCountConfirmed.textContent = "";
+        fnrhLastGuestDivergence.textContent = "";
+        fnrhLastGuestDivergence.className = "readiness-stats";
       }
 
       const guestList = document.getElementById("guestList");
@@ -1050,6 +1395,23 @@ Qualquer dúvida, estamos à disposição!`;
       for (const guest of guests) {
         const card = document.createElement("div");
         card.className = "guest-card";
+        const possibleFallbackFields = [
+          !guest.genero_id && "genero_id",
+          !guest.raca_id && "raca_id",
+          !guest.deficiencia_id && "deficiencia_id",
+          !guest.cidade_id && "cidade_id",
+          !guest.estado_id && "estado_id"
+        ].filter(Boolean);
+        const missingCriticalFields = [
+          !guest.genero_id && "genero_id",
+          !guest.raca_id && "raca_id",
+          !guest.deficiencia_id && "deficiencia_id",
+          !guest.cidade_id && "cidade_id",
+          !guest.estado_id && "estado_id",
+          !guest.cpf && "cpf",
+          !guest.birth_date && "birth_date"
+        ].filter(Boolean);
+        const isFNRHComplete = missingCriticalFields.length === 0;
 
         card.innerHTML = `
           <div class="guest-header">
@@ -1066,6 +1428,13 @@ Qualquer dúvida, estamos à disposição!`;
               </button>
             </div>
           </div>
+
+          <div class="fnrh-completeness ${isFNRHComplete ? "" : "incomplete"}">
+            <div><strong>FNRH:</strong> ${isFNRHComplete ? "completo" : "incompleto"}</div>
+            ${isFNRHComplete ? "" : `<div>Pendências: ${missingCriticalFields.join(", ")}</div>`}
+          </div>
+
+          ${possibleFallbackFields.length > 0 ? `<div class="fnrh-fallback-warning">Possível uso de fallback FNRH</div>` : ""}
 
           <div class="guest-meta">
             <div><strong>CPF:</strong> ${guest.cpf || "-"}</div>
@@ -1104,6 +1473,8 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     async function loadStayDetails(stay) {
+      console.log("loadStayDetails:", stay.id);
+      selectedStayId = stay?.id ?? selectedStayId;
       const guestList = document.getElementById("guestList");
       guestList.innerHTML = `<div class="empty">Carregando hóspedes...</div>`;
       setActionStatus("Carregando detalhes da stay...", "info");
@@ -1121,20 +1492,25 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     async function loadStays() {
+      console.log("loadStays called with selectedStayId:", selectedStayId);
+      isReloadingStays = true;
       const status = document.getElementById("listStatus");
       status.textContent = "Carregando...";
 
       try {
         stays = await fetchJson(`${API_BASE}/stays`);
-        renderStayList();
 
         if (stays.length) {
-          const stayToOpen =
-            stays.find(s => s.id === selectedStayId) || stays[0];
+          const stayToOpen = selectedStayId != null
+            ? stays.find((s) => String(s.id) === String(selectedStayId))
+            : null;
 
-          selectedStayId = stayToOpen.id;
+          const finalStay = stayToOpen || stays[0];
+
+          selectedStayId = finalStay.id;
+
           renderStayList();
-          await loadStayDetails(stayToOpen);
+          await loadStayDetails(finalStay);
         } else {
           selectedStayDetails = null;
           updateDetailActions(null, []);
@@ -1147,6 +1523,8 @@ Qualquer dúvida, estamos à disposição!`;
         status.textContent = "Erro ao carregar stays.";
         document.getElementById("stayList").innerHTML =
           `<div class="empty">Não foi possível buscar as stays.</div>`;
+      } finally {
+        isReloadingStays = false;
       }
     }
 
@@ -1156,36 +1534,75 @@ Qualquer dúvida, estamos à disposição!`;
         return;
       }
 
+      const currentStay = selectedStayDetails.stay;
+      let finalFeedbackMessage = "";
+      let finalFeedbackTone = "info";
+
+      const hasIncompleteGuests = (selectedStayDetails.guests || []).some((guest) => [
+        !guest.genero_id,
+        !guest.raca_id,
+        !guest.deficiencia_id,
+        !guest.cidade_id,
+        !guest.estado_id,
+        !guest.cpf,
+        !guest.birth_date
+      ].some(Boolean));
+
+      if (hasIncompleteGuests) {
+        const confirmed = window.confirm("Existem hóspedes com dados incompletos para a FNRH. Deseja enviar mesmo assim?");
+        if (!confirmed) {
+          return;
+        }
+      }
+
       const sendButton = document.getElementById("sendFnrhBtn");
       sendButton.disabled = true;
       setActionStatus("Enviando stay para a FNRH...", "info");
 
       try {
-        const response = await fetch(`${API_BASE}/stays/${selectedStayDetails.stay.id}/send-fnrh`, {
+        const response = await fetch(`${API_BASE}/stays/${currentStay.id}/send-fnrh`, {
           method: "POST"
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-          setActionStatus(data.error || "Falha ao enviar a stay para a FNRH.", "error");
+          finalFeedbackMessage = "Falha ao enviar para a FNRH";
+          finalFeedbackTone = "error";
           return;
         }
 
-        const modeLabel = data.fnrh_mode ? ` (${data.fnrh_mode})` : "";
-        setActionStatus(`${data.message || "Stay enviada com sucesso."}${modeLabel}`, "success");
-        await loadStays();
+        finalFeedbackMessage = "Envio para FNRH realizado com sucesso";
+        finalFeedbackTone = "success";
       } catch (error) {
         console.error(error);
+        finalFeedbackMessage = "Falha ao enviar para a FNRH";
+        finalFeedbackTone = "error";
         setActionStatus("Erro de comunicação ao enviar a stay para a FNRH.", "error");
       } finally {
-        if (selectedStayDetails?.stay) {
+        if (currentStay?.id) {
+          selectedStayId = selectedStayDetails?.stay?.id;
+
+          try {
+            await loadStays();
+          } catch (reloadError) {
+            console.error(reloadError);
+          }
+        } else if (selectedStayDetails?.stay) {
           updateDetailActions(selectedStayDetails.stay, selectedStayDetails.guests || []);
+        }
+
+        if (finalFeedbackMessage) {
+          setActionStatus(finalFeedbackMessage, finalFeedbackTone);
         }
       }
     }
 
     async function saveSelectedStay() {
+      console.log("saveSelectedStay start", {
+        selectedStayId,
+        selectedStayDetailsStayId: selectedStayDetails?.stay?.id
+      });
       if (!selectedStayDetails?.stay?.id) {
         setStayFormStatus("Selecione uma stay antes de salvar alterações.", "warning");
         return;
@@ -1204,6 +1621,15 @@ Qualquer dúvida, estamos à disposição!`;
       const saveButton = document.getElementById("saveStayBtn");
       saveButton.disabled = true;
       setStayFormStatus("Salvando dados da stay...", "info");
+      console.log("before setting selectedStayId in saveSelectedStay", {
+        selectedStayId,
+        selectedStayDetailsStayId: selectedStayDetails?.stay?.id
+      });
+      selectedStayId = selectedStayDetails.stay.id;
+      console.log("after setting selectedStayId in saveSelectedStay", {
+        selectedStayId,
+        selectedStayDetailsStayId: selectedStayDetails?.stay?.id
+      });
 
       try {
         const response = await fetch(`${API_BASE}/stays/${selectedStayDetails.stay.id}`, {
@@ -1225,6 +1651,11 @@ Qualquer dúvida, estamos à disposição!`;
         }
 
         setStayFormStatus(data.message || "Stay atualizada com sucesso.", "success");
+        console.log("before loadStays in saveSelectedStay", {
+          selectedStayId,
+          selectedStayDetailsStayId: selectedStayDetails?.stay?.id
+        });
+        selectedStayId = selectedStayDetails?.stay?.id;
         await loadStays();
       } catch (error) {
         console.error(error);
@@ -1305,6 +1736,7 @@ Qualquer dúvida, estamos à disposição!`;
       const isEditing = !!editingGuestId;
       addButton.disabled = true;
       setGuestFormStatus(isEditing ? "Salvando edição do hóspede..." : "Salvando hóspede na stay...", "info");
+      selectedStayId = selectedStayDetails.stay.id;
 
       try {
         const url = isEditing ? `${API_BASE}/guests/${editingGuestId}` : `${API_BASE}/guests`;

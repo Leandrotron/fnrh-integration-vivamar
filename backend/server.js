@@ -12,6 +12,12 @@ app.use(cors());
 app.use(express.json());
 
 const PROPERTY_ID = "vivamar";
+const EMPTY_STAY_SEED = {
+  reservation_id: "TEST-STAY-SEM-HOSPEDES",
+  sub_reservation_id: "TEST-STAY-SEM-HOSPEDES-01",
+  data_entrada: "2026-04-20",
+  data_saida: "2026-04-22"
+};
 
 // =========================
 // Funções auxiliares
@@ -104,6 +110,8 @@ function buildLegacyCheckinFNRHPayload(checkin) {
 
 function buildFNRHPayload(stay, guests) {
   const safeGuests = Array.isArray(guests) ? guests : [];
+  const debugInfo = [];
+  const validationWarnings = [];
 
   const payload = {
     reserva: {
@@ -120,6 +128,49 @@ function buildFNRHPayload(stay, guests) {
       // O modelo atual nao tem unidade/quarto explicito dentro da stay.
     },
     dados_hospede: safeGuests.map((guest) => {
+        const guestDebug = {
+          guest_id: guest?.id,
+          nome: guest?.full_name,
+          campos: {}
+        };
+        const generoId = guest?.genero_id || "HOMEM";
+        const racaId = guest?.raca_id || "NAOINFORMAR";
+        const deficienciaId = guest?.deficiencia_id || "NAO";
+        const cidadeId = guest?.cidade_id || null;
+        const estadoId = guest?.estado_id || null;
+        const cpf = guest?.cpf || null;
+        const birthDate = guest?.birth_date || null;
+        const missingCriticalFields = [];
+
+        guestDebug.campos.genero_id = {
+          value: generoId,
+          source: guest?.genero_id ? "guest" : generoId ? "fallback" : "missing"
+        };
+        guestDebug.campos.raca_id = {
+          value: racaId,
+          source: guest?.raca_id ? "guest" : racaId ? "fallback" : "missing"
+        };
+        guestDebug.campos.deficiencia_id = {
+          value: deficienciaId,
+          source: guest?.deficiencia_id ? "guest" : deficienciaId ? "fallback" : "missing"
+        };
+        guestDebug.campos.cidade_id = {
+          value: cidadeId,
+          source: guest?.cidade_id ? "guest" : "missing"
+        };
+        guestDebug.campos.estado_id = {
+          value: estadoId,
+          source: guest?.estado_id ? "guest" : "missing"
+        };
+        guestDebug.campos.cpf = {
+          value: cpf,
+          source: guest?.cpf ? "guest" : "missing"
+        };
+        guestDebug.campos.birth_date = {
+          value: birthDate,
+          source: guest?.birth_date ? "guest" : "missing"
+        };
+
         const payloadGuest = {
           is_principal: !!guest?.is_main_guest,
           // Mantido fixo no envio inicial, alinhado ao fluxo atual de registro da hospedagem.
@@ -128,19 +179,19 @@ function buildFNRHPayload(stay, guests) {
             ...(guest?.full_name ? { nome: guest.full_name } : {}),
             // A documentacao de pessoa usa nome_social; vazio e um default seguro aqui.
             nome_social: "",
-            ...(guest?.birth_date ? { data_nascimento: guest.birth_date } : {}),
+            ...(birthDate ? { data_nascimento: birthDate } : {}),
             // Fallbacks temporarios para manter compatibilidade com hospedes antigos
             // que ainda nao tenham esses dados preenchidos no sistema.
-            genero_id: guest?.genero_id || "HOMEM",
-            raca_id: guest?.raca_id || "NAOINFORMAR",
-            deficiencia_id: guest?.deficiencia_id || "NAO",
+            genero_id: generoId,
+            raca_id: racaId,
+            deficiencia_id: deficienciaId,
             tipo_deficiencia_id: "",
             // Assuncao minima explicita para o caso atual de hospede brasileiro.
             PaisNacionalidade_id: "BR",
-            ...(guest?.cpf
+            ...(cpf
               ? {
                 documento_id: {
-                  numero_documento: guest.cpf,
+                  numero_documento: cpf,
                   tipo_documento_id: "CPF"
                 }
               }
@@ -148,8 +199,8 @@ function buildFNRHPayload(stay, guests) {
           contato: {
             ...(guest?.email ? { email: guest.email } : {}),
             ...(guest?.phone ? { telefone: guest.phone } : {}),
-            ...(guest?.cidade_id ? { cidade_id: guest.cidade_id } : {}),
-            ...(guest?.estado_id ? { estado_id: guest.estado_id } : {}),
+            ...(cidadeId ? { cidade_id: cidadeId } : {}),
+            ...(estadoId ? { estado_id: estadoId } : {}),
             ...(guest?.cep ? { cep: guest.cep } : {}),
             ...(guest?.logradouro ? { logradouro: guest.logradouro } : {}),
             ...(guest?.numero ? { numero: guest.numero } : {}),
@@ -161,12 +212,36 @@ function buildFNRHPayload(stay, guests) {
         }
         };
 
+        if (generoId == null || generoId === "") missingCriticalFields.push("genero_id");
+        if (racaId == null || racaId === "") missingCriticalFields.push("raca_id");
+        if (deficienciaId == null || deficienciaId === "") missingCriticalFields.push("deficiencia_id");
+        if (cidadeId == null || cidadeId === "") missingCriticalFields.push("cidade_id");
+        if (estadoId == null || estadoId === "") missingCriticalFields.push("estado_id");
+        if (cpf == null || cpf === "") missingCriticalFields.push("cpf");
+        if (birthDate == null || birthDate === "") missingCriticalFields.push("birth_date");
+
+        if (missingCriticalFields.length > 0) {
+          validationWarnings.push({
+            guest_id: guest?.id,
+            nome: guest?.full_name,
+            missing_critical_fields: missingCriticalFields
+          });
+        }
+
+        debugInfo.push(guestDebug);
+
         // O modelo atual ainda nao coleta genero_id, endereco completo,
         // documento alternativo nem responsavel_id para cenarios mais completos.
         return payloadGuest;
       })
     };
 
+  console.log("FNRH DEBUG PAYLOAD:", JSON.stringify(debugInfo, null, 2));
+  if (validationWarnings.length > 0) {
+    console.warn("FNRH VALIDATION WARNINGS:", JSON.stringify(validationWarnings, null, 2));
+  } else {
+    console.log("FNRH VALIDATION WARNINGS: none");
+  }
   console.log("FNRH PAYLOAD PREVIEW:", JSON.stringify(payload, null, 2));
 
   return payload;
@@ -305,6 +380,61 @@ function updateGuestsFNRHStatus(guestIds, fnrhStatus, statusValue, callback) {
     [fnrhStatus, statusValue, ...guestIds],
     function (err) {
       callback(err);
+    }
+  );
+}
+
+function updateStayLastFNRHResult(stayId, status, message, guestCountSent, guestCountConfirmed, callback) {
+  db.run(
+    `UPDATE stays
+     SET fnrh_last_status = ?,
+         fnrh_last_message = ?,
+         fnrh_last_sent_at = CURRENT_TIMESTAMP,
+         fnrh_last_guest_count_sent = ?,
+         fnrh_last_guest_count_confirmed = ?
+     WHERE id = ? AND property_id = ?`,
+    [status, message, guestCountSent, guestCountConfirmed, stayId, PROPERTY_ID],
+    (err) => {
+      callback(err);
+    }
+  );
+}
+
+function ensureEmptyTestStay() {
+  db.get(
+    `SELECT id FROM stays
+     WHERE property_id = ? AND reservation_id = ? AND sub_reservation_id = ?`,
+    [PROPERTY_ID, EMPTY_STAY_SEED.reservation_id, EMPTY_STAY_SEED.sub_reservation_id],
+    (err, row) => {
+      if (err) {
+        console.error("Erro ao verificar stay de teste sem hóspedes:", err);
+        return;
+      }
+
+      if (row) {
+        console.log(`Stay de teste sem hóspedes já existe (#${row.id})`);
+        return;
+      }
+
+      db.run(
+        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          PROPERTY_ID,
+          EMPTY_STAY_SEED.reservation_id,
+          EMPTY_STAY_SEED.sub_reservation_id,
+          EMPTY_STAY_SEED.data_entrada,
+          EMPTY_STAY_SEED.data_saida
+        ],
+        function (insertErr) {
+          if (insertErr) {
+            console.error("Erro ao criar stay de teste sem hóspedes:", insertErr);
+            return;
+          }
+
+          console.log(`Stay de teste sem hóspedes criada (#${this.lastID})`);
+        }
+      );
     }
   );
 }
@@ -577,6 +707,7 @@ app.post("/stays", (req, res) => {
   );
 });
 console.log("ROTAS STAYS/GUESTS CARREGADAS");
+ensureEmptyTestStay();
 
 // lista stays
 app.get("/stays", (req, res) => {
@@ -600,7 +731,7 @@ app.get("/stays/:id", (req, res) => {
   const stayId = req.params.id;
 
   db.get(
-    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, created_at
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
      FROM stays
      WHERE id = ? AND property_id = ?`,
     [stayId, PROPERTY_ID],
@@ -1101,26 +1232,59 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
 
           const payload = buildFNRHPayload(stay, guests);
           const guestIds = guests.map((g) => g.id);
+          const guestCountSent = Array.isArray(payload?.dados_hospede) ? payload.dados_hospede.length : guests.length;
 
           try {
             const result = await sendToFNRH(payload);
+            const guestCountConfirmed = Array.isArray(result.body?.dados_hospedes) ? result.body.dados_hospedes.length : 0;
 
             if (result.ok) {
               updateGuestsFNRHStatus(guestIds, "sent", "sent_to_fnrh", (updateErr) => {
                 if (updateErr) {
                   console.error("Erro ao atualizar status FNRH dos hóspedes:", updateErr);
-                  return res.status(500).json({
-                    error: "Enviado, mas falhou ao atualizar status local"
-                  });
+                  updateStayLastFNRHResult(
+                    stay.id,
+                    "error",
+                    "Enviado, mas falhou ao atualizar status local",
+                    guestCountSent,
+                    0,
+                    (stayUpdateErr) => {
+                      if (stayUpdateErr) {
+                        console.error("Erro ao salvar falha local após envio FNRH:", stayUpdateErr);
+                      }
+
+                      return res.status(500).json({
+                        error: "Enviado, mas falhou ao atualizar status local"
+                      });
+                    }
+                  );
+                  return;
                 }
 
-                return res.json({
-                  message: "Stay enviada para FNRH com sucesso",
-                  stay_id: stay.id,
-                  fnrh_mode: process.env.FNRH_MODE || "mock",
-                  response_status: result.status,
-                  response_body: result.body
-                });
+                const successMessage = guestCountSent === guestCountConfirmed
+                  ? "Envio concluído com todos os hóspedes confirmados"
+                  : "Envio concluído com confirmação parcial de hóspedes";
+
+                updateStayLastFNRHResult(
+                  stay.id,
+                  "success",
+                  successMessage,
+                  guestCountSent,
+                  guestCountConfirmed,
+                  (stayUpdateErr) => {
+                    if (stayUpdateErr) {
+                      console.error("Erro ao salvar último envio FNRH da stay:", stayUpdateErr);
+                    }
+
+                    return res.json({
+                      message: "Stay enviada para FNRH com sucesso",
+                      stay_id: stay.id,
+                      fnrh_mode: process.env.FNRH_MODE || "mock",
+                      response_status: result.status,
+                      response_body: result.body
+                    });
+                  }
+                );
               });
             } else {
               updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
@@ -1128,12 +1292,24 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
                   console.error("Erro ao marcar falha FNRH:", updateErr);
                 }
 
-                return res.status(502).json({
-                  error: "Falha no envio para FNRH",
-                  stay_id: stay.id,
-                  fnrh_mode: process.env.FNRH_MODE || "mock",
-                  response_status: result.status,
-                  response_body: result.body
+                const errorMessage = String(
+                  result.body?.error ||
+                  result.body?.message ||
+                  "Falha no envio para FNRH"
+                ).trim();
+
+                updateStayLastFNRHResult(stay.id, "error", errorMessage, guestCountSent, 0, (stayUpdateErr) => {
+                  if (stayUpdateErr) {
+                    console.error("Erro ao salvar falha FNRH da stay:", stayUpdateErr);
+                  }
+
+                  return res.status(502).json({
+                    error: "Falha no envio para FNRH",
+                    stay_id: stay.id,
+                    fnrh_mode: process.env.FNRH_MODE || "mock",
+                    response_status: result.status,
+                    response_body: result.body
+                  });
                 });
               });
             }
@@ -1145,12 +1321,24 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
                 console.error("Erro ao marcar status de erro FNRH:", updateErr);
               }
 
-              return res.status(500).json({
-                error: sendErr.message || "Erro interno ao enviar para FNRH",
-                stay_id: stay.id,
-                fnrh_mode: process.env.FNRH_MODE || "mock",
-                response_status: sendErr.fnrhStatus ?? null,
-                response_body: sendErr.fnrhBody || null
+              const errorMessage = String(
+                sendErr.fnrhBody?.error ||
+                sendErr.message ||
+                "Erro interno ao enviar para FNRH"
+              ).trim();
+
+              updateStayLastFNRHResult(stay.id, "error", errorMessage, guestCountSent, 0, (stayUpdateErr) => {
+                if (stayUpdateErr) {
+                  console.error("Erro ao salvar erro FNRH da stay:", stayUpdateErr);
+                }
+
+                return res.status(500).json({
+                  error: sendErr.message || "Erro interno ao enviar para FNRH",
+                  stay_id: stay.id,
+                  fnrh_mode: process.env.FNRH_MODE || "mock",
+                  response_status: sendErr.fnrhStatus ?? null,
+                  response_body: sendErr.fnrhBody || null
+                });
               });
             });
           }

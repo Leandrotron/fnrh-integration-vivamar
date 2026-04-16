@@ -2,6 +2,8 @@
 
 Sistema de **pré-check-in digital** com integração à FNRH, desenvolvido para eliminar retrabalho manual na recepção.
 
+Status atual: investigação ativa de bug na seleção de stays após edição.
+
 ---
 
 ## 🎯 Objetivo

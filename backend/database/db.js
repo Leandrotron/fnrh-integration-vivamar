@@ -56,6 +56,11 @@ db.serialize(() => {
       sub_reservation_id TEXT NOT NULL,
       data_entrada TEXT,
       data_saida TEXT,
+      fnrh_last_status TEXT,
+      fnrh_last_message TEXT,
+      fnrh_last_sent_at TEXT,
+      fnrh_last_guest_count_sent INTEGER,
+      fnrh_last_guest_count_confirmed INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
@@ -65,6 +70,11 @@ db.serialize(() => {
 
   ensureColumn("stays", "data_entrada", "TEXT");
   ensureColumn("stays", "data_saida", "TEXT");
+  ensureColumn("stays", "fnrh_last_status", "TEXT");
+  ensureColumn("stays", "fnrh_last_message", "TEXT");
+  ensureColumn("stays", "fnrh_last_sent_at", "TEXT");
+  ensureColumn("stays", "fnrh_last_guest_count_sent", "INTEGER");
+  ensureColumn("stays", "fnrh_last_guest_count_confirmed", "INTEGER");
 
   // nova estrutura: hóspedes da suíte
   db.run(`

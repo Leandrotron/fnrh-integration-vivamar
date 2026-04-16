@@ -1,5 +1,17 @@
 # DEV_LOG
 
+## 2026-04-16
+
+- Investigação do bug de seleção de stay após salvar ou recarregar no painel `stays.html`
+- Adicionados logs de rastreamento no frontend para acompanhar o fluxo de:
+  - `loadStays`
+  - `loadStayDetails`
+  - `renderGuests`
+- Tentativas de preservação de `selectedStayId` durante reloads da lista e reabertura da stay atual
+- Ajustes incrementais na lógica de seleção das stays para evitar retorno indevido à primeira stay da lista
+- Resultado atual: bug ainda não resolvido de forma confiável; investigação pausada para retomada posterior
+- Observação operacional: o estado atual foi versionado para manter ponto de retomada claro no próximo ciclo de debug
+
 ## Finalidade
 
 Este arquivo é o ponto oficial de retomada do projeto em novos chats.
