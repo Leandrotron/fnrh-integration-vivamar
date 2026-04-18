@@ -86,6 +86,27 @@
       color: #666;
     }
 
+    .field-note.success {
+      color: #18794e;
+    }
+
+    .field-note.error {
+      color: #b42318;
+    }
+
+    .field-note.warning {
+      color: #9a6700;
+    }
+
+    .section-title {
+      margin: 14px 0 8px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #2c3e50;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
     .actions {
       display: flex;
       gap: 10px;
@@ -248,6 +269,71 @@
         "#222";
     }
 
+    function setGuestCepStatus(index, message, tone = "") {
+      const element = document.getElementById(`guest_${index}_cep_status`);
+      if (!element) {
+        return;
+      }
+      element.textContent = message || "Preencha o CEP para completar cidade e estado automaticamente.";
+      element.className = `field-note ${tone}`.trim();
+    }
+
+    async function lookupAddressByCep(index, forceLookup = false) {
+      const cepInput = document.getElementById(`guest_${index}_cep`);
+      const card = document.querySelector(`.guest-box[data-guest-index="${index}"]`);
+      const cepDigits = onlyDigits(cepInput?.value || "").slice(0, 8);
+
+      if (!card) {
+        return;
+      }
+
+      if (!cepDigits) {
+        card.dataset.lastCepLookup = "";
+        setGuestCepStatus(index, "");
+        return;
+      }
+
+      if (cepDigits.length < 8) {
+        setGuestCepStatus(index, "Complete os 8 dígitos do CEP para buscar o endereço.", "warning");
+        return;
+      }
+
+      if (!forceLookup && card.dataset.lastCepLookup === cepDigits) {
+        return;
+      }
+
+      setGuestCepStatus(index, "Buscando endereço...", "warning");
+
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+
+        if (!response.ok) {
+          throw new Error(`Erro ${response.status} ao consultar CEP`);
+        }
+
+        const data = await response.json();
+
+        if (data.erro) {
+          card.dataset.lastCepLookup = "";
+          setGuestCepStatus(index, "CEP não encontrado. Você pode preencher manualmente.", "error");
+          return;
+        }
+
+        document.getElementById(`guest_${index}_logradouro`).value = data.logradouro || "";
+        document.getElementById(`guest_${index}_bairro`).value = data.bairro || "";
+        document.getElementById(`guest_${index}_cidade_nome`).value = data.localidade || "";
+        document.getElementById(`guest_${index}_estado_uf`).value = (data.uf || "").toUpperCase();
+        document.getElementById(`guest_${index}_cidade_id`).value = data.ibge || "";
+        document.getElementById(`guest_${index}_estado_id`).value = (data.uf || "").toUpperCase();
+        card.dataset.lastCepLookup = cepDigits;
+        setGuestCepStatus(index, "Endereço preenchido automaticamente.", "success");
+      } catch (error) {
+        console.error(error);
+        card.dataset.lastCepLookup = "";
+        setGuestCepStatus(index, "Não foi possível buscar o CEP agora. O preenchimento manual continua disponível.", "error");
+      }
+    }
+
     function renderStayLoadedInfo(stay = currentStayData) {
       if (!stay) return;
 
@@ -316,9 +402,11 @@
       }
 
       guestIndex += 1;
+      const currentGuestIndex = guestIndex;
       const card = document.createElement("div");
       card.className = "guest-box";
-      card.dataset.guestIndex = String(guestIndex);
+      card.dataset.guestIndex = String(currentGuestIndex);
+      card.dataset.lastCepLookup = "";
 
       card.innerHTML = `
         <h3>Hóspede ${guestIndex}</h3>
@@ -344,6 +432,43 @@
         </div>
 
         <div class="field">
+          <label for="guest_${guestIndex}_birth_date">Data de nascimento</label>
+          <input id="guest_${guestIndex}_birth_date" type="date">
+          <div class="field-note">Use a data real do hóspede.</div>
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_genero_id">Gênero</label>
+          <select id="guest_${guestIndex}_genero_id">
+            <option value="">Selecione</option>
+            <option value="HOMEM">Masculino</option>
+            <option value="MULHER">Feminino</option>
+            <option value="OUTRO">Outro</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_raca_id">Raça/Cor</label>
+          <select id="guest_${guestIndex}_raca_id">
+            <option value="">Selecione</option>
+            <option value="AMARELA">Amarela</option>
+            <option value="BRANCA">Branca</option>
+            <option value="INDIGENA">Indígena</option>
+            <option value="PARDA">Parda</option>
+            <option value="PRETA">Preta</option>
+            <option value="NAOINFORMAR">Prefiro não informar</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_deficiencia_id">Possui alguma deficiência?</label>
+          <select id="guest_${guestIndex}_deficiencia_id">
+            <option value="NAO">Não</option>
+            <option value="SIM">Sim</option>
+          </select>
+        </div>
+
+        <div class="field">
           <label for="guest_${guestIndex}_role">Tipo do hóspede</label>
           <select id="guest_${guestIndex}_role">
             <option value="1">Titular</option>
@@ -352,12 +477,54 @@
           <div class="field-note">Pelo menos um hóspede deve ser titular.</div>
         </div>
 
+        <div class="section-title">Endereço</div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_cep">CEP</label>
+          <input id="guest_${guestIndex}_cep" placeholder="00000-000" maxlength="9">
+          <div id="guest_${guestIndex}_cep_status" class="field-note">Preencha o CEP para completar cidade e estado automaticamente.</div>
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_logradouro">Logradouro</label>
+          <input id="guest_${guestIndex}_logradouro" placeholder="Rua, avenida, travessa...">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_numero">Número</label>
+          <input id="guest_${guestIndex}_numero" placeholder="123">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_complemento">Complemento</label>
+          <input id="guest_${guestIndex}_complemento" placeholder="Apto, bloco, fundos...">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_bairro">Bairro</label>
+          <input id="guest_${guestIndex}_bairro" placeholder="Nome do bairro">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_cidade_nome">Cidade</label>
+          <input id="guest_${guestIndex}_cidade_nome" placeholder="Nome da cidade">
+        </div>
+
+        <div class="field">
+          <label for="guest_${guestIndex}_estado_uf">Estado</label>
+          <input id="guest_${guestIndex}_estado_uf" placeholder="UF, ex: SP" maxlength="2">
+          <div class="field-note">Use a UF. O CEP pode preencher automaticamente.</div>
+        </div>
+
+        <input id="guest_${guestIndex}_cidade_id" type="hidden" value="">
+        <input id="guest_${guestIndex}_estado_id" type="hidden" value="">
+
         <div class="actions">
           <button class="danger-btn remove-guest-btn" type="button">Remover hóspede</button>
         </div>
       `;
 
-      card.querySelector(`#guest_${guestIndex}_role`).value = defaultRole;
+      card.querySelector(`#guest_${currentGuestIndex}_role`).value = defaultRole;
 
       card.querySelector(".remove-guest-btn").addEventListener("click", () => {
         const cards = document.querySelectorAll(".guest-box");
@@ -370,12 +537,37 @@
         setStatus("");
       });
 
-      card.querySelector(`#guest_${guestIndex}_cpf`).addEventListener("input", (event) => {
+      card.querySelector(`#guest_${currentGuestIndex}_cpf`).addEventListener("input", (event) => {
         event.target.value = formatCPF(event.target.value);
       });
 
-      card.querySelector(`#guest_${guestIndex}_phone`).addEventListener("input", (event) => {
+      card.querySelector(`#guest_${currentGuestIndex}_phone`).addEventListener("input", (event) => {
         event.target.value = formatPhone(event.target.value);
+      });
+
+      card.querySelector(`#guest_${currentGuestIndex}_cep`).addEventListener("input", (event) => {
+        const digits = onlyDigits(event.target.value).slice(0, 8);
+        event.target.value = digits.replace(/^(\d{5})(\d)/, "$1-$2");
+        if (digits.length < 8) {
+          card.dataset.lastCepLookup = "";
+        }
+        if (digits.length === 8) {
+          lookupAddressByCep(currentGuestIndex);
+        }
+      });
+
+      card.querySelector(`#guest_${currentGuestIndex}_cep`).addEventListener("blur", () => {
+        lookupAddressByCep(currentGuestIndex, true);
+      });
+
+      card.querySelector(`#guest_${currentGuestIndex}_cidade_nome`).addEventListener("input", () => {
+        document.getElementById(`guest_${currentGuestIndex}_cidade_id`).value = "";
+      });
+
+      card.querySelector(`#guest_${currentGuestIndex}_estado_uf`).addEventListener("input", (event) => {
+        const normalizedValue = String(event.target.value || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+        event.target.value = normalizedValue;
+        document.getElementById(`guest_${currentGuestIndex}_estado_id`).value = normalizedValue;
       });
 
       document.getElementById("guestList").appendChild(card);
@@ -389,9 +581,19 @@
           cpf: document.getElementById(`guest_${index}_cpf`).value.trim(),
           email: document.getElementById(`guest_${index}_email`).value.trim(),
           phone: document.getElementById(`guest_${index}_phone`).value.trim(),
+          birth_date: document.getElementById(`guest_${index}_birth_date`).value.trim(),
+          genero_id: document.getElementById(`guest_${index}_genero_id`).value.trim(),
+          raca_id: document.getElementById(`guest_${index}_raca_id`).value.trim(),
+          deficiencia_id: document.getElementById(`guest_${index}_deficiencia_id`).value.trim() || "NAO",
+          cep: document.getElementById(`guest_${index}_cep`).value.trim(),
+          logradouro: document.getElementById(`guest_${index}_logradouro`).value.trim(),
+          numero: document.getElementById(`guest_${index}_numero`).value.trim(),
+          complemento: document.getElementById(`guest_${index}_complemento`).value.trim(),
+          bairro: document.getElementById(`guest_${index}_bairro`).value.trim(),
+          cidade_id: document.getElementById(`guest_${index}_cidade_id`).value.trim(),
+          estado_id: document.getElementById(`guest_${index}_estado_id`).value.trim(),
           is_main_guest: document.getElementById(`guest_${index}_role`).value === "1" ? 1 : 0,
-          is_adult: 1,
-          birth_date: ""
+          is_adult: 1
         };
       });
     }
@@ -424,6 +626,18 @@
 
         if (cpfSet.has(cpfDigits)) {
           return "Não repita o mesmo CPF em mais de um hóspede.";
+        }
+
+        if (!guest.birth_date) {
+          return "Preencha a data de nascimento de todos os hóspedes.";
+        }
+
+        if (!guest.genero_id) {
+          return "Selecione o gênero de todos os hóspedes.";
+        }
+
+        if (!guest.raca_id) {
+          return "Selecione a raça/cor de todos os hóspedes.";
         }
 
         cpfSet.add(cpfDigits);
@@ -546,6 +760,16 @@
               email: guest.email,
               phone: guest.phone,
               birth_date: guest.birth_date,
+              genero_id: guest.genero_id,
+              raca_id: guest.raca_id,
+              deficiencia_id: guest.deficiencia_id,
+              cep: guest.cep,
+              logradouro: guest.logradouro,
+              numero: guest.numero,
+              complemento: guest.complemento,
+              bairro: guest.bairro,
+              cidade_id: guest.cidade_id,
+              estado_id: guest.estado_id,
               is_adult: guest.is_adult,
               is_main_guest: guest.is_main_guest
             })

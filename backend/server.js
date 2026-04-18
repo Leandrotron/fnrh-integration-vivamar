@@ -63,6 +63,10 @@ function isValidBirthDate(dateString) {
   return /^\d{4}-\d{2}-\d{2}$/.test(dateString);
 }
 
+const VALID_GENERO_IDS = ["HOMEM", "MULHER", "OUTRO"];
+const VALID_RACA_IDS = ["AMARELA", "BRANCA", "INDIGENA", "PARDA", "PRETA", "NAOINFORMAR"];
+const VALID_DEFICIENCIA_IDS = ["NAO", "SIM"];
+
 function splitName(fullName) {
   const parts = fullName.trim().split(/\s+/);
   const firstName = parts.shift() || "";
@@ -481,7 +485,7 @@ app.post("/checkin", (req, res) => {
 
   const reservationId = String(reservation_id).trim();
   const subReservationId = String(sub_reservation_id || reservation_id).trim();
-  const fullName = String(full_name).trim();
+  const fullName = String(full_name || "").trim();
   const cpfClean = normalizeCPF(cpf);
   const phoneClean = onlyDigits(phone);
   const birthDateClean = String(birth_date || "").trim();
@@ -753,7 +757,6 @@ app.get("/stays/:id", (req, res) => {
 app.put("/stays/:id", (req, res) => {
   const stayId = req.params.id;
   const { reservation_id, sub_reservation_id, data_entrada, data_saida } = req.body;
-
   if (!reservation_id) {
     return res.status(400).json({
       error: "ID da reserva e obrigatorio"
@@ -764,7 +767,6 @@ app.put("/stays/:id", (req, res) => {
   const subReservationId = String(sub_reservation_id || reservation_id).trim();
   const dataEntrada = String(data_entrada || "").trim();
   const dataSaida = String(data_saida || "").trim();
-
   if (dataEntrada && !isValidBirthDate(dataEntrada)) {
     return res.status(400).json({
       error: "Data de entrada invalida"
@@ -830,135 +832,144 @@ app.post("/guests", (req, res) => {
     is_main_guest
   } = req.body;
 
-  if (!stay_id || !full_name) {
-    return res.status(400).json({
-      error: "stay_id e nome completo são obrigatórios"
-    });
-  }
-
-  const fullName = String(full_name).trim();
+  const fullName = String(full_name || "").trim();
   const cpfClean = normalizeCPF(cpf);
   const phoneClean = phone ? onlyDigits(phone) : "";
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
   const generoIdClean = String(genero_id || "").trim();
   const racaIdClean = String(raca_id || "").trim();
-  const deficienciaIdClean = String(deficiencia_id || "").trim();
+  const deficienciaIdClean = String(deficiencia_id || "NAO").trim();
   const cidadeIdClean = String(cidade_id || "").trim();
-  const estadoIdClean = String(estado_id || "").trim();
+  const estadoIdClean = String(estado_id || "").trim().toUpperCase();
   const cepClean = onlyDigits(cep);
   const logradouroClean = String(logradouro || "").trim();
   const numeroClean = String(numero || "").trim();
   const complementoClean = String(complemento || "").trim();
   const bairroClean = String(bairro || "").trim();
+  const isMainGuestProvided = is_main_guest !== undefined && is_main_guest !== null && String(is_main_guest).trim() !== "";
+  const isMainGuestValue = Number(is_main_guest) === 1 ? 1 : 0;
+  const isAdultValue = Number(is_adult) === 1 ? 1 : 0;
 
-  if (cpfClean && !isValidCPF(cpfClean)) {
-    return res.status(400).json({ error: "CPF inválido" });
+  if (!stayIdClean) {
+    return res.status(400).json({ error: "Stay obrigatoria" });
   }
 
-  // 🔍 1. tentar encontrar hóspede existente
-  const query = cpfClean
-    ? `SELECT * FROM guests WHERE stay_id = ? AND cpf = ?`
-    : `SELECT * FROM guests WHERE stay_id = ? AND full_name = ? AND birth_date = ?`;
+  if (!fullName) {
+    return res.status(400).json({ error: "Nome completo obrigatorio" });
+  }
 
-  const params = cpfClean
-    ? [stay_id, cpfClean]
-    : [stay_id, fullName, birthDateClean];
+  if (!cpfClean) {
+    return res.status(400).json({ error: "CPF obrigatorio" });
+  }
 
-  db.get(query, params, (err, existing) => {
-    if (err) {
-      console.error("Erro ao buscar hóspede:", err);
-      return res.status(500).json({ error: "Erro no banco" });
-    }
+  if (!isValidCPF(cpfClean)) {
+    return res.status(400).json({ error: "CPF invalido" });
+  }
 
-    if (cpfClean && existing) {
-      return res.status(400).json({
-        error: "Já existe um hóspede com este CPF na mesma stay"
-      });
-    }
+  if (!birthDateClean) {
+    return res.status(400).json({ error: "Data de nascimento obrigatoria" });
+  }
 
-    // 🔄 2. se já existe → UPDATE
-    if (existing) {
-      db.run(
-        `UPDATE guests
-         SET email = ?, phone = ?, birth_date = ?, genero_id = ?, raca_id = ?, deficiencia_id = ?, cidade_id = ?, estado_id = ?, cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, is_adult = ?, is_main_guest = ?
-         WHERE id = ?`,
-        [
-          emailClean,
-          phoneClean,
-          birthDateClean,
-          generoIdClean,
-          racaIdClean,
-          deficienciaIdClean,
-          cidadeIdClean,
-          estadoIdClean,
-          cepClean,
-          logradouroClean,
-          numeroClean,
-          complementoClean,
-          bairroClean,
-          is_adult ? 1 : 0,
-          is_main_guest ? 1 : 0,
-          existing.id
-        ],
-        function (err) {
+  if (!isValidBirthDate(birthDateClean)) {
+    return res.status(400).json({ error: "Data de nascimento invalida" });
+  }
+
+  if (!isMainGuestProvided) {
+    return res.status(400).json({ error: "Tipo do hospede obrigatorio" });
+  }
+
+  if (!generoIdClean) {
+    return res.status(400).json({ error: "Genero nao informado" });
+  }
+
+  if (!VALID_GENERO_IDS.includes(generoIdClean)) {
+    return res.status(400).json({ error: "Genero invalido" });
+  }
+
+  if (!racaIdClean) {
+    return res.status(400).json({ error: "Raca/Cor nao informada" });
+  }
+
+  if (!VALID_RACA_IDS.includes(racaIdClean)) {
+    return res.status(400).json({ error: "Raca/Cor invalida" });
+  }
+
+  if (!VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
+    return res.status(400).json({ error: "Informacao de deficiencia invalida" });
+  }
+
+  db.get(
+    `SELECT id FROM stays WHERE id = ? AND property_id = ?`,
+    [stayIdClean, PROPERTY_ID],
+    (stayErr, stayRow) => {
+      if (stayErr) {
+        console.error("Erro ao validar stay do hospede:", stayErr);
+        return res.status(500).json({ error: "Erro no banco" });
+      }
+
+      if (!stayRow) {
+        return res.status(400).json({ error: "Stay nao encontrada" });
+      }
+
+      db.get(
+        `SELECT * FROM guests WHERE stay_id = ? AND cpf = ?`,
+        [stayIdClean, cpfClean],
+        (err, existing) => {
           if (err) {
-            console.error("Erro ao atualizar hóspede:", err);
-            return res.status(500).json({ error: "Erro ao atualizar hóspede" });
+            console.error("Erro ao buscar hospede:", err);
+            return res.status(500).json({ error: "Erro no banco" });
           }
 
-          return res.json({
-            message: "Hóspede atualizado",
-            guest_id: existing.id
-          });
+          if (existing) {
+            return res.status(400).json({
+              error: "Ja existe um hospede com este CPF na mesma stay"
+            });
+          }
+
+          db.run(
+            `INSERT INTO guests
+             (stay_id, full_name, cpf, email, phone, birth_date, genero_id, raca_id, deficiencia_id, cidade_id, estado_id, cep, logradouro, numero, complemento, bairro, is_adult, is_main_guest, status, fnrh_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              stayIdClean,
+              fullName,
+              cpfClean,
+              emailClean,
+              phoneClean,
+              birthDateClean,
+              generoIdClean,
+              racaIdClean,
+              deficienciaIdClean,
+              cidadeIdClean,
+              estadoIdClean,
+              cepClean,
+              logradouroClean,
+              numeroClean,
+              complementoClean,
+              bairroClean,
+              isAdultValue,
+              isMainGuestValue,
+              "draft",
+              "pending"
+            ],
+            function (insertErr) {
+              if (insertErr) {
+                console.error("Erro ao criar hospede:", insertErr);
+                return res.status(500).json({ error: "Erro ao criar hospede" });
+              }
+
+              return res.json({
+                message: "Hospede criado com sucesso",
+                guest_id: this.lastID
+              });
+            }
+          );
         }
       );
-
-      return;
     }
-
-    // 🆕 3. se não existe → INSERT
-    db.run(
-      `INSERT INTO guests
-       (stay_id, full_name, cpf, email, phone, birth_date, genero_id, raca_id, deficiencia_id, cidade_id, estado_id, cep, logradouro, numero, complemento, bairro, is_adult, is_main_guest, status, fnrh_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        stay_id,
-        fullName,
-        cpfClean,
-        emailClean,
-        phoneClean,
-        birthDateClean,
-        generoIdClean,
-        racaIdClean,
-        deficienciaIdClean,
-        cidadeIdClean,
-        estadoIdClean,
-        cepClean,
-        logradouroClean,
-        numeroClean,
-        complementoClean,
-        bairroClean,
-        is_adult ? 1 : 0,
-        is_main_guest ? 1 : 0,
-        "draft",
-        "pending"
-      ],
-      function (err) {
-        if (err) {
-          console.error("Erro ao criar hóspede:", err);
-          return res.status(500).json({ error: "Erro ao criar hóspede" });
-        }
-
-        return res.json({
-          message: "Hóspede criado com sucesso",
-          guest_id: this.lastID
-        });
-      }
-    );
-  });
+  );
 });
-
 // lista hóspedes de uma suíte
 app.get("/stays/:id/guests", (req, res) => {
   const stayId = req.params.id;
@@ -1070,26 +1081,65 @@ app.put("/guests/:id", (req, res) => {
     return res.status(400).json({ error: "Nome completo é obrigatório" });
   }
 
-  const fullName = String(full_name).trim();
+  const fullName = String(full_name || "").trim();
   const cpfClean = normalizeCPF(cpf);
   const phoneClean = phone ? onlyDigits(phone) : "";
   const emailClean = String(email || "").trim();
   const birthDateClean = String(birth_date || "").trim();
   const generoIdClean = String(genero_id || "").trim();
   const racaIdClean = String(raca_id || "").trim();
-  const deficienciaIdClean = String(deficiencia_id || "").trim();
+  const deficienciaIdClean = String(deficiencia_id || "NAO").trim();
   const cidadeIdClean = String(cidade_id || "").trim();
-  const estadoIdClean = String(estado_id || "").trim();
+  const estadoIdClean = String(estado_id || "").trim().toUpperCase();
   const cepClean = onlyDigits(cep);
   const logradouroClean = String(logradouro || "").trim();
   const numeroClean = String(numero || "").trim();
   const complementoClean = String(complemento || "").trim();
   const bairroClean = String(bairro || "").trim();
+  const isMainGuestProvided = is_main_guest !== undefined && is_main_guest !== null && String(is_main_guest).trim() !== "";
+  const isMainGuestValue = Number(is_main_guest) === 1 ? 1 : 0;
+  const isAdultValue = Number(is_adult) === 1 ? 1 : 0;
 
-  if (cpfClean && !isValidCPF(cpfClean)) {
+  if (!cpfClean) {
+    return res.status(400).json({ error: "CPF é obrigatório" });
+  }
+
+  if (!isValidCPF(cpfClean)) {
     return res.status(400).json({
       error: "CPF inválido"
     });
+  }
+
+  if (!birthDateClean) {
+    return res.status(400).json({ error: "Data de nascimento é obrigatória" });
+  }
+
+  if (!isValidBirthDate(birthDateClean)) {
+    return res.status(400).json({ error: "Data de nascimento inválida" });
+  }
+
+  if (!isMainGuestProvided) {
+    return res.status(400).json({ error: "Tipo do hóspede é obrigatório" });
+  }
+
+  if (!generoIdClean) {
+    return res.status(400).json({ error: "Gênero não informado" });
+  }
+
+  if (!VALID_GENERO_IDS.includes(generoIdClean)) {
+    return res.status(400).json({ error: "Gênero inválido" });
+  }
+
+  if (!racaIdClean) {
+    return res.status(400).json({ error: "Raça/Cor não informada" });
+  }
+
+  if (!VALID_RACA_IDS.includes(racaIdClean)) {
+    return res.status(400).json({ error: "Raça/Cor inválida" });
+  }
+
+  if (!VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
+    return res.status(400).json({ error: "Informação de deficiência inválida" });
   }
 
   db.get(
@@ -1143,8 +1193,8 @@ app.put("/guests/:id", (req, res) => {
                 numeroClean,
                 complementoClean,
                 bairroClean,
-                is_adult ? 1 : 0,
-                is_main_guest ? 1 : 0,
+                isAdultValue,
+                isMainGuestValue,
                 guestId
               ],
               function (updateErr) {
@@ -1161,7 +1211,7 @@ app.put("/guests/:id", (req, res) => {
             );
           };
 
-          if (guest.is_main_guest && !is_main_guest) {
+          if (guest.is_main_guest && !isMainGuestValue) {
             db.get(
               `SELECT COUNT(*) AS main_guest_count
                FROM guests
@@ -1351,3 +1401,4 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
+
