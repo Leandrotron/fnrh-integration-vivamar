@@ -2,7 +2,7 @@
 
 Sistema de **pré-check-in digital** com integração à FNRH, desenvolvido para eliminar retrabalho manual na recepção.
 
-Status atual: investigação ativa de bug na seleção de stays após edição.
+Status atual: fluxo operacional `stays + guests` funcional, com pré-check-in público por link, criação em lote de stays e envio real para a FNRH.
 
 ---
 
@@ -33,15 +33,16 @@ O processo tradicional de check-in:
 Um sistema onde:
 
 ```text
-Hóspede → Formulário → Backend → FNRH API
+Stay → Link público → Hóspedes → Painel interno → FNRH API
 ```
 
 Com isso:
 
-* O hóspede preenche no próprio celular
-* Os dados chegam organizados
-* O envio à FNRH é automatizado
-* A recepção não precisa digitar tudo novamente
+* A recepção pode criar stays individuais ou em lote
+* Cada stay gera um link público de pré-check-in
+* Os hóspedes preenchem no próprio celular
+* Os dados chegam organizados no painel interno
+* O envio real para a FNRH já foi validado com resposta `201`
 
 ---
 
@@ -107,21 +108,38 @@ node server.js
 
 ## 📊 Modelo de dados (resumo)
 
-Tabela principal: `checkins`
+Modelo principal atual: `stays + guests`
 
-Principais campos:
+### `stays`
+
+* `reservation_id`
+* `sub_reservation_id`
+* `data_entrada`
+* `data_saida`
+
+### `guests`
 
 * nome completo
 * CPF
 * data de nascimento
 * telefone
 * endereço completo
-* cidade / estado
-* país
-* meio de transporte
-* placa (opcional)
-* status
-* resposta da FNRH
+* `cidade_id` / `estado_id`
+* gênero / raça / deficiência
+* `vehicle_plate` (opcional, uso operacional, não enviado para a FNRH)
+* status local e status FNRH
+
+O fluxo legado com `checkins` ainda existe, mas a evolução atual do projeto está concentrada em `stays + guests`.
+
+---
+
+## Fluxo operacional atual
+
+* Criação individual ou em lote de stays no painel interno
+* Geração e cópia de links de pré-check-in por stay ou por reserva
+* Pré-check-in público para múltiplos hóspedes
+* Revisão interna dos dados antes do envio
+* Envio real para a FNRH já validado com resposta `201`
 
 ---
 

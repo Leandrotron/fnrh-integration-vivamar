@@ -31,6 +31,10 @@ function normalizeCPF(cpf) {
   return onlyDigits(cpf);
 }
 
+function normalizeVehiclePlate(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function isValidCPF(cpf) {
   cpf = normalizeCPF(cpf);
 
@@ -828,6 +832,7 @@ app.post("/guests", (req, res) => {
     numero,
     complemento,
     bairro,
+    vehicle_plate,
     is_adult,
     is_main_guest
   } = req.body;
@@ -848,6 +853,7 @@ app.post("/guests", (req, res) => {
   const numeroClean = String(numero || "").trim();
   const complementoClean = String(complemento || "").trim();
   const bairroClean = String(bairro || "").trim();
+  const vehiclePlateClean = normalizeVehiclePlate(vehicle_plate);
   const isMainGuestProvided = is_main_guest !== undefined && is_main_guest !== null && String(is_main_guest).trim() !== "";
   const isMainGuestValue = Number(is_main_guest) === 1 ? 1 : 0;
   const isAdultValue = Number(is_adult) === 1 ? 1 : 0;
@@ -930,8 +936,8 @@ app.post("/guests", (req, res) => {
 
           db.run(
             `INSERT INTO guests
-             (stay_id, full_name, cpf, email, phone, birth_date, genero_id, raca_id, deficiencia_id, cidade_id, estado_id, cep, logradouro, numero, complemento, bairro, is_adult, is_main_guest, status, fnrh_status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (stay_id, full_name, cpf, email, phone, birth_date, genero_id, raca_id, deficiencia_id, cidade_id, estado_id, cep, logradouro, numero, complemento, bairro, vehicle_plate, is_adult, is_main_guest, status, fnrh_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               stayIdClean,
               fullName,
@@ -949,6 +955,7 @@ app.post("/guests", (req, res) => {
               numeroClean,
               complementoClean,
               bairroClean,
+              vehiclePlateClean,
               isAdultValue,
               isMainGuestValue,
               "draft",
@@ -1074,6 +1081,7 @@ app.put("/guests/:id", (req, res) => {
     numero,
     complemento,
     bairro,
+    vehicle_plate,
     is_adult,
     is_main_guest
   } = req.body;
@@ -1097,6 +1105,7 @@ app.put("/guests/:id", (req, res) => {
   const numeroClean = String(numero || "").trim();
   const complementoClean = String(complemento || "").trim();
   const bairroClean = String(bairro || "").trim();
+  const vehiclePlateClean = normalizeVehiclePlate(vehicle_plate);
   const isMainGuestProvided = is_main_guest !== undefined && is_main_guest !== null && String(is_main_guest).trim() !== "";
   const isMainGuestValue = Number(is_main_guest) === 1 ? 1 : 0;
   const isAdultValue = Number(is_adult) === 1 ? 1 : 0;
@@ -1176,7 +1185,7 @@ app.put("/guests/:id", (req, res) => {
           const executeUpdate = () => {
             db.run(
               `UPDATE guests
-               SET full_name = ?, cpf = ?, email = ?, phone = ?, birth_date = ?, genero_id = ?, raca_id = ?, deficiencia_id = ?, cidade_id = ?, estado_id = ?, cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, is_adult = ?, is_main_guest = ?
+               SET full_name = ?, cpf = ?, email = ?, phone = ?, birth_date = ?, genero_id = ?, raca_id = ?, deficiencia_id = ?, cidade_id = ?, estado_id = ?, cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, vehicle_plate = ?, is_adult = ?, is_main_guest = ?
                WHERE id = ?`,
               [
                 fullName,
@@ -1194,6 +1203,7 @@ app.put("/guests/:id", (req, res) => {
                 numeroClean,
                 complementoClean,
                 bairroClean,
+                vehiclePlateClean,
                 isAdultValue,
                 isMainGuestValue,
                 guestId

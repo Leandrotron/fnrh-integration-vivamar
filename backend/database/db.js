@@ -115,6 +115,7 @@ db.serialize(() => {
   ensureColumn("guests", "numero", "TEXT");
   ensureColumn("guests", "complemento", "TEXT");
   ensureColumn("guests", "bairro", "TEXT");
+  ensureColumn("guests", "vehicle_plate", "TEXT");
   ensureColumn("guests", "genero_id", "TEXT");
   ensureColumn("guests", "raca_id", "TEXT");
   ensureColumn("guests", "deficiencia_id", "TEXT");

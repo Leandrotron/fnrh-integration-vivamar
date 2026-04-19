@@ -180,6 +180,24 @@
       color: #222;
       line-height: 1.6;
     }
+
+    .guidance-box {
+      background: #fff8ea;
+      border: 1px solid #f1d7a7;
+      color: #7a4b00;
+      line-height: 1.5;
+    }
+
+    .guidance-box strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .guidance-count {
+      display: block;
+      margin-top: 6px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -190,6 +208,7 @@
     <div class="subtitle">Preencha os dados da sua hospedagem</div>
 
     <div id="stayInfo" class="info-box">Carregando dados da stay...</div>
+    <div id="guestGuidance" class="info-box guidance-box" style="display:none;"></div>
 
     <div id="guestList"></div>
 
@@ -343,6 +362,28 @@
         <strong>Suíte:</strong> ${stay.sub_reservation_id || "-"}
       `;
       document.getElementById("stayInfo").style.color = "#222";
+    }
+
+    function renderGuestGuidance() {
+      const guidance = document.getElementById("guestGuidance");
+
+      if (!stayLoaded || !currentStayData) {
+        guidance.style.display = "none";
+        guidance.innerHTML = "";
+        return;
+      }
+
+      const countLabel =
+        existingGuestCount === 1
+          ? "1 hóspede já cadastrado nesta hospedagem."
+          : `${existingGuestCount} hóspedes já cadastrados nesta hospedagem.`;
+
+      guidance.innerHTML = `
+        <strong>Importante:</strong>
+        Cadastre todos os hóspedes desta hospedagem. Se preferir, você pode enviar um por vez e continuar adicionando os demais depois.
+        <span class="guidance-count">${countLabel}</span>
+      `;
+      guidance.style.display = "block";
     }
 
     function updateActionButtons() {
@@ -516,6 +557,11 @@
           <div class="field-note">Use a UF. O CEP pode preencher automaticamente.</div>
         </div>
 
+        <div class="field">
+          <label for="guest_${guestIndex}_vehicle_plate">Placa do veículo (opcional)</label>
+          <input id="guest_${guestIndex}_vehicle_plate" placeholder="Ajuda na organização do estacionamento">
+        </div>
+
         <input id="guest_${guestIndex}_cidade_id" type="hidden" value="">
         <input id="guest_${guestIndex}_estado_id" type="hidden" value="">
 
@@ -590,6 +636,7 @@
           numero: document.getElementById(`guest_${index}_numero`).value.trim(),
           complemento: document.getElementById(`guest_${index}_complemento`).value.trim(),
           bairro: document.getElementById(`guest_${index}_bairro`).value.trim(),
+          vehicle_plate: document.getElementById(`guest_${index}_vehicle_plate`).value.trim(),
           cidade_id: document.getElementById(`guest_${index}_cidade_id`).value.trim(),
           estado_id: document.getElementById(`guest_${index}_estado_id`).value.trim(),
           is_main_guest: document.getElementById(`guest_${index}_role`).value === "1" ? 1 : 0,
@@ -655,6 +702,8 @@
       existingGuests = [];
       existingGuestCount = 0;
       document.getElementById("guestList").innerHTML = "";
+      document.getElementById("guestGuidance").style.display = "none";
+      document.getElementById("guestGuidance").innerHTML = "";
       clearSubmittedSummary();
       setStayInfo("Carregando dados da stay...", "info");
       setStatus("Carregando stay...", "info");
@@ -700,14 +749,15 @@
         document.getElementById("guestList").innerHTML = "";
         guestIndex = 0;
         createGuestCard("1");
+        renderGuestGuidance();
 
         if (existingGuestCount > 0) {
           setStatus(
-            `Esta hospedagem já possui ${existingGuestCount} hóspede(s) registrado(s). Os dados já enviados não aparecem preenchidos nesta tela. Se já existir hóspede titular, este link pode ser usado para enviar apenas acompanhantes.`,
+            `Esta hospedagem já possui ${existingGuestCount} hóspede(s) registrado(s). Você pode continuar cadastrando os demais por esta tela.`,
             "warning"
           );
         } else {
-          setStatus("Stay carregada com sucesso. Preencha os hóspedes e envie o pré-check-in.", "success");
+          setStatus("Stay carregada com sucesso. Cadastre todos os hóspedes desta hospedagem e envie um por vez, se preferir.", "success");
         }
 
         updateActionButtons();
@@ -768,6 +818,7 @@
               numero: guest.numero,
               complemento: guest.complemento,
               bairro: guest.bairro,
+              vehicle_plate: guest.vehicle_plate,
               cidade_id: guest.cidade_id,
               estado_id: guest.estado_id,
               is_adult: guest.is_adult,
@@ -800,17 +851,17 @@
         }
 
         if (successfulGuests.length === guests.length) {
-          submissionCompleted = true;
-          document.getElementById("guestList").querySelectorAll("input, select, button").forEach((field) => {
-            field.disabled = true;
-          });
           renderSubmittedSummary({
             mode: "success",
             successfulGuests,
             failedGuests
           });
-          setStayInfo("Pré-check-in recebido com sucesso. Nossa equipe já pode dar continuidade ao seu atendimento.", "success");
-          setStatus("Pré-check-in enviado com sucesso. Obrigado! Seus dados foram recebidos.", "success");
+          renderStayLoadedInfo();
+          renderGuestGuidance();
+          document.getElementById("guestList").innerHTML = "";
+          guestIndex = 0;
+          createGuestCard(existingGuests.some((guest) => guest.is_main_guest) ? "0" : "1");
+          setStatus("Pré-check-in enviado com sucesso. Se ainda houver outros hóspedes desta hospedagem, você pode cadastrá-los abaixo.", "success");
           return;
         }
 
@@ -832,6 +883,7 @@
           successfulGuests,
           failedGuests
         });
+        renderGuestGuidance();
         setStayInfo(
           "Recebemos parte do pré-check-in. Revise os hóspedes não enviados e tente novamente para concluir.",
           "warning"

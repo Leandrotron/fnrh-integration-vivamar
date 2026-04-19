@@ -90,6 +90,39 @@
       border-radius: 10px;
     }
 
+    .list-filter-box {
+      margin-bottom: 12px;
+      padding: 12px;
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+    }
+
+    .list-filter-box label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #444;
+    }
+
+    .list-filter-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .list-filter-actions input[type="date"] {
+      flex: 1;
+      min-width: 180px;
+      padding: 10px 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
     .batch-create-box h3 {
       margin: 0 0 12px;
       font-size: 16px;
@@ -711,6 +744,15 @@
           <div id="batchCreateStatus" class="form-status"></div>
         </div>
 
+        <div class="list-filter-box">
+          <label for="stayEntryDateFilter">Filtrar por data de entrada</label>
+          <div class="list-filter-actions">
+            <input id="stayEntryDateFilter" type="date">
+            <button id="todayStayEntryDateFilterBtn" type="button" class="secondary-btn">Hoje</button>
+            <button id="clearStayEntryDateFilterBtn" type="button" class="secondary-btn">Limpar filtro</button>
+          </div>
+        </div>
+
         <div id="listStatus" class="status">Carregando...</div>
         <div id="stayList" class="stay-list"></div>
       </section>
@@ -980,6 +1022,11 @@
               </div>
 
               <div class="form-field">
+                <label for="newGuestVehiclePlate">Placa do veículo</label>
+                <input id="newGuestVehiclePlate" placeholder="Opcional">
+              </div>
+
+              <div class="form-field">
                 <label for="newGuestRole">Tipo do hóspede</label>
                 <select id="newGuestRole">
                   <option value="0">Acompanhante</option>
@@ -1016,6 +1063,7 @@
     let isSavingStay = false;
     let isCreatingBatchStays = false;
     let lastGuestCepLookup = "";
+    let stayEntryDateFilter = "";
     function setSelectedStayId(nextValue) {
       selectedStayId = nextValue;
       if (nextValue == null || nextValue === "") {
@@ -1040,6 +1088,29 @@
     function formatDateTime(value) {
       if (!value) return "-";
       return value.replace("T", " ");
+    }
+
+    function formatDate(value) {
+      if (!value) return "-";
+      const normalized = normalizeDateValue(value);
+      if (!normalized) return String(value);
+      const [year, month, day] = normalized.split("-");
+      return `${day}/${month}/${year}`;
+    }
+
+    function normalizeDateValue(value) {
+      if (!value) return "";
+      if (value instanceof Date) {
+        return value.toISOString().slice(0, 10);
+      }
+      if (typeof value === "string") {
+        return value.trim().slice(0, 10);
+      }
+      return String(value).trim().slice(0, 10);
+    }
+
+    function getTodayDateInputValue() {
+      return new Date().toISOString().slice(0, 10);
     }
 
     function onlyDigits(value) {
@@ -1178,6 +1249,7 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("newGuestNumero").value = "";
       document.getElementById("newGuestComplemento").value = "";
       document.getElementById("newGuestBairro").value = "";
+      document.getElementById("newGuestVehiclePlate").value = "";
       document.getElementById("newGuestRole").value = "0";
       setGuestCepStatus("");
       setGuestFormStatus("");
@@ -1235,6 +1307,7 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("newGuestNumero").value = guest.numero || "";
       document.getElementById("newGuestComplemento").value = guest.complemento || "";
       document.getElementById("newGuestBairro").value = guest.bairro || "";
+      document.getElementById("newGuestVehiclePlate").value = guest.vehicle_plate || "";
       document.getElementById("newGuestRole").value = guest.is_main_guest ? "1" : "0";
       lastGuestCepLookup = onlyDigits(guest.cep || "");
       setGuestCepStatus("");
@@ -1552,6 +1625,19 @@ Qualquer dúvida, estamos à disposição!`;
     function renderStayList() {
       const container = document.getElementById("stayList");
       const status = document.getElementById("listStatus");
+      const normalizedFilterDate = normalizeDateValue(stayEntryDateFilter);
+      const filteredStays = normalizedFilterDate
+        ? stays.filter((stay) => {
+          const normalizedStayDate = normalizeDateValue(stay.data_entrada);
+          console.log("stay date filter debug", {
+            input: stayEntryDateFilter,
+            stayDataEntrada: stay.data_entrada,
+            normalizedInput: normalizedFilterDate,
+            normalizedStayDate
+          });
+          return normalizedStayDate === normalizedFilterDate;
+        })
+        : stays;
 
       container.innerHTML = "";
 
@@ -1561,9 +1647,17 @@ Qualquer dúvida, estamos à disposição!`;
         return;
       }
 
-      status.textContent = `${stays.length} stay(s) encontrada(s).`;
+      if (!filteredStays.length) {
+        status.textContent = `Nenhuma stay encontrada para ${formatDate(normalizedFilterDate)}.`;
+        container.innerHTML = `<div class="empty">Nenhuma stay com a data de entrada selecionada.</div>`;
+        return;
+      }
 
-      for (const stay of stays) {
+      status.textContent = normalizedFilterDate
+        ? `${filteredStays.length} stay(s) encontrada(s) para ${formatDate(normalizedFilterDate)}.`
+        : `${stays.length} stay(s) encontrada(s).`;
+
+      for (const stay of filteredStays) {
         const card = document.createElement("div");
         card.className = "stay-card" + (String(stay.id) === String(selectedStayId) ? " active" : "");
         card.innerHTML = `
@@ -1817,6 +1911,7 @@ Qualquer dúvida, estamos à disposição!`;
             <div><strong>NÃºmero:</strong> ${guest.numero || "-"}</div>
             <div><strong>Complemento:</strong> ${guest.complemento || "-"}</div>
             <div><strong>Bairro:</strong> ${guest.bairro || "-"}</div>
+            ${guest.vehicle_plate ? `<div><strong>Placa do veículo:</strong> ${guest.vehicle_plate}</div>` : ""}
             <div><strong>Status:</strong> ${guest.status || "-"}</div>
             <div><strong>FNRH:</strong> ${guest.fnrh_status || "-"}</div>
           </div>
@@ -2155,6 +2250,7 @@ Qualquer dúvida, estamos à disposição!`;
       const numero = document.getElementById("newGuestNumero").value.trim();
       const complemento = document.getElementById("newGuestComplemento").value.trim();
       const bairro = document.getElementById("newGuestBairro").value.trim();
+      const vehiclePlate = document.getElementById("newGuestVehiclePlate").value.trim();
       const isMainGuest = document.getElementById("newGuestRole").value === "1" ? 1 : 0;
 
       if (!fullName) {
@@ -2229,6 +2325,7 @@ Qualquer dúvida, estamos à disposição!`;
             numero,
             complemento,
             bairro,
+            vehicle_plate: vehiclePlate,
             is_adult: 1,
             is_main_guest: isMainGuest
           })
@@ -2386,8 +2483,27 @@ Qualquer dúvida, estamos à disposição!`;
       window.open(link, "_blank");
     }
 
+    const stayEntryDateFilterInput = document.getElementById("stayEntryDateFilter");
+    const applyStayEntryDateFilter = (nextValue) => {
+      stayEntryDateFilter = normalizeDateValue(nextValue);
+      stayEntryDateFilterInput.value = stayEntryDateFilter;
+      renderStayList();
+    };
+
+    stayEntryDateFilter = getTodayDateInputValue();
+    stayEntryDateFilterInput.value = stayEntryDateFilter;
+
     document.getElementById("reloadBtn").addEventListener("click", () => {
       loadStays(selectedStayDetails?.stay?.id ?? selectedStayId);
+    });
+    document.getElementById("stayEntryDateFilter").addEventListener("change", (event) => {
+      applyStayEntryDateFilter(event.target.value || "");
+    });
+    document.getElementById("todayStayEntryDateFilterBtn").addEventListener("click", () => {
+      applyStayEntryDateFilter(getTodayDateInputValue());
+    });
+    document.getElementById("clearStayEntryDateFilterBtn").addEventListener("click", () => {
+      applyStayEntryDateFilter("");
     });
     document.getElementById("createBatchStaysBtn").addEventListener("click", createBatchStays);
     document.getElementById("reloadDetailsBtn").addEventListener("click", () => {

@@ -580,3 +580,85 @@ Se houver investigaÃƒÂ§ÃƒÂ£o detalhada de bug, manter tambÃƒÂ©m o re
 
 - Data: 2026-04-19
 - Situacao geral: fluxo `stays + guests` validado em cenario real com multiplas stays por reserva, criacao em lote operacional no painel interno, copia de links de pre-check-in por reserva, correcao do `POST /guests`, mensagens de erro do pre-check-in mais precisas e integracao real com FNRH confirmada com resposta `201`
+
+---
+
+## 2026-04-19 - Fechamento complementar
+
+### Resumo do dia
+
+- O fluxo `stays + guests` ganhou maturidade operacional no painel interno e no pre-check-in pÃºblico.
+- O painel `stays.html` passou a operar melhor com volume real de stays:
+  - filtro por `data_entrada`
+  - abertura padrÃ£o em hoje
+  - botÃ£o `Hoje`
+- O `precheckin.html` ficou mais claro para o hÃ³spede:
+  - orientaÃ§Ã£o para cadastrar todos os hÃ³spedes da stay
+  - contador de hÃ³spedes jÃ¡ cadastrados
+  - continuidade do fluxo apÃ³s envio com sucesso
+- O campo operacional `vehicle_plate` foi consolidado no sistema:
+  - persistÃªncia no banco
+  - captura no fluxo pÃºblico
+  - exibiÃ§Ã£o no painel
+  - ediÃ§Ã£o operacional no painel
+  - sem participaÃ§Ã£o no payload da FNRH
+- O fluxo real atÃ© a FNRH foi mantido funcional, com confirmaÃ§Ã£o prÃ¡tica de resposta `201`.
+
+### Alteracoes realizadas
+
+- Ajuste do `frontend/precheckin.html` para exibir mensagens reais do backend em respostas `400`.
+- CorreÃ§Ã£o do bug `stayIdClean is not defined` em `POST /guests`.
+- InclusÃ£o de criaÃ§Ã£o em lote de stays no `frontend/stays.html`.
+- InclusÃ£o de botÃ£o para copiar links de prÃ©-check-in por reserva no `frontend/stays.html`.
+- Melhoria de UX do `frontend/precheckin.html` com orientaÃ§Ã£o operacional e contador de hÃ³spedes jÃ¡ cadastrados.
+- CorreÃ§Ã£o de encoding/acentuaÃ§Ã£o em textos do `frontend/precheckin.html`.
+- InclusÃ£o de filtro por data de entrada em `frontend/stays.html`, com valor inicial em hoje e botÃ£o `Hoje`.
+- InclusÃ£o de `vehicle_plate` no modelo `guests`, com suporte em:
+  - `backend/database/db.js`
+  - `POST /guests`
+  - `PUT /guests/:id`
+  - `frontend/precheckin.html`
+  - `frontend/stays.html`
+
+### Decisoes do dia
+
+- Manter `data_entrada` como filtro operacional principal do painel.
+- Manter `created_at` apenas como dado secundÃ¡rio.
+- Consolidar a leitura operacional de que `1 stay = 1 quarto/unidade operacional`.
+- Manter `sub_reservation_id` como identificador operacional da stay no contexto atual.
+- Tratar `vehicle_plate` como dado operacional da pousada, fora do escopo FNRH.
+- Continuar priorizando evoluÃ§Ã£o incremental e estabilidade em vez de refactor amplo.
+
+### Problemas encontrados
+
+- O frontend pÃºblico ainda escondia mensagens reais de validaÃ§Ã£o do backend.
+- O `POST /guests` tinha uma referÃªncia quebrada que bloqueava salvamento vÃ¡lido.
+- O filtro de data inicialmente falhou por diferenÃ§a de formato entre `input[type="date"]` e `data_entrada`.
+- A placa do veÃ­culo estava salva, mas ainda nÃ£o estava completa como recurso operacional no painel interno.
+
+### Pendencias
+
+- Observar em uso real se o identificador atual das stays continua suficiente para reservas maiores.
+- Revalidar em rotina operacional o filtro por data com volume maior de stays.
+- Refinar gradualmente textos com encoding antigo em arquivos que ainda preservam histÃ³rico legado.
+- Continuar reduzindo dependÃªncia de fallbacks temporÃ¡rios no builder da FNRH sem abrir refactor amplo.
+
+### Proximo passo recomendado
+
+- Validar em uso operacional real um ciclo completo com:
+  - criaÃ§Ã£o em lote
+  - distribuiÃ§Ã£o de links por reserva
+  - preenchimento pÃºblico por mÃºltiplos hÃ³spedes
+  - revisÃ£o no painel interno antes do envio FNRH
+
+### Alertas e cuidados
+
+- NÃ£o mover `vehicle_plate` para o payload da FNRH.
+- NÃ£o trocar o filtro principal do painel para data de criaÃ§Ã£o sem necessidade operacional comprovada.
+- NÃ£o tratar o projeto como greenfield; o estado atual jÃ¡ Ã© funcional e validado em uso real.
+- Reiniciar o backend ao testar alteraÃ§Ãµes em schema ou rotas de `guests`.
+
+### Ultima atualizacao
+
+- Data: 2026-04-19
+- Situacao geral: painel interno mais maduro para operacao diaria, com criacao em lote, copia de links por reserva, filtro por data de entrada com foco em hoje, pre-check-in publico mais claro, `vehicle_plate` operacional completo e fluxo real para FNRH preservado
