@@ -82,6 +82,19 @@
       overflow-y: auto;
     }
 
+    .batch-create-box {
+      margin-bottom: 16px;
+      padding: 14px;
+      background: #f8f9fa;
+      border: 1px solid #e2e2e2;
+      border-radius: 10px;
+    }
+
+    .batch-create-box h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
     .stay-card {
       border: 1px solid #ddd;
       border-radius: 10px;
@@ -658,6 +671,46 @@
     <div class="layout">
       <section class="panel">
         <h2>Stays</h2>
+        <div class="batch-create-box">
+          <h3>Criar stays em lote</h3>
+          <div class="form-note">
+            Crie várias stays da mesma reserva de uma vez. Cada stay será criada individualmente usando a rota atual.
+          </div>
+
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="batchReservationId">reservation_id</label>
+              <input id="batchReservationId" placeholder="Número da reserva">
+            </div>
+
+            <div class="form-field">
+              <label for="batchReferenceName">Nome de referência</label>
+              <input id="batchReferenceName" placeholder="Opcional, ex: Grupo Teste">
+            </div>
+
+            <div class="form-field">
+              <label for="batchDataEntrada">data_entrada</label>
+              <input id="batchDataEntrada" type="date">
+            </div>
+
+            <div class="form-field">
+              <label for="batchDataSaida">data_saida</label>
+              <input id="batchDataSaida" type="date">
+            </div>
+
+            <div class="form-field">
+              <label for="batchStayCount">Quantidade de stays</label>
+              <input id="batchStayCount" type="number" min="1" step="1" placeholder="Ex: 3">
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button id="createBatchStaysBtn" type="button">Criar stays em lote</button>
+          </div>
+
+          <div id="batchCreateStatus" class="form-status"></div>
+        </div>
+
         <div id="listStatus" class="status">Carregando...</div>
         <div id="stayList" class="stay-list"></div>
       </section>
@@ -769,6 +822,7 @@
             <div class="link-actions">
               <button id="copyPrecheckinBtn" type="button">Copiar link</button>
               <button id="copyWhatsappMessageBtn" type="button" class="secondary-btn">Copiar mensagem WhatsApp</button>
+              <button id="copyReservationLinksBtn" type="button" class="secondary-btn">Copiar links da reserva</button>
               <button id="openPrecheckinBtn" type="button" class="secondary-btn">Abrir link</button>
             </div>
           </div>
@@ -960,6 +1014,7 @@
     let editingGuestId = null;
     let isReloadingStays = false;
     let isSavingStay = false;
+    let isCreatingBatchStays = false;
     let lastGuestCepLookup = "";
     function setSelectedStayId(nextValue) {
       selectedStayId = nextValue;
@@ -1043,6 +1098,16 @@
         "#555";
     }
 
+    function setBatchCreateStatus(message, tone) {
+      const element = document.getElementById("batchCreateStatus");
+      element.textContent = message || "";
+      element.style.color =
+        tone === "error" ? "#b42318" :
+        tone === "success" ? "#18794e" :
+        tone === "warning" ? "#9a6700" :
+        "#555";
+    }
+
     function setGuestCepStatus(message, tone = "") {
       const element = document.getElementById("newGuestCepStatus");
       if (!element) {
@@ -1059,6 +1124,19 @@
       return url.toString();
     }
 
+    function getStayOperationalLabel(stay) {
+      if (!stay) {
+        return "Stay sem identificaÃ§Ã£o";
+      }
+
+      const subReservationId = String(stay.sub_reservation_id || "").trim();
+      if (subReservationId) {
+        return subReservationId;
+      }
+
+      return `Stay #${stay.id ?? "-"}`;
+    }
+
     function buildWhatsappPrecheckinMessage(link) {
       if (!link) return "";
 
@@ -1069,6 +1147,14 @@ Para agilizar seu check-in, pedimos que preencha seus dados no link abaixo:
 ${link}
 
 Qualquer dúvida, estamos à disposição!`;
+    }
+
+    function buildReservationPrecheckinMessage(referenceStay, reservationStays) {
+      const reservationId = referenceStay?.reservation_id || "-";
+      const sortedStays = [...reservationStays].sort((left, right) => Number(left.id) - Number(right.id));
+      const links = sortedStays.map((stay) => `${getStayOperationalLabel(stay)}:\n${getPrecheckinLink(stay.id)}`);
+
+      return `Segue os links de prÃ©-check-in da reserva ${reservationId}:\n\n${links.join("\n\n")}\n\nPor favor, encaminhe cada link ao responsÃ¡vel do respectivo quarto.`;
     }
 
     function resetGuestForm() {
@@ -1112,6 +1198,15 @@ Qualquer dúvida, estamos à disposição!`;
       document.getElementById("editStayDataSaida").value = stay?.data_saida || "";
       updateSelectedStayContext(stay);
       setStayFormStatus("");
+    }
+
+    function buildBatchSubReservationId(reservationId, referenceName, index, total) {
+      const baseLabel = referenceName || reservationId;
+      if (total <= 1) {
+        return baseLabel;
+      }
+
+      return `${baseLabel}-${String(index + 1).padStart(2, "0")}`;
     }
 
     function startGuestEdit(guestId) {
@@ -1355,6 +1450,7 @@ Qualquer dúvida, estamos à disposição!`;
       const addGuestButton = document.getElementById("addGuestBtn");
       const copyPrecheckinButton = document.getElementById("copyPrecheckinBtn");
       const copyWhatsappMessageButton = document.getElementById("copyWhatsappMessageBtn");
+      const copyReservationLinksButton = document.getElementById("copyReservationLinksBtn");
       const openPrecheckinButton = document.getElementById("openPrecheckinBtn");
       const precheckinLinkValue = document.getElementById("precheckinLinkValue");
       const summary = getStayOperationalSummary(guests);
@@ -1401,6 +1497,7 @@ Qualquer dúvida, estamos à disposição!`;
       addGuestButton.disabled = !stay;
       copyPrecheckinButton.disabled = !stay;
       copyWhatsappMessageButton.disabled = !stay;
+      copyReservationLinksButton.disabled = !stay;
       openPrecheckinButton.disabled = !stay;
       precheckinLinkValue.textContent = precheckinLink || "Selecione uma stay para gerar o link.";
       roleField.classList.remove("attention");
@@ -1816,6 +1913,106 @@ Qualquer dúvida, estamos à disposição!`;
       }
     }
 
+    async function createBatchStays() {
+      const reservationId = document.getElementById("batchReservationId").value.trim();
+      const referenceName = document.getElementById("batchReferenceName").value.trim();
+      const dataEntrada = document.getElementById("batchDataEntrada").value.trim();
+      const dataSaida = document.getElementById("batchDataSaida").value.trim();
+      const quantityRaw = document.getElementById("batchStayCount").value.trim();
+      const quantity = Number(quantityRaw);
+
+      if (!reservationId) {
+        setBatchCreateStatus("reservation_id é obrigatório para criar stays em lote.", "error");
+        return;
+      }
+
+      if (!quantityRaw || !Number.isInteger(quantity) || quantity <= 0) {
+        setBatchCreateStatus("Informe uma quantidade válida de stays para criar.", "error");
+        return;
+      }
+
+      const createButton = document.getElementById("createBatchStaysBtn");
+      createButton.disabled = true;
+      isCreatingBatchStays = true;
+      setBatchCreateStatus("Criando stays em lote...", "info");
+
+      const successfulStays = [];
+      const failedStays = [];
+      const existingStays = [];
+
+      try {
+        for (let index = 0; index < quantity; index += 1) {
+          const subReservationId = buildBatchSubReservationId(reservationId, referenceName, index, quantity);
+          const response = await fetch(`${API_BASE}/stays`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reservation_id: reservationId,
+              sub_reservation_id: subReservationId,
+              data_entrada: dataEntrada,
+              data_saida: dataSaida
+            })
+          });
+
+          const contentType = response.headers.get("content-type") || "";
+          const data = contentType.includes("application/json") ? await response.json() : {};
+
+          if (!response.ok) {
+            failedStays.push({
+              subReservationId,
+              reason: data.error || "Não foi possível criar esta stay."
+            });
+            continue;
+          }
+
+          if (data.message === "Stay já existe") {
+            existingStays.push(data.stay);
+          } else {
+            successfulStays.push(data.stay);
+          }
+        }
+
+        const firstCreatedStayId = successfulStays[0]?.id || existingStays[0]?.id || null;
+
+        if (firstCreatedStayId != null) {
+          await loadStays(firstCreatedStayId);
+        }
+
+        if (!failedStays.length) {
+          const createdCount = successfulStays.length;
+          const existingCount = existingStays.length;
+          if (existingCount > 0) {
+            setBatchCreateStatus(
+              `${createdCount} stay(s) criada(s) e ${existingCount} já existente(s). Primeira stay do lote selecionada.`,
+              "warning"
+            );
+          } else {
+            setBatchCreateStatus(
+              `${createdCount} stay(s) criada(s) com sucesso. Primeira stay do lote selecionada.`,
+              "success"
+            );
+          }
+          return;
+        }
+
+        if (!successfulStays.length && !existingStays.length) {
+          setBatchCreateStatus(failedStays[0].reason, "error");
+          return;
+        }
+
+        setBatchCreateStatus(
+          `${successfulStays.length} criada(s), ${existingStays.length} já existente(s) e ${failedStays.length} com erro. Primeiro erro: ${failedStays[0].reason}`,
+          "warning"
+        );
+      } catch (error) {
+        console.error(error);
+        setBatchCreateStatus("Erro de comunicação ao criar stays em lote.", "error");
+      } finally {
+        isCreatingBatchStays = false;
+        createButton.disabled = false;
+      }
+    }
+
     async function sendSelectedStayToFNRH() {
       if (!selectedStayDetails?.stay?.id) {
         setActionStatus("Selecione uma stay antes de enviar.", "warning");
@@ -2146,6 +2343,39 @@ Qualquer dúvida, estamos à disposição!`;
       }
     }
 
+    async function copyReservationPrecheckinLinks() {
+      const currentStay = selectedStayDetails?.stay;
+      if (!currentStay?.id) {
+        setActionStatus("Selecione uma stay para copiar os links da reserva.", "warning");
+        return;
+      }
+
+      const reservationId = String(currentStay.reservation_id || "").trim();
+      if (!reservationId) {
+        setActionStatus("A stay selecionada estÃ¡ sem reservation_id para montar os links da reserva.", "error");
+        return;
+      }
+
+      const reservationStays = stays.filter((stay) => String(stay.reservation_id || "").trim() === reservationId);
+      if (!reservationStays.length) {
+        setActionStatus("NÃ£o foi possÃ­vel localizar stays da mesma reserva.", "error");
+        return;
+      }
+
+      const message = buildReservationPrecheckinMessage(currentStay, reservationStays);
+
+      try {
+        await navigator.clipboard.writeText(message);
+        setActionStatus(
+          `${reservationStays.length} link(s) da reserva ${reservationId} copiado(s) com sucesso.`,
+          "success"
+        );
+      } catch (error) {
+        console.error(error);
+        setActionStatus("NÃ£o foi possÃ­vel copiar os links da reserva automaticamente.", "error");
+      }
+    }
+
     function openSelectedPrecheckinLink() {
       const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
       if (!link) {
@@ -2159,6 +2389,7 @@ Qualquer dúvida, estamos à disposição!`;
     document.getElementById("reloadBtn").addEventListener("click", () => {
       loadStays(selectedStayDetails?.stay?.id ?? selectedStayId);
     });
+    document.getElementById("createBatchStaysBtn").addEventListener("click", createBatchStays);
     document.getElementById("reloadDetailsBtn").addEventListener("click", () => {
       if (selectedStayDetails?.stay) {
         loadStayDetails(selectedStayDetails.stay);
@@ -2170,6 +2401,7 @@ Qualquer dúvida, estamos à disposição!`;
     document.getElementById("cancelEditBtn").addEventListener("click", resetGuestForm);
     document.getElementById("copyPrecheckinBtn").addEventListener("click", copySelectedPrecheckinLink);
     document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copySelectedWhatsappMessage);
+    document.getElementById("copyReservationLinksBtn").addEventListener("click", copyReservationPrecheckinLinks);
     document.getElementById("openPrecheckinBtn").addEventListener("click", openSelectedPrecheckinLink);
     document.getElementById("newGuestCpf").addEventListener("input", (event) => {
       event.target.value = formatCPF(event.target.value);

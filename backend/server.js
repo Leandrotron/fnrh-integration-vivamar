@@ -832,6 +832,7 @@ app.post("/guests", (req, res) => {
     is_main_guest
   } = req.body;
 
+  const stayIdClean = String(stay_id || "").trim();
   const fullName = String(full_name || "").trim();
   const cpfClean = normalizeCPF(cpf);
   const phoneClean = phone ? onlyDigits(phone) : "";
