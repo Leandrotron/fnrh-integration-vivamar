@@ -451,6 +451,88 @@ function updateStayLastFNRHResult(stayId, status, message, guestCountSent, guest
   );
 }
 
+function persistFNRHReturnData(stayId, guests, resultBody, callback) {
+  const reserva = resultBody?.dados?.reserva || {};
+  const reservaId = String(reserva.reserva_id || "").trim();
+  const officialPrecheckinLink = String(reserva.link_precheckin || "").trim();
+  const returnedGuests = Array.isArray(resultBody?.dados?.dados_hospedes)
+    ? resultBody.dados.dados_hospedes
+    : [];
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION", (beginErr) => {
+      if (beginErr) {
+        callback(beginErr);
+        return;
+      }
+
+      db.run(
+        `UPDATE stays
+         SET fnrh_reserva_id = ?,
+             fnrh_link_precheckin_oficial = ?
+         WHERE id = ? AND property_id = ?`,
+        [reservaId, officialPrecheckinLink, stayId, PROPERTY_ID],
+        (stayErr) => {
+          if (stayErr) {
+            db.run("ROLLBACK", () => callback(stayErr));
+            return;
+          }
+
+          if (!returnedGuests.length) {
+            db.run("COMMIT", (commitErr) => callback(commitErr));
+            return;
+          }
+
+          let pendingUpdates = returnedGuests.length;
+          let finished = false;
+
+          returnedGuests.forEach((returnedGuest, index) => {
+            const localGuest = guests[index];
+            if (!localGuest) {
+              pendingUpdates -= 1;
+
+              if (!pendingUpdates && !finished) {
+                finished = true;
+                db.run("COMMIT", (commitErr) => callback(commitErr));
+              }
+
+              return;
+            }
+
+            const fnrhHospedeId = String(returnedGuest?.hospede_id || "").trim();
+            const fnrhPessoaId = String(returnedGuest?.hospede?.pessoa_id || "").trim();
+
+            // O payload e o retorno da FNRH seguem a ordem do array local de hóspedes neste fluxo atual.
+            db.run(
+              `UPDATE guests
+               SET fnrh_hospede_id = ?,
+                   fnrh_pessoa_id = ?
+               WHERE id = ? AND stay_id = ?`,
+              [fnrhHospedeId, fnrhPessoaId, localGuest.id, stayId],
+              (guestErr) => {
+                if (finished) return;
+
+                if (guestErr) {
+                  finished = true;
+                  db.run("ROLLBACK", () => callback(guestErr));
+                  return;
+                }
+
+                pendingUpdates -= 1;
+
+                if (!pendingUpdates) {
+                  finished = true;
+                  db.run("COMMIT", (commitErr) => callback(commitErr));
+                }
+              }
+            );
+          });
+        }
+      );
+    });
+  });
+}
+
 function ensureEmptyTestStay() {
   db.get(
     `SELECT id, public_token FROM stays
@@ -802,7 +884,7 @@ app.get("/stays/:id", (req, res) => {
   const stayId = req.params.id;
 
   db.get(
-    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token, fnrh_reserva_id, fnrh_link_precheckin_oficial, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
      FROM stays
      WHERE id = ? AND property_id = ?`,
     [stayId, PROPERTY_ID],
@@ -1425,14 +1507,36 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
                   (stayUpdateErr) => {
                     if (stayUpdateErr) {
                       console.error("Erro ao salvar último envio FNRH da stay:", stayUpdateErr);
+                      return res.json({
+                        message: "Stay enviada para FNRH com sucesso",
+                        stay_id: stay.id,
+                        fnrh_mode: process.env.FNRH_MODE || "mock",
+                        response_status: result.status,
+                        response_body: result.body,
+                        local_persistence_warning: "Falhou ao salvar status consolidado local da stay"
+                      });
                     }
 
-                    return res.json({
-                      message: "Stay enviada para FNRH com sucesso",
-                      stay_id: stay.id,
-                      fnrh_mode: process.env.FNRH_MODE || "mock",
-                      response_status: result.status,
-                      response_body: result.body
+                    persistFNRHReturnData(stay.id, guests, result.body, (persistErr) => {
+                      if (persistErr) {
+                        console.error("Erro ao persistir identificadores retornados pela FNRH após envio bem-sucedido:", persistErr);
+                        return res.json({
+                          message: "Stay enviada para FNRH com sucesso",
+                          stay_id: stay.id,
+                          fnrh_mode: process.env.FNRH_MODE || "mock",
+                          response_status: result.status,
+                          response_body: result.body,
+                          local_persistence_warning: "Envio externo concluído, mas falhou ao salvar identificadores retornados pela FNRH"
+                        });
+                      }
+
+                      return res.json({
+                        message: "Stay enviada para FNRH com sucesso",
+                        stay_id: stay.id,
+                        fnrh_mode: process.env.FNRH_MODE || "mock",
+                        response_status: result.status,
+                        response_body: result.body
+                      });
                     });
                   }
                 );

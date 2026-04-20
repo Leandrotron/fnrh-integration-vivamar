@@ -581,6 +581,8 @@ Se houver investigaÃƒÂ§ÃƒÂ£o detalhada de bug, manter tambÃƒÂ©m o re
 - Backend e frontend ja estao preparados para deploy simples de beta sem refactor estrutural.
 - Backend pronto para subir em Render/Railway e frontend pronto para apontar para API remota via `window.APP_CONFIG.API_BASE`.
 - Proximo passo operacional: publicar a beta e validar uso externo real com `precheckin.html`, painel interno e fluxo de envio FNRH.
+- Backend Render online em `https://fnrh-integration-vivamar.onrender.com`.
+- Frontend beta preparado para apontar para esse backend; proximo passo operacional e publicar o frontend e validar uso externo com `precheckin.html?token=...` e `stays.html`.
 
 ## Ultima Atualizacao
 

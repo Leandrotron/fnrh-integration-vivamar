@@ -111,6 +111,8 @@ db.serialize(() => {
       sub_reservation_id TEXT NOT NULL,
       data_entrada TEXT,
       data_saida TEXT,
+      fnrh_reserva_id TEXT,
+      fnrh_link_precheckin_oficial TEXT,
       fnrh_last_status TEXT,
       fnrh_last_message TEXT,
       fnrh_last_sent_at TEXT,
@@ -130,6 +132,8 @@ db.serialize(() => {
   ensureColumn("stays", "fnrh_last_sent_at", "TEXT");
   ensureColumn("stays", "fnrh_last_guest_count_sent", "INTEGER");
   ensureColumn("stays", "fnrh_last_guest_count_confirmed", "INTEGER");
+  ensureColumn("stays", "fnrh_reserva_id", "TEXT");
+  ensureColumn("stays", "fnrh_link_precheckin_oficial", "TEXT");
   ensureColumn("stays", "public_token", "TEXT");
 
   db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stays_public_token ON stays (public_token)`, (err) => {
@@ -163,6 +167,8 @@ db.serialize(() => {
       is_main_guest INTEGER DEFAULT 0,
       status TEXT DEFAULT 'draft',
       fnrh_status TEXT DEFAULT 'pending',
+      fnrh_hospede_id TEXT,
+      fnrh_pessoa_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (stay_id) REFERENCES stays(id)
     )
@@ -182,6 +188,8 @@ db.serialize(() => {
   ensureColumn("guests", "genero_id", "TEXT");
   ensureColumn("guests", "raca_id", "TEXT");
   ensureColumn("guests", "deficiencia_id", "TEXT");
+  ensureColumn("guests", "fnrh_hospede_id", "TEXT");
+  ensureColumn("guests", "fnrh_pessoa_id", "TEXT");
 
   // índice para otimizar busca de hóspedes por stay_id e cpf
   db.run(`CREATE INDEX IF NOT EXISTS idx_guests_stay_cpf ON guests (stay_id, cpf)`, (err) => {

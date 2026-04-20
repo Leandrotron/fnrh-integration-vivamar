@@ -160,6 +160,22 @@ Observação:
 
 ---
 
+## Publicação do frontend beta
+
+O frontend publicado fica na pasta `frontend`.
+
+Para esta beta externa:
+
+* o backend está em `https://fnrh-integration-vivamar.onrender.com`
+* `frontend/app-config.js` já aponta para esse backend
+
+Depois de publicar o frontend, testar ao menos:
+
+* `precheckin.html?token=...`
+* `stays.html`
+
+---
+
 ## ⚙️ Stack
 
 ### Frontend
