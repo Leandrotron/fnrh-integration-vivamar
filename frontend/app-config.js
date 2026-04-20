@@ -1,4 +1,5 @@
 window.APP_CONFIG = window.APP_CONFIG || {};
+window.APP_CONFIG.API_BASE = window.APP_CONFIG.API_BASE || "https://fnrh-integration-vivamar.onrender.com";
 
 (function initializeAppConfig(global) {
   const rawApiBase = String(global.APP_CONFIG.API_BASE || "").trim();
