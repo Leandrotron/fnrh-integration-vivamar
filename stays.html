@@ -2072,14 +2072,14 @@ Qualquer dúvida, estamos à disposição!`;
         const firstCreatedStayId = successfulStays[0]?.id || existingStays[0]?.id || null;
 
         if (firstCreatedStayId != null) {
+          document.getElementById("batchReferenceName").value = "";
+          document.getElementById("batchStayCount").value = "1";
           await loadStays(firstCreatedStayId);
         }
 
         if (!failedStays.length) {
           const createdCount = successfulStays.length;
           const existingCount = existingStays.length;
-          document.getElementById("batchReferenceName").value = "";
-          document.getElementById("batchStayCount").value = "1";
           if (existingCount > 0) {
             setBatchCreateStatus(
               `${createdCount} stay(s) criada(s) e ${existingCount} já existente(s). Primeira stay do lote selecionada.`,
