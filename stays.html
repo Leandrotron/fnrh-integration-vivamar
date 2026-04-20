@@ -1277,7 +1277,7 @@ Qualquer dúvida, estamos à disposição!`;
     function buildBatchSubReservationId(reservationId, referenceName, index, total) {
       const baseLabel = referenceName || reservationId;
       if (total <= 1) {
-        return baseLabel;
+        return `${baseLabel}-${Date.now()}`;
       }
 
       return `${baseLabel}-${String(index + 1).padStart(2, "0")}`;
