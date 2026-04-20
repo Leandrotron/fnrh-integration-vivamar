@@ -84,6 +84,80 @@ cd backend
 node server.js
 ```
 
+Para abrir o frontend localmente, mantenha o backend rodando em `http://localhost:3000` e abra os arquivos em `frontend/` como hoje. O fallback local continua apontando para essa porta sem exigir configuração extra.
+
+---
+
+## Beta / Deploy mínimo
+
+Objetivo desta fase: publicar frontend e backend sem mexer na lógica atual.
+
+Recomendação prática:
+
+* backend em Render ou Railway
+* frontend em hospedagem estática simples
+
+Arquivo local do backend:
+
+* `backend/.env`
+
+Variáveis usadas hoje:
+
+* `PORT` → porta HTTP da API (`3000` no local)
+* `FNRH_MODE` → `mock` ou `real`
+* `FNRH_BASE_URL`
+* `FNRH_SUBMIT_PATH`
+* `FNRH_USER`
+* `FNRH_API_KEY`
+* `FNRH_CPF_SOLICITANTE`
+
+Se `FNRH_MODE=mock`, o fluxo continua funcionando sem credenciais reais da FNRH.
+
+Se frontend e backend ficarem em domínios diferentes, defina a URL pública da API em `frontend/app-config.js`:
+
+```js
+window.APP_CONFIG = {
+  API_BASE: "https://URL-DO-BACKEND"
+};
+```
+
+Checklist mínimo:
+
+* subir o backend
+* copiar a URL pública do backend
+* configurar `window.APP_CONFIG.API_BASE`
+* publicar o frontend
+* testar `precheckin.html`
+* testar o painel interno
+* validar criação, listagem e envio FNRH
+
+Observação:
+
+* SQLite é aceitável para beta controlada
+* a persistência em cloud depende do disco oferecido pelo provedor
+* não alterar isso agora
+
+---
+
+## Deploy Backend (Render)
+
+Passos diretos:
+
+* criar conta no Render
+* criar um novo `Web Service`
+* conectar o repositório Git
+* definir `Root Directory`: `backend`
+* definir `Build Command`: `npm install`
+* definir `Start Command`: `npm start`
+
+Nota:
+
+* o backend usa `process.env.PORT` automaticamente, não precisa configurar porta manualmente
+
+Observação:
+
+* para uso com frontend externo, configurar `window.APP_CONFIG.API_BASE` com a URL pública do backend
+
 ---
 
 ## ⚙️ Stack

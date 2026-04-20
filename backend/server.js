@@ -1,14 +1,17 @@
 console.log("SERVER COM SUB_RESERVATION_ID 🚀");
 require("dotenv").config();
 
+const crypto = require("crypto");
 const db = require("./database/db");
 const express = require("express");
 const cors = require("cors");
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: "*"
+}));
 app.use(express.json());
 
 const PROPERTY_ID = "vivamar";
@@ -92,6 +95,46 @@ function maskValue(value, visibleStart = 4, visibleEnd = 2) {
 function buildBasicAuthorization(user, apiKey) {
   const credentials = Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64");
   return `Basic ${credentials}`;
+}
+
+function generatePublicToken() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function ensureStayHasPublicToken(stay, callback) {
+  if (!stay?.id) {
+    callback(null, stay);
+    return;
+  }
+
+  const currentToken = String(stay.public_token || "").trim();
+  if (currentToken) {
+    callback(null, {
+      ...stay,
+      public_token: currentToken
+    });
+    return;
+  }
+
+  const nextToken = generatePublicToken();
+
+  db.run(
+    `UPDATE stays
+     SET public_token = ?
+     WHERE id = ? AND (public_token IS NULL OR TRIM(public_token) = "")`,
+    [nextToken, stay.id],
+    (err) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      callback(null, {
+        ...stay,
+        public_token: nextToken
+      });
+    }
+  );
 }
 
 function buildLegacyCheckinFNRHPayload(checkin) {
@@ -410,7 +453,7 @@ function updateStayLastFNRHResult(stayId, status, message, guestCountSent, guest
 
 function ensureEmptyTestStay() {
   db.get(
-    `SELECT id FROM stays
+    `SELECT id, public_token FROM stays
      WHERE property_id = ? AND reservation_id = ? AND sub_reservation_id = ?`,
     [PROPERTY_ID, EMPTY_STAY_SEED.reservation_id, EMPTY_STAY_SEED.sub_reservation_id],
     (err, row) => {
@@ -420,19 +463,29 @@ function ensureEmptyTestStay() {
       }
 
       if (row) {
-        console.log(`Stay de teste sem hóspedes já existe (#${row.id})`);
+        ensureStayHasPublicToken(row, (tokenErr, stayWithToken) => {
+          if (tokenErr) {
+            console.error("Erro ao garantir public_token da stay de teste:", tokenErr);
+            return;
+          }
+
+          console.log(`Stay de teste sem hóspedes já existe (#${stayWithToken.id})`);
+        });
         return;
       }
 
+      const publicToken = generatePublicToken();
+
       db.run(
-        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         [
           PROPERTY_ID,
           EMPTY_STAY_SEED.reservation_id,
           EMPTY_STAY_SEED.sub_reservation_id,
           EMPTY_STAY_SEED.data_entrada,
-          EMPTY_STAY_SEED.data_saida
+          EMPTY_STAY_SEED.data_saida,
+          publicToken
         ],
         function (insertErr) {
           if (insertErr) {
@@ -682,16 +735,25 @@ app.post("/stays", (req, res) => {
       }
 
       if (row) {
-        return res.json({
-          message: "Stay já existe",
-          stay: row
+        return ensureStayHasPublicToken(row, (tokenErr, stayWithToken) => {
+          if (tokenErr) {
+            console.error("Erro ao garantir public_token da stay existente:", tokenErr);
+            return res.status(500).json({ error: "Erro ao preparar link público da stay" });
+          }
+
+          return res.json({
+            message: "Stay já existe",
+            stay: stayWithToken
+          });
         });
       }
 
+      const publicToken = generatePublicToken();
+
       db.run(
-        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida)
-         VALUES (?, ?, ?, ?, ?)`,
-        [PROPERTY_ID, reservationId, subReservationId, dataEntrada, dataSaida],
+        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [PROPERTY_ID, reservationId, subReservationId, dataEntrada, dataSaida, publicToken],
         function (err) {
           if (err) {
             console.error("Erro ao criar stay:", err);
@@ -706,7 +768,8 @@ app.post("/stays", (req, res) => {
                 reservation_id: reservationId,
                 sub_reservation_id: subReservationId,
                 data_entrada: dataEntrada,
-                data_saida: dataSaida
+                data_saida: dataSaida,
+                public_token: publicToken
               }
             });
           }
@@ -739,13 +802,40 @@ app.get("/stays/:id", (req, res) => {
   const stayId = req.params.id;
 
   db.get(
-    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
      FROM stays
      WHERE id = ? AND property_id = ?`,
     [stayId, PROPERTY_ID],
     (err, stay) => {
       if (err) {
         console.error("Erro ao buscar stay:", err);
+        return res.status(500).json({ error: "Erro ao buscar stay" });
+      }
+
+      if (!stay) {
+        return res.status(404).json({ error: "Stay não encontrada" });
+      }
+
+      return res.json(stay);
+    }
+  );
+});
+
+app.get("/stays/public/:token", (req, res) => {
+  const publicToken = String(req.params.token || "").trim();
+
+  if (!publicToken) {
+    return res.status(400).json({ error: "Token público não informado" });
+  }
+
+  db.get(
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
+     FROM stays
+     WHERE public_token = ? AND property_id = ?`,
+    [publicToken, PROPERTY_ID],
+    (err, stay) => {
+      if (err) {
+        console.error("Erro ao buscar stay pública por token:", err);
         return res.status(500).json({ error: "Erro ao buscar stay" });
       }
 
@@ -1410,6 +1500,6 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
 

@@ -1051,8 +1051,9 @@
     </div>
   </div>
 
+  <script src="app-config.js"></script>
   <script>
-    const API_BASE = "http://localhost:3000";
+    const API_BASE = window.getApiBase();
     const ACTIVE_STAY_STORAGE_KEY = "stays.activeStayId";
 
     let stays = [];
@@ -1188,10 +1189,11 @@
       element.className = `field-help ${tone}`.trim();
     }
 
-    function getPrecheckinLink(stayId) {
-      if (!stayId) return "";
+    function getPrecheckinLink(stay) {
+      const publicToken = String(stay?.public_token || "").trim();
+      if (!publicToken) return "";
       const url = new URL("precheckin.html", window.location.href);
-      url.searchParams.set("stay", stayId);
+      url.searchParams.set("token", publicToken);
       return url.toString();
     }
 
@@ -1223,7 +1225,7 @@ Qualquer dúvida, estamos à disposição!`;
     function buildReservationPrecheckinMessage(referenceStay, reservationStays) {
       const reservationId = referenceStay?.reservation_id || "-";
       const sortedStays = [...reservationStays].sort((left, right) => Number(left.id) - Number(right.id));
-      const links = sortedStays.map((stay) => `${getStayOperationalLabel(stay)}:\n${getPrecheckinLink(stay.id)}`);
+      const links = sortedStays.map((stay) => `${getStayOperationalLabel(stay)}:\n${getPrecheckinLink(stay)}`);
 
       return `Segue os links de prÃ©-check-in da reserva ${reservationId}:\n\n${links.join("\n\n")}\n\nPor favor, encaminhe cada link ao responsÃ¡vel do respectivo quarto.`;
     }
@@ -2409,7 +2411,7 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     async function copySelectedPrecheckinLink() {
-      const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
+      const link = getPrecheckinLink(selectedStayDetails?.stay);
       if (!link) {
         setActionStatus("Selecione uma stay para copiar o link do pré-check-in.", "warning");
         return;
@@ -2425,7 +2427,7 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     async function copySelectedWhatsappMessage() {
-      const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
+      const link = getPrecheckinLink(selectedStayDetails?.stay);
       if (!link) {
         setActionStatus("Selecione uma stay para copiar a mensagem do WhatsApp.", "warning");
         return;
@@ -2474,7 +2476,7 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     function openSelectedPrecheckinLink() {
-      const link = getPrecheckinLink(selectedStayDetails?.stay?.id || selectedStayId);
+      const link = getPrecheckinLink(selectedStayDetails?.stay);
       if (!link) {
         setActionStatus("Selecione uma stay para abrir o link do pré-check-in.", "warning");
         return;

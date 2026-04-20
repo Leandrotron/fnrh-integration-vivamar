@@ -222,7 +222,10 @@
     <div id="status" class="status"></div>
   </div>
 
+  <script src="app-config.js"></script>
   <script>
+    const API_BASE = window.getApiBase();
+
     function getParams() {
       const p = new URLSearchParams(window.location.search);
       return {
@@ -568,7 +571,7 @@
           birth_date
         };
 
-        const res = await fetch("http://localhost:3000/checkin", {
+        const res = await fetch(`${API_BASE}/checkin`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data)
@@ -584,7 +587,7 @@
         status.innerHTML = "<span style='color:green'>Check-in principal realizado com sucesso!</span>";
 
         try {
-          const stayRes = await fetch("http://localhost:3000/stays", {
+          const stayRes = await fetch(`${API_BASE}/stays`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -604,7 +607,7 @@
           const stay_id = stayJson.stay.id;
 
           for (const guest of guests) {
-            const guestRes = await fetch("http://localhost:3000/guests", {
+            const guestRes = await fetch(`${API_BASE}/guests`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

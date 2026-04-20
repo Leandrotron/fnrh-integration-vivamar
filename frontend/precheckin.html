@@ -226,9 +226,11 @@
     </div>
   </div>
 
+  <script src="app-config.js"></script>
   <script>
-    const API_BASE = "http://localhost:3000";
+    const API_BASE = window.getApiBase();
     let stayId = "";
+    let stayToken = "";
     let guestIndex = 0;
     let stayLoaded = false;
     let isSubmitting = false;
@@ -237,9 +239,12 @@
     let existingGuests = [];
     let existingGuestCount = 0;
 
-    function getStayIdFromUrl() {
+    function getStayAccessFromUrl() {
       const params = new URLSearchParams(window.location.search);
-      return params.get("stay") || "";
+      return {
+        token: params.get("token") || "",
+        stayId: params.get("stay") || ""
+      };
     }
 
     function onlyDigits(value) {
@@ -694,7 +699,9 @@
     }
 
     async function loadStay() {
-      stayId = getStayIdFromUrl();
+      const access = getStayAccessFromUrl();
+      stayToken = String(access.token || "").trim();
+      stayId = String(access.stayId || "").trim();
       stayLoaded = false;
       submissionCompleted = false;
       isSubmitting = false;
@@ -709,14 +716,17 @@
       setStatus("Carregando stay...", "info");
       updateActionButtons();
 
-      if (!stayId) {
+      if (!stayToken && !stayId) {
         setStayInfo("Este link de pré-check-in está incompleto. Peça à recepção para enviar o link correto da sua hospedagem.", "error");
-        setStatus("Não foi possível abrir o pré-check-in porque o link está sem a identificação da stay.", "error");
+        setStatus("Não foi possível abrir o pré-check-in porque o link está sem token ou identificação da stay.", "error");
         return;
       }
 
       try {
-        const response = await fetch(`${API_BASE}/stays/${stayId}`);
+        const stayUrl = stayToken
+          ? `${API_BASE}/stays/public/${encodeURIComponent(stayToken)}`
+          : `${API_BASE}/stays/${stayId}`;
+        const response = await fetch(stayUrl);
         const contentType = response.headers.get("content-type") || "";
         const data = contentType.includes("application/json") ? await response.json() : {};
 
@@ -728,6 +738,7 @@
 
         stayLoaded = true;
         currentStayData = data;
+        stayId = String(data.id || stayId || "").trim();
         renderStayLoadedInfo(data);
 
         try {

@@ -167,7 +167,10 @@
     <tbody id="tabela"></tbody>
   </table>
 
+  <script src="app-config.js"></script>
   <script>
+    const API_BASE = window.getApiBase();
+
     function renderStatus(status) {
       if (status === "validated") {
         return `<span class="status-pill validated">validated</span>`;
@@ -231,7 +234,7 @@ Se tiver qualquer dúvida, estamos à disposição.`;
 
     async function enviarFNRH(id) {
       try {
-        const response = await fetch(`http://localhost:3000/checkins/${id}/send-fnrh`, {
+        const response = await fetch(`${API_BASE}/checkins/${id}/send-fnrh`, {
           method: "POST"
         });
 
@@ -255,7 +258,7 @@ Se tiver qualquer dúvida, estamos à disposição.`;
       tabela.innerHTML = "<tr><td colspan='12'>Carregando...</td></tr>";
 
       try {
-        const response = await fetch("http://localhost:3000/checkins");
+        const response = await fetch(`${API_BASE}/checkins`);
         const data = await response.json();
 
         if (data.length === 0) {

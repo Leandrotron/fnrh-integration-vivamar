@@ -576,6 +576,12 @@ Se houver investigaÃƒÂ§ÃƒÂ£o detalhada de bug, manter tambÃƒÂ©m o re
 - Ao testar mudanÃƒÂ§as em rotas, reiniciar o backend para evitar confusÃƒÂ£o com servidor antigo em memÃƒÂ³ria.
 - Continuar verificando com cuidado os retornos reais da FNRH, porque a integraÃƒÂ§ÃƒÂ£o jÃƒÂ¡ estÃƒÂ¡ funcional e qualquer ajuste agora impacta fluxo real.
 
+## 2026-04-20 - Nota operacional
+
+- Backend e frontend ja estao preparados para deploy simples de beta sem refactor estrutural.
+- Backend pronto para subir em Render/Railway e frontend pronto para apontar para API remota via `window.APP_CONFIG.API_BASE`.
+- Proximo passo operacional: publicar a beta e validar uso externo real com `precheckin.html`, painel interno e fluxo de envio FNRH.
+
 ## Ultima Atualizacao
 
 - Data: 2026-04-19

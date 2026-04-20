@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const sqlite3 = require("sqlite3").verbose();
 
 const db = new sqlite3.Database("./database.sqlite");
@@ -19,6 +20,60 @@ function ensureColumn(tableName, columnName, definition) {
         console.log(`✓ Coluna ${columnName} adicionada em ${tableName}`);
       }
     });
+  });
+}
+
+function generatePublicToken() {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function assignMissingStayPublicTokens() {
+  db.all(`PRAGMA table_info(stays)`, (columnErr, columns) => {
+    if (columnErr) {
+      console.error("Erro ao inspecionar public_token em stays:", columnErr);
+      return;
+    }
+
+    const hasPublicTokenColumn = columns.some((column) => column.name === "public_token");
+    if (!hasPublicTokenColumn) {
+      setTimeout(assignMissingStayPublicTokens, 100);
+      return;
+    }
+
+    db.all(
+      `SELECT id
+       FROM stays
+       WHERE public_token IS NULL OR TRIM(public_token) = ""`,
+      (err, rows) => {
+        if (err) {
+          console.error("Erro ao buscar stays sem public_token:", err);
+          return;
+        }
+
+        if (!rows.length) {
+          return;
+        }
+
+        rows.forEach((row) => {
+          const token = generatePublicToken();
+
+          db.run(
+            `UPDATE stays
+             SET public_token = ?
+             WHERE id = ? AND (public_token IS NULL OR TRIM(public_token) = "")`,
+            [token, row.id],
+            (updateErr) => {
+              if (updateErr) {
+                console.error(`Erro ao preencher public_token da stay #${row.id}:`, updateErr);
+                return;
+              }
+
+              console.log(`✓ public_token gerado para stay #${row.id}`);
+            }
+          );
+        });
+      }
+    );
   });
 }
 
@@ -75,6 +130,14 @@ db.serialize(() => {
   ensureColumn("stays", "fnrh_last_sent_at", "TEXT");
   ensureColumn("stays", "fnrh_last_guest_count_sent", "INTEGER");
   ensureColumn("stays", "fnrh_last_guest_count_confirmed", "INTEGER");
+  ensureColumn("stays", "public_token", "TEXT");
+
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stays_public_token ON stays (public_token)`, (err) => {
+    if (err) console.error("Erro ao criar índice idx_stays_public_token:", err);
+    else console.log("✓ Índice idx_stays_public_token criado");
+  });
+
+  assignMissingStayPublicTokens();
 
   // nova estrutura: hóspedes da suíte
   db.run(`
