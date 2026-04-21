@@ -1462,10 +1462,9 @@ Qualquer dúvida, estamos à disposição!`;
     }
 
     function hasGuestMinimumResidenceData(guest) {
-      const cep = String(guest?.cep || "").trim();
       const cidadeId = String(guest?.cidade_id || "").trim();
       const estadoId = String(guest?.estado_id || "").trim();
-      return !!cep || (!!cidadeId && !!estadoId);
+      return !!cidadeId && !!estadoId;
     }
 
     function getFnrhValidationErrors(stay, guests) {
@@ -1508,7 +1507,7 @@ Qualquer dúvida, estamos à disposição!`;
         }
 
         if (!hasGuestMinimumResidenceData(guest)) {
-          errors.push(`Residência ausente no hóspede ${guestName} (informe CEP ou cidade_id + estado_id)`);
+          errors.push(`Residência ausente no hóspede ${guestName} (informe cidade_id e estado_id)`);
         }
       }
 
