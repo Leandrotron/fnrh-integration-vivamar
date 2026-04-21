@@ -670,3 +670,53 @@ Se houver investigaÃƒÂ§ÃƒÂ£o detalhada de bug, manter tambÃƒÂ©m o re
 
 - Data: 2026-04-19
 - Situacao geral: painel interno mais maduro para operacao diaria, com criacao em lote, copia de links por reserva, filtro por data de entrada com foco em hoje, pre-check-in publico mais claro, `vehicle_plate` operacional completo e fluxo real para FNRH preservado
+
+## 2026-04-21 - Fechamento do fluxo minimo FNRH
+
+### Resumo do dia
+
+- A estrategia operacional mudou para gerar o link oficial da FNRH o mais cedo possivel.
+- O fluxo deixou de exigir ficha completa antes do envio inicial.
+- O sistema agora consegue criar a stay, cadastrar o hospede com validacao reduzida, enviar para a FNRH e receber `link_precheckin` funcional.
+
+### Descobertas tecnicas
+
+- A FNRH exigiu nos testes reais:
+  - `nome`
+  - `CPF`
+  - `data_nascimento`
+  - `cidade_id`
+  - `estado_id`
+- `cidade_id` e `estado_id` passaram a ser tratados como dados minimos de residencia, normalmente resolvidos a partir do CEP.
+- A FNRH nao exigiu para gerar o link oficial:
+  - `genero_id`
+  - `raca_id`
+  - `deficiencia_id`
+
+### Ajustes realizados
+
+- Criacao de um builder minimal dedicado para o envio ao endpoint `/hospedagem/registrar`.
+- Testes incrementais do payload ate encontrar o menor conjunto funcional aceito pela FNRH.
+- Ajuste do bloco `reserva` para ficar mais proximo do contrato oficial.
+- Persistencia e exibicao operacional do `link_precheckin` oficial no painel interno.
+- Ajuste final das validacoes do backend em `POST /guests` e `PUT /guests/:id` para permitir cadastro minimo sem exigir campos que nao entram no fluxo inicial.
+
+### Resultado final
+
+- Fluxo funcional confirmado para:
+  - criar stay com dados minimos
+  - cadastrar hospede com validacao reduzida
+  - enviar para a FNRH
+  - gerar o link oficial de pre-check-in
+- A ficha completa pode ser concluida depois pelo proprio hospede no link oficial da FNRH.
+
+### Observacoes importantes
+
+- `data_nascimento` continua obrigatoria.
+- O CEP continua importante porque viabiliza a resolucao de `cidade_id` e `estado_id`.
+- O preenchimento completo da ficha nao precisa mais acontecer antes do primeiro envio.
+- A separacao entre dados minimos para gerar link e ficha completa para conclusao posterior passou a ser a referencia operacional do projeto.
+
+### Proximo passo recomendado
+
+- Manter o foco em estabilidade do fluxo minimo e evoluir a UX operacional sem reintroduzir validacoes antigas que nao sao exigidas para a geracao do link oficial.

@@ -302,3 +302,25 @@ Este projeto pode evoluir para:
 ## 👨‍💻 Autor
 
 Desenvolvido internamente para a operação da Pousada Viva Mar.
+---
+
+## Fluxo atual de integracao com FNRH
+
+O fluxo atual foi simplificado para gerar o link oficial da FNRH o mais cedo possivel, sem exigir ficha completa antes do envio inicial.
+
+1. Criar a `stay` com os dados basicos da reserva.
+2. Cadastrar o hospede com os dados minimos necessarios: nome completo, CPF, data de nascimento e CEP.
+3. O sistema resolve `cidade_id` e `estado_id` a partir do CEP para compor o payload minimo funcional.
+4. Enviar a stay para a FNRH.
+5. Receber e persistir `link_precheckin`.
+6. Compartilhar o link oficial para que o proprio hospede complete a ficha no ambiente da FNRH.
+
+Esse fluxo substitui a estrategia anterior de exigir ficha completa antes do envio inicial. Dados como `genero_id`, `raca_id` e `deficiencia_id` continuam disponiveis no sistema, mas nao bloqueiam mais a geracao do link oficial.
+
+## Dados minimos obrigatorios (fluxo atual)
+
+* Nome completo
+* CPF
+* Data de nascimento
+* CEP
+* Datas da reserva
