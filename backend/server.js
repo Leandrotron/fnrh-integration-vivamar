@@ -163,20 +163,18 @@ function buildFNRHPayload(stay, guests) {
   const safeGuests = Array.isArray(guests) ? guests : [];
   const debugInfo = [];
   const validationWarnings = [];
+  const quantidadeHospedeAdulto = safeGuests.filter((guest) => Number(guest?.is_adult) === 1).length;
+  const quantidadeHospedeMenor = safeGuests.filter((guest) => Number(guest?.is_adult) === 0).length;
 
   const payload = {
     reserva: {
       numero_reserva: stay?.reservation_id || "",
-      numero_sub_reserva: stay?.sub_reservation_id || "",
       data_entrada: stay?.data_entrada || "",
-      data_saida: stay?.data_saida || ""
+      data_saida: stay?.data_saida || "",
+      origem_reserva_id: "MEIOHOSPEDAGEM",
+      quantidade_hospede_adulto: quantidadeHospedeAdulto,
+      quantidade_hospede_menor: quantidadeHospedeMenor
       // A documentacao e os erros reais da API indicam o uso desses campos na reserva.
-    },
-    hospedagem: {
-      stayIdLocal: stay?.id || null,
-      propertyId: stay?.property_id || "",
-      criadoEm: stay?.created_at || null
-      // O modelo atual nao tem unidade/quarto explicito dentro da stay.
     },
     dados_hospede: safeGuests.map((guest) => {
         const guestDebug = {
@@ -1606,4 +1604,3 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
-
