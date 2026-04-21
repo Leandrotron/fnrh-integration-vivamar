@@ -1461,6 +1461,13 @@ Qualquer dúvida, estamos à disposição!`;
       };
     }
 
+    function hasGuestMinimumResidenceData(guest) {
+      const cep = String(guest?.cep || "").trim();
+      const cidadeId = String(guest?.cidade_id || "").trim();
+      const estadoId = String(guest?.estado_id || "").trim();
+      return !!cep || (!!cidadeId && !!estadoId);
+    }
+
     function getFnrhValidationErrors(stay, guests) {
       const errors = [];
       const guestList = guests || [];
@@ -1500,8 +1507,8 @@ Qualquer dúvida, estamos à disposição!`;
           errors.push(`CPF ausente no hóspede ${guestName}`);
         }
 
-        if (!guest.birth_date?.trim()) {
-          errors.push(`Data de nascimento ausente no hóspede ${guestName}`);
+        if (!hasGuestMinimumResidenceData(guest)) {
+          errors.push(`Residência ausente no hóspede ${guestName} (informe CEP ou cidade_id + estado_id)`);
         }
       }
 
@@ -1556,13 +1563,9 @@ Qualquer dúvida, estamos à disposição!`;
         !guest.estado_id
       ].some(Boolean)).length;
       const incompleteGuests = guests.filter((guest) => [
-        !guest.genero_id,
-        !guest.raca_id,
-        !guest.deficiencia_id,
-        !guest.cidade_id,
-        !guest.estado_id,
+        !guest.full_name,
         !guest.cpf,
-        !guest.birth_date
+        !hasGuestMinimumResidenceData(guest)
       ].some(Boolean)).length;
       const hasIncompleteGuests = incompleteGuests > 0;
 
@@ -1770,13 +1773,9 @@ Qualquer dúvida, estamos à disposição!`;
           !guest.estado_id && "estado_id"
         ].filter(Boolean);
         const missingCriticalFields = [
-          !guest.genero_id && "genero_id",
-          !guest.raca_id && "raca_id",
-          !guest.deficiencia_id && "deficiencia_id",
-          !guest.cidade_id && "cidade_id",
-          !guest.estado_id && "estado_id",
+          !guest.full_name && "nome",
           !guest.cpf && "cpf",
-          !guest.birth_date && "birth_date"
+          !hasGuestMinimumResidenceData(guest) && "residencia_minima"
         ].filter(Boolean);
 
         if (missingCriticalFields.length === 0) {
@@ -1890,13 +1889,9 @@ Qualquer dúvida, estamos à disposição!`;
           !guest.estado_id && "estado_id"
         ].filter(Boolean);
         const missingCriticalFields = [
-          !guest.genero_id && "genero_id",
-          !guest.raca_id && "raca_id",
-          !guest.deficiencia_id && "deficiencia_id",
-          !guest.cidade_id && "cidade_id",
-          !guest.estado_id && "estado_id",
+          !guest.full_name && "nome",
           !guest.cpf && "cpf",
-          !guest.birth_date && "birth_date"
+          !hasGuestMinimumResidenceData(guest) && "residencia_minima"
         ].filter(Boolean);
         const isFNRHComplete = missingCriticalFields.length === 0;
 
