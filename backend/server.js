@@ -310,6 +310,8 @@ function buildFNRHPayloadMinimal(stay, guests) {
     dados_hospede: safeGuests.map((guest) => {
       const cpf = guest?.cpf || null;
       const birthDate = guest?.birth_date || null;
+      const cidadeId = guest?.cidade_id || null;
+      const estadoId = guest?.estado_id || null;
 
       return {
         is_principal: !!guest?.is_main_guest,
@@ -323,7 +325,12 @@ function buildFNRHPayloadMinimal(stay, guests) {
                 tipo_documento_id: "CPF"
               }
             }
-            : {})
+            : {}),
+          contato: {
+            ...(cidadeId ? { cidade_id: cidadeId } : {}),
+            ...(estadoId ? { estado_id: estadoId } : {}),
+            PaisResidencia_id: "BR"
+          }
         }
       };
     })
