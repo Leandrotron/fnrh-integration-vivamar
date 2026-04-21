@@ -1060,7 +1060,7 @@ app.post("/guests", (req, res) => {
   const birthDateClean = String(birth_date || "").trim();
   const generoIdClean = String(genero_id || "").trim();
   const racaIdClean = String(raca_id || "").trim();
-  const deficienciaIdClean = String(deficiencia_id || "NAO").trim();
+  const deficienciaIdClean = String(deficiencia_id || "").trim();
   const cidadeIdClean = String(cidade_id || "").trim();
   const estadoIdClean = String(estado_id || "").trim().toUpperCase();
   const cepClean = onlyDigits(cep);
@@ -1089,11 +1089,7 @@ app.post("/guests", (req, res) => {
     return res.status(400).json({ error: "CPF invalido" });
   }
 
-  if (!birthDateClean) {
-    return res.status(400).json({ error: "Data de nascimento obrigatoria" });
-  }
-
-  if (!isValidBirthDate(birthDateClean)) {
+  if (birthDateClean && !isValidBirthDate(birthDateClean)) {
     return res.status(400).json({ error: "Data de nascimento invalida" });
   }
 
@@ -1101,23 +1097,23 @@ app.post("/guests", (req, res) => {
     return res.status(400).json({ error: "Tipo do hospede obrigatorio" });
   }
 
-  if (!generoIdClean) {
-    return res.status(400).json({ error: "Genero nao informado" });
+  if (!cidadeIdClean) {
+    return res.status(400).json({ error: "cidade_id obrigatorio" });
   }
 
-  if (!VALID_GENERO_IDS.includes(generoIdClean)) {
+  if (!estadoIdClean) {
+    return res.status(400).json({ error: "estado_id obrigatorio" });
+  }
+
+  if (generoIdClean && !VALID_GENERO_IDS.includes(generoIdClean)) {
     return res.status(400).json({ error: "Genero invalido" });
   }
 
-  if (!racaIdClean) {
-    return res.status(400).json({ error: "Raca/Cor nao informada" });
-  }
-
-  if (!VALID_RACA_IDS.includes(racaIdClean)) {
+  if (racaIdClean && !VALID_RACA_IDS.includes(racaIdClean)) {
     return res.status(400).json({ error: "Raca/Cor invalida" });
   }
 
-  if (!VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
+  if (deficienciaIdClean && !VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
     return res.status(400).json({ error: "Informacao de deficiencia invalida" });
   }
 
@@ -1312,7 +1308,7 @@ app.put("/guests/:id", (req, res) => {
   const birthDateClean = String(birth_date || "").trim();
   const generoIdClean = String(genero_id || "").trim();
   const racaIdClean = String(raca_id || "").trim();
-  const deficienciaIdClean = String(deficiencia_id || "NAO").trim();
+  const deficienciaIdClean = String(deficiencia_id || "").trim();
   const cidadeIdClean = String(cidade_id || "").trim();
   const estadoIdClean = String(estado_id || "").trim().toUpperCase();
   const cepClean = onlyDigits(cep);
@@ -1335,11 +1331,7 @@ app.put("/guests/:id", (req, res) => {
     });
   }
 
-  if (!birthDateClean) {
-    return res.status(400).json({ error: "Data de nascimento é obrigatória" });
-  }
-
-  if (!isValidBirthDate(birthDateClean)) {
+  if (birthDateClean && !isValidBirthDate(birthDateClean)) {
     return res.status(400).json({ error: "Data de nascimento inválida" });
   }
 
@@ -1347,26 +1339,25 @@ app.put("/guests/:id", (req, res) => {
     return res.status(400).json({ error: "Tipo do hóspede é obrigatório" });
   }
 
-  if (!generoIdClean) {
-    return res.status(400).json({ error: "Gênero não informado" });
+  if (!cidadeIdClean) {
+    return res.status(400).json({ error: "cidade_id é obrigatório" });
   }
 
-  if (!VALID_GENERO_IDS.includes(generoIdClean)) {
+  if (!estadoIdClean) {
+    return res.status(400).json({ error: "estado_id é obrigatório" });
+  }
+
+  if (generoIdClean && !VALID_GENERO_IDS.includes(generoIdClean)) {
     return res.status(400).json({ error: "Gênero inválido" });
   }
 
-  if (!racaIdClean) {
-    return res.status(400).json({ error: "Raça/Cor não informada" });
-  }
-
-  if (!VALID_RACA_IDS.includes(racaIdClean)) {
+  if (racaIdClean && !VALID_RACA_IDS.includes(racaIdClean)) {
     return res.status(400).json({ error: "Raça/Cor inválida" });
   }
 
-  if (!VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
+  if (deficienciaIdClean && !VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
     return res.status(400).json({ error: "Informação de deficiência inválida" });
   }
-
   db.get(
     `SELECT guests.*, stays.property_id
      FROM guests
