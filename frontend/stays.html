@@ -869,6 +869,15 @@
             </div>
           </div>
 
+          <div class="link-box">
+            <div class="link-title">Link oficial de pré-check-in da FNRH</div>
+            <div id="fnrhOfficialLinkValue" class="link-value">Link oficial da FNRH ainda não gerado.</div>
+            <div class="link-actions">
+              <button id="copyFnrhOfficialLinkBtn" type="button">Copiar link FNRH</button>
+              <button id="openFnrhOfficialLinkBtn" type="button" class="secondary-btn">Abrir pré-check-in oficial</button>
+            </div>
+          </div>
+
           <div id="actionStatus" class="action-status"></div>
 
           <div class="summary-row">
@@ -1195,6 +1204,10 @@
       const url = new URL("precheckin.html", window.location.href);
       url.searchParams.set("token", publicToken);
       return url.toString();
+    }
+
+    function getOfficialFnrhPrecheckinLink(stay) {
+      return String(stay?.fnrh_link_precheckin_oficial || "").trim();
     }
 
     function getStayOperationalLabel(stay) {
@@ -1527,10 +1540,14 @@ Qualquer dúvida, estamos à disposição!`;
       const copyWhatsappMessageButton = document.getElementById("copyWhatsappMessageBtn");
       const copyReservationLinksButton = document.getElementById("copyReservationLinksBtn");
       const openPrecheckinButton = document.getElementById("openPrecheckinBtn");
+      const copyFnrhOfficialLinkButton = document.getElementById("copyFnrhOfficialLinkBtn");
+      const openFnrhOfficialLinkButton = document.getElementById("openFnrhOfficialLinkBtn");
       const precheckinLinkValue = document.getElementById("precheckinLinkValue");
+      const fnrhOfficialLinkValue = document.getElementById("fnrhOfficialLinkValue");
       const summary = getStayOperationalSummary(guests);
       const fnrhValidationErrors = getFnrhValidationErrors(stay, guests);
       const precheckinLink = getPrecheckinLink(stay?.id);
+      const fnrhOfficialLink = getOfficialFnrhPrecheckinLink(stay);
       const guestsWithPossibleFallback = guests.filter((guest) => [
         !guest.genero_id,
         !guest.raca_id,
@@ -1574,7 +1591,12 @@ Qualquer dúvida, estamos à disposição!`;
       copyWhatsappMessageButton.disabled = !stay;
       copyReservationLinksButton.disabled = !stay;
       openPrecheckinButton.disabled = !stay;
+      copyFnrhOfficialLinkButton.disabled = !fnrhOfficialLink;
+      openFnrhOfficialLinkButton.disabled = !fnrhOfficialLink;
       precheckinLinkValue.textContent = precheckinLink || "Selecione uma stay para gerar o link.";
+      fnrhOfficialLinkValue.textContent = stay
+        ? (fnrhOfficialLink || "Link oficial da FNRH ainda não gerado.")
+        : "Selecione uma stay para visualizar o link oficial da FNRH.";
       roleField.classList.remove("attention");
       roleHelp.style.display = "none";
       roleHelp.className = "field-help";
@@ -2428,6 +2450,22 @@ Qualquer dúvida, estamos à disposição!`;
       }
     }
 
+    async function copySelectedFnrhOfficialLink() {
+      const link = getOfficialFnrhPrecheckinLink(selectedStayDetails?.stay);
+      if (!link) {
+        setActionStatus("O link oficial da FNRH ainda não foi gerado para esta stay.", "warning");
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(link);
+        setActionStatus("Link oficial da FNRH copiado.", "success");
+      } catch (error) {
+        console.error(error);
+        setActionStatus("Não foi possível copiar o link oficial da FNRH automaticamente.", "error");
+      }
+    }
+
     async function copySelectedWhatsappMessage() {
       const link = getPrecheckinLink(selectedStayDetails?.stay);
       if (!link) {
@@ -2487,6 +2525,16 @@ Qualquer dúvida, estamos à disposição!`;
       window.open(link, "_blank");
     }
 
+    function openSelectedFnrhOfficialLink() {
+      const link = getOfficialFnrhPrecheckinLink(selectedStayDetails?.stay);
+      if (!link) {
+        setActionStatus("O link oficial da FNRH ainda não foi gerado para esta stay.", "warning");
+        return;
+      }
+
+      window.open(link, "_blank");
+    }
+
     const stayEntryDateFilterInput = document.getElementById("stayEntryDateFilter");
     const applyStayEntryDateFilter = (nextValue) => {
       stayEntryDateFilter = normalizeDateValue(nextValue);
@@ -2520,9 +2568,11 @@ Qualquer dúvida, estamos à disposição!`;
     document.getElementById("addGuestBtn").addEventListener("click", addGuestToSelectedStay);
     document.getElementById("cancelEditBtn").addEventListener("click", resetGuestForm);
     document.getElementById("copyPrecheckinBtn").addEventListener("click", copySelectedPrecheckinLink);
+    document.getElementById("copyFnrhOfficialLinkBtn").addEventListener("click", copySelectedFnrhOfficialLink);
     document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copySelectedWhatsappMessage);
     document.getElementById("copyReservationLinksBtn").addEventListener("click", copyReservationPrecheckinLinks);
     document.getElementById("openPrecheckinBtn").addEventListener("click", openSelectedPrecheckinLink);
+    document.getElementById("openFnrhOfficialLinkBtn").addEventListener("click", openSelectedFnrhOfficialLink);
     document.getElementById("newGuestCpf").addEventListener("input", (event) => {
       event.target.value = formatCPF(event.target.value);
     });
