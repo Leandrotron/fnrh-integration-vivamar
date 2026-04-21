@@ -1089,6 +1089,10 @@ app.post("/guests", (req, res) => {
     return res.status(400).json({ error: "CPF invalido" });
   }
 
+  if (!birthDateClean) {
+    return res.status(400).json({ error: "Data de nascimento obrigatoria" });
+  }
+
   if (birthDateClean && !isValidBirthDate(birthDateClean)) {
     return res.status(400).json({ error: "Data de nascimento invalida" });
   }
@@ -1331,6 +1335,9 @@ app.put("/guests/:id", (req, res) => {
     });
   }
 
+  if (!birthDateClean) {
+    return res.status(400).json({ error: "Data de nascimento é obrigatória" });
+  }
   if (birthDateClean && !isValidBirthDate(birthDateClean)) {
     return res.status(400).json({ error: "Data de nascimento inválida" });
   }
