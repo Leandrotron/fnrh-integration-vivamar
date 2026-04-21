@@ -73,6 +73,7 @@ function isValidBirthDate(dateString) {
 const VALID_GENERO_IDS = ["HOMEM", "MULHER", "OUTRO"];
 const VALID_RACA_IDS = ["AMARELA", "BRANCA", "INDIGENA", "PARDA", "PRETA", "NAOINFORMAR"];
 const VALID_DEFICIENCIA_IDS = ["NAO", "SIM"];
+const useMinimalPayload = false;
 
 function splitName(fullName) {
   const parts = fullName.trim().split(/\s+/);
@@ -291,7 +292,44 @@ function buildFNRHPayload(stay, guests) {
   } else {
     console.log("FNRH VALIDATION WARNINGS: none");
   }
-  console.log("FNRH PAYLOAD PREVIEW:", JSON.stringify(payload, null, 2));
+  console.log("FNRH PAYLOAD PREVIEW (FULL):", JSON.stringify(payload, null, 2));
+
+  return payload;
+}
+
+function buildFNRHPayloadMinimal(stay, guests) {
+  const safeGuests = Array.isArray(guests) ? guests : [];
+
+  const payload = {
+    reserva: {
+      numero_reserva: stay?.reservation_id || "",
+      data_entrada: stay?.data_entrada || "",
+      data_saida: stay?.data_saida || "",
+      origem_reserva_id: "MEIOHOSPEDAGEM"
+    },
+    dados_hospede: safeGuests.map((guest) => {
+      const cpf = guest?.cpf || null;
+      const birthDate = guest?.birth_date || null;
+
+      return {
+        is_principal: !!guest?.is_main_guest,
+        dados_pessoais: {
+          ...(guest?.full_name ? { nome: guest.full_name } : {}),
+          ...(birthDate ? { data_nascimento: birthDate } : {}),
+          ...(cpf
+            ? {
+              documento_id: {
+                numero_documento: cpf,
+                tipo_documento_id: "CPF"
+              }
+            }
+            : {})
+        }
+      };
+    })
+  };
+
+  console.log("FNRH PAYLOAD PREVIEW (MINIMAL):", JSON.stringify(payload, null, 2));
 
   return payload;
 }
@@ -1461,7 +1499,9 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
             return res.status(400).json({ error: "Nenhum hóspede titular encontrado na stay" });
           }
 
-          const payload = buildFNRHPayload(stay, guests);
+          const payload = useMinimalPayload
+            ? buildFNRHPayloadMinimal(stay, guests)
+            : buildFNRHPayload(stay, guests);
           const guestIds = guests.map((g) => g.id);
           const guestCountSent = Array.isArray(payload?.dados_hospede) ? payload.dados_hospede.length : guests.length;
 
