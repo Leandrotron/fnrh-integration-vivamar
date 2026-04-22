@@ -1961,8 +1961,11 @@ Qualquer dúvida, estamos à disposição!`;
       setActionStatus("Carregando detalhes da stay...", "info");
 
       try {
-        const guests = await fetchJson(`${API_BASE}/stays/${stay.id}/guests`);
-        renderGuests(stay, guests);
+        const [latestStay, guests] = await Promise.all([
+          fetchJson(`${API_BASE}/stays/${stay.id}`),
+          fetchJson(`${API_BASE}/stays/${stay.id}/guests`)
+        ]);
+        renderGuests(latestStay, guests);
       } catch (error) {
         console.error(error);
         if (!isSavingStay) {
