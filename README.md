@@ -324,3 +324,41 @@ Esse fluxo substitui a estrategia anterior de exigir ficha completa antes do env
 * Data de nascimento
 * CEP
 * Datas da reserva
+
+
+## Atualizacao operacional mais recente
+
+- O fluxo principal agora prioriza o envio inicial para a FNRH e o uso do link oficial retornado pela propria FNRH.
+- `frontend/reservas.html` foi criada como interface enxuta e experimental focada na recepcao.
+- `frontend/stays.html` continua existindo como tela anterior, mais completa e mais carregada, sem ser removida nesta etapa.
+- O sistema deixou de perseguir como fluxo principal a ideia de formulario completo proprio antes do primeiro envio.
+
+## Posicionamento atual do sistema
+
+O produto esta se consolidando como um painel/orquestrador da recepcao, com foco em:
+
+- criar reserva com dados minimos
+- cadastrar hospede principal com dados minimos
+- enviar para FNRH
+- compartilhar o link oficial
+- exibir QR Code para operacao no balcao
+
+Objetivo operacional central:
+
+- eliminar papel
+- reduzir retrabalho
+- usar a FNRH como ambiente oficial de preenchimento do hospede
+
+## Interfaces operacionais atuais
+
+### `frontend/reservas.html`
+
+- nova base provavel da interface futura
+- focada no fluxo minimo da recepcao
+- inclui link oficial, QR Code, CEP com preenchimento automatico no fluxo brasileiro e modo estrangeiro visualmente coerente
+
+### `frontend/stays.html`
+
+- permanece disponivel como tela anterior e mais completa
+- segue util para operacoes e testes detalhados
+- nao deve ser removida neste momento

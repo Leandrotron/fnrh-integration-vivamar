@@ -1,5 +1,71 @@
 # DEV_LOG
 
+## 2026-04-22 - Fechamento da nova interface `reservas.html`
+
+### Resumo da sessao
+
+- Criada a nova pagina `frontend/reservas.html` como interface enxuta e experimental para a recepcao.
+- A nova tela foi alinhada ao fluxo operacional real atual:
+  - criar reserva com dados minimos
+  - cadastrar hospede principal com dados minimos
+  - enviar para FNRH
+  - usar link oficial
+  - usar QR Code
+- `frontend/stays.html` continua existindo como tela anterior, mais completa e mais carregada, sem ser removida nesta etapa.
+- O produto deixou de priorizar formulario completo proprio como fluxo principal.
+- A FNRH passou a ser o ambiente oficial de preenchimento do hospede apos o primeiro envio.
+
+### O que foi criado
+
+- Criacao de `frontend/reservas.html`.
+- Estrutura nova com foco em recepcao:
+  - lista de reservas na coluna esquerda
+  - painel da reserva selecionada na direita
+  - dados minimos da reserva
+  - hospede principal com fluxo minimo
+  - bloco de acoes FNRH destacado
+- Inclusao de QR Code para o link oficial da FNRH na nova tela.
+
+### O que foi ajustado
+
+- Reorganizacao visual da `reservas.html` para reduzir ruido de formulario e reforcar a hierarquia operacional.
+- Destaque maior para o bloco de acoes FNRH.
+- Modo estrangeiro ajustado visualmente para ficar coerente com um fluxo internacional minimo.
+- Restauracao do preenchimento automatico de endereco por CEP no fluxo brasileiro da nova tela.
+- Inclusao de feedback visual mais claro para o envio da FNRH:
+  - loading no botao
+  - bloqueio de multiplos cliques
+  - mensagem clara de sucesso
+  - mensagem clara de erro
+
+### O que foi validado
+
+- Fluxo brasileiro validado na pratica como direcao operacional principal.
+- Nova tela capaz de suportar o fluxo minimo da recepcao sem depender da tela antiga.
+- Uso do link oficial da FNRH como principal canal para conclusao da ficha.
+- QR Code funcionando na nova tela como extensao do uso do link oficial.
+
+### Decisoes de produto registradas
+
+- O objetivo principal do sistema passou a ser eliminar papel e reduzir retrabalho na recepcao.
+- O sistema interno deixa de agir como ficha completa propria e assume o papel de painel/orquestrador operacional.
+- A geracao e uso do link oficial da FNRH agora tem prioridade sobre o link de pre-check-in proprio do produto.
+- `frontend/reservas.html` passa a ser a base provavel da interface futura.
+- `frontend/stays.html` permanece preservado por enquanto.
+
+### Pendencias
+
+- Validar envio real de hospede estrangeiro para a FNRH quando houver caso real ou dados adequados.
+- Continuar refinando a UX da `reservas.html` com base no uso operacional.
+- Avaliar busca rapida por hospede/reserva em etapa futura.
+- Reavaliar se o feedback visual do envio FNRH precisa evoluir ainda mais apos uso real da recepcao.
+
+### Proximo passo recomendado
+
+- Consolidar a `reservas.html` como frente principal da recepcao em novos testes operacionais, preservando `stays.html` como tela secundaria enquanto o fluxo novo amadurece.
+
+---
+
 ## 2026-04-16
 
 - InvestigaÃƒÂ§ÃƒÂ£o do bug de seleÃƒÂ§ÃƒÂ£o de stay apÃƒÂ³s salvar ou recarregar no painel `stays.html`
@@ -720,3 +786,7 @@ Se houver investigaÃƒÂ§ÃƒÂ£o detalhada de bug, manter tambÃƒÂ©m o re
 ### Proximo passo recomendado
 
 - Manter o foco em estabilidade do fluxo minimo e evoluir a UX operacional sem reintroduzir validacoes antigas que nao sao exigidas para a geracao do link oficial.
+
+
+
+
