@@ -555,6 +555,98 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim) {
   };
 }
 
+async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
+  const mode = process.env.FNRH_MODE || "mock";
+  console.log("[FNRH] guest check-in mode:", mode);
+
+  if (mode === "mock") {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        mode: "mock",
+        hospede_id: fnrhHospedeId,
+        situacao_id: "CHECKIN_REALIZADO",
+        data_hora: checkinAtIso
+      }
+    };
+  }
+
+  const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
+  const user = String(process.env.FNRH_USER || "").trim();
+  const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+  const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
+  const finalUrl = `${baseUrl}/hospedes/${encodeURIComponent(fnrhHospedeId)}/checkin`;
+
+  const missingVars = [
+    !baseUrl && "FNRH_BASE_URL",
+    !user && "FNRH_USER",
+    !apiKey && "FNRH_API_KEY",
+    !cpfSolicitante && "FNRH_CPF_SOLICITANTE"
+  ].filter(Boolean);
+
+  if (missingVars.length) {
+    const configurationError = new Error(
+      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+    );
+    configurationError.fnrhStatus = null;
+    configurationError.fnrhBody = { error: configurationError.message };
+    throw configurationError;
+  }
+
+  const authorization = buildBasicAuthorization(user, apiKey);
+  const requestHeaders = {
+    "Content-Type": "text/plain",
+    Authorization: authorization,
+    cpf_solicitante: cpfSolicitante
+  };
+
+  console.log("[FNRH] guest check-in request url:", finalUrl);
+  console.log("[FNRH] guest check-in request headers:", {
+    "Content-Type": "text/plain",
+    Authorization: `Basic ${maskValue(Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64"), 8, 4)}`,
+    FNRH_USER: maskValue(user, 4, 4),
+    FNRH_API_KEY: maskValue(apiKey, 3, 2),
+    cpf_solicitante: maskValue(cpfSolicitante, 3, 2)
+  });
+  console.log("[FNRH] guest check-in request body:", checkinAtIso);
+
+  let response;
+
+  try {
+    response = await fetch(finalUrl, {
+      method: "PATCH",
+      headers: requestHeaders,
+      body: checkinAtIso
+    });
+  } catch (networkError) {
+    console.error("[FNRH] guest check-in network error:", networkError);
+    networkError.fnrhStatus = null;
+    networkError.fnrhBody = {
+      error: networkError.message || "Erro de rede ao realizar check-in na FNRH"
+    };
+    throw networkError;
+  }
+
+  let body;
+  const text = await response.text();
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+
+  console.log("[FNRH] guest check-in response status:", response.status);
+  console.log("[FNRH] guest check-in response body:", JSON.stringify(body, null, 2));
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
 function updateGuestsFNRHStatus(guestIds, fnrhStatus, statusValue, callback) {
   if (!guestIds.length) return callback();
 
@@ -1343,6 +1435,81 @@ app.get("/stays/:id/guests", (req, res) => {
       }
 
       res.json(rows);
+    }
+  );
+});
+
+app.post("/guests/:id/fnrh-checkin", (req, res) => {
+  const guestId = req.params.id;
+
+  db.get(
+    `SELECT guests.id, guests.full_name, guests.fnrh_hospede_id, guests.stay_id
+     FROM guests
+     INNER JOIN stays ON stays.id = guests.stay_id
+     WHERE guests.id = ? AND stays.property_id = ?`,
+    [guestId, PROPERTY_ID],
+    async (err, guest) => {
+      if (err) {
+        console.error("Erro ao buscar hóspede para check-in FNRH:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+      }
+
+      if (!guest) {
+        return res.status(404).json({ error: "Hóspede não encontrado" });
+      }
+
+      const fnrhHospedeId = String(guest.fnrh_hospede_id || "").trim();
+      if (!fnrhHospedeId) {
+        return res.status(400).json({
+          error: "Hóspede sem fnrh_hospede_id para check-in na FNRH",
+          guest_id: guest.id
+        });
+      }
+
+      const checkinAtIso = new Date().toISOString();
+
+      try {
+        const result = await sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso);
+
+        if (!result.ok) {
+          const errorMessage = String(
+            result.body?.error ||
+            result.body?.message ||
+            "Falha ao realizar check-in na FNRH"
+          ).trim();
+
+          return res.status(502).json({
+            error: errorMessage,
+            guest_id: guest.id,
+            fnrh_hospede_id: fnrhHospedeId,
+            checkin_at: checkinAtIso,
+            fnrh_mode: process.env.FNRH_MODE || "mock",
+            response_status: result.status,
+            response_body: result.body
+          });
+        }
+
+        return res.json({
+          message: "Check-in FNRH realizado com sucesso",
+          guest_id: guest.id,
+          fnrh_hospede_id: fnrhHospedeId,
+          checkin_at: checkinAtIso,
+          response_status: result.status,
+          response_body: result.body
+        });
+      } catch (checkinErr) {
+        console.error("Erro ao realizar check-in FNRH:", checkinErr);
+
+        return res.status(500).json({
+          error: checkinErr.message || "Erro interno ao realizar check-in FNRH",
+          guest_id: guest.id,
+          fnrh_hospede_id: fnrhHospedeId,
+          checkin_at: checkinAtIso,
+          fnrh_mode: process.env.FNRH_MODE || "mock",
+          response_status: checkinErr.fnrhStatus ?? null,
+          response_body: checkinErr.fnrhBody || null
+        });
+      }
     }
   );
 });
