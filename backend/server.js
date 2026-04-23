@@ -462,7 +462,7 @@ async function sendToFNRH(payload) {
   };
 }
 
-async function fetchFnrhPreCheckins() {
+async function fetchFnrhPreCheckins(dataInicio, dataFim) {
   const mode = process.env.FNRH_MODE || "mock";
   console.log("[FNRH] pre-checkins mode:", mode);
 
@@ -482,7 +482,11 @@ async function fetchFnrhPreCheckins() {
   const user = String(process.env.FNRH_USER || "").trim();
   const apiKey = String(process.env.FNRH_API_KEY || "").trim();
   const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
-  const finalUrl = `${baseUrl}/hospedes/pre-checkins`;
+  const query = new URLSearchParams({
+    data_inicio: dataInicio,
+    data_fim: dataFim
+  });
+  const finalUrl = `${baseUrl}/hospedes/pre-checkins?${query.toString()}`;
 
   const missingVars = [
     !baseUrl && "FNRH_BASE_URL",
@@ -723,8 +727,17 @@ app.get("/", (req, res) => {
 });
 
 app.get("/fnrh/precheckins", async (req, res) => {
+  const dataInicio = String(req.query.data_inicio || "").trim();
+  const dataFim = String(req.query.data_fim || "").trim();
+
+  if (!dataInicio || !dataFim) {
+    return res.status(400).json({
+      error: "data_inicio e data_fim são obrigatórios"
+    });
+  }
+
   try {
-    const result = await fetchFnrhPreCheckins();
+    const result = await fetchFnrhPreCheckins(dataInicio, dataFim);
 
     if (!result.ok) {
       const errorMessage = String(
