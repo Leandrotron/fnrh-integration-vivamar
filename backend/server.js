@@ -462,6 +462,95 @@ async function sendToFNRH(payload) {
   };
 }
 
+async function fetchFnrhPreCheckins() {
+  const mode = process.env.FNRH_MODE || "mock";
+  console.log("[FNRH] pre-checkins mode:", mode);
+
+  if (mode === "mock") {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        mode: "mock",
+        fetched_at: new Date().toISOString(),
+        dados: []
+      }
+    };
+  }
+
+  const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
+  const user = String(process.env.FNRH_USER || "").trim();
+  const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+  const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
+  const finalUrl = `${baseUrl}/hospedes/pre-checkins`;
+
+  const missingVars = [
+    !baseUrl && "FNRH_BASE_URL",
+    !user && "FNRH_USER",
+    !apiKey && "FNRH_API_KEY",
+    !cpfSolicitante && "FNRH_CPF_SOLICITANTE"
+  ].filter(Boolean);
+
+  if (missingVars.length) {
+    const configurationError = new Error(
+      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+    );
+    configurationError.fnrhStatus = null;
+    configurationError.fnrhBody = { error: configurationError.message };
+    throw configurationError;
+  }
+
+  const authorization = buildBasicAuthorization(user, apiKey);
+  const requestHeaders = {
+    "Content-Type": "application/json",
+    Authorization: authorization,
+    cpf_solicitante: cpfSolicitante
+  };
+
+  console.log("[FNRH] pre-checkins request url:", finalUrl);
+  console.log("[FNRH] pre-checkins request headers:", {
+    "Content-Type": "application/json",
+    Authorization: `Basic ${maskValue(Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64"), 8, 4)}`,
+    FNRH_USER: maskValue(user, 4, 4),
+    FNRH_API_KEY: maskValue(apiKey, 3, 2),
+    cpf_solicitante: maskValue(cpfSolicitante, 3, 2)
+  });
+
+  let response;
+
+  try {
+    response = await fetch(finalUrl, {
+      method: "GET",
+      headers: requestHeaders
+    });
+  } catch (networkError) {
+    console.error("[FNRH] pre-checkins network error:", networkError);
+    networkError.fnrhStatus = null;
+    networkError.fnrhBody = {
+      error: networkError.message || "Erro de rede ao consultar pré-check-ins da FNRH"
+    };
+    throw networkError;
+  }
+
+  let body;
+  const text = await response.text();
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+
+  console.log("[FNRH] pre-checkins response status:", response.status);
+  console.log("[FNRH] pre-checkins response body:", JSON.stringify(body, null, 2));
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
 function updateGuestsFNRHStatus(guestIds, fnrhStatus, statusValue, callback) {
   if (!guestIds.length) return callback();
 
@@ -631,6 +720,38 @@ function ensureEmptyTestStay() {
 
 app.get("/", (req, res) => {
   res.send("FNRH Integration API rodando 🚀");
+});
+
+app.get("/fnrh/precheckins", async (req, res) => {
+  try {
+    const result = await fetchFnrhPreCheckins();
+
+    if (!result.ok) {
+      const errorMessage = String(
+        result.body?.error ||
+        result.body?.message ||
+        "Falha ao consultar pré-check-ins da FNRH"
+      ).trim();
+
+      return res.status(502).json({
+        error: errorMessage,
+        fnrh_mode: process.env.FNRH_MODE || "mock",
+        response_status: result.status,
+        response_body: result.body
+      });
+    }
+
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    console.error("Erro ao consultar pré-check-ins da FNRH:", error);
+
+    return res.status(500).json({
+      error: error.message || "Erro interno ao consultar pré-check-ins da FNRH",
+      fnrh_mode: process.env.FNRH_MODE || "mock",
+      response_status: error.fnrhStatus ?? null,
+      response_body: error.fnrhBody || null
+    });
+  }
 });
 
 app.get("/checkins", (req, res) => {
