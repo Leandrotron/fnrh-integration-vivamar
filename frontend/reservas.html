@@ -257,6 +257,10 @@
       font-weight: bold;
     }
 
+    .reservation-state-line {
+      margin-top: 10px;
+    }
+
     .status-line {
       min-height: 18px;
       font-size: 14px;
@@ -334,11 +338,72 @@
       font-size: 14px;
     }
 
+    .link-box.available {
+      border-color: #8bc6a3;
+      background: #f0fbf5;
+      color: #0f5a42;
+      font-weight: bold;
+    }
+
+    .copy-feedback {
+      align-self: center;
+      min-height: 18px;
+      font-size: 14px;
+      color: var(--success);
+      font-weight: bold;
+    }
+
     .guest-primary-box {
       padding: 16px;
       border: 1px solid #d9e1e7;
       border-radius: 16px;
       background: #fbfcfd;
+    }
+
+    .precheckin-box {
+      padding: 14px;
+      border: 1px solid #d9e1e7;
+      border-radius: 14px;
+      background: #fbfcfd;
+    }
+
+    .precheckin-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .precheckin-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: #334155;
+      font-size: 14px;
+    }
+
+    .precheckin-row span:last-child {
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .precheckin-row .answered {
+      color: var(--success);
+    }
+
+    .precheckin-row .pending {
+      color: var(--warning);
+    }
+
+    .guest-fnrh-status {
+      margin-top: 10px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .guest-fnrh-status.success {
+      color: var(--success);
+      font-weight: bold;
     }
 
     .subtle-box {
@@ -434,6 +499,7 @@
             <div class="summary-label">Reserva Selecionada</div>
             <div id="selectedReservationTitle" class="summary-value">-</div>
             <div id="selectedReservationMeta" class="muted">-</div>
+            <div id="reservationStateLine" class="status-inline reservation-state-line"></div>
           </div>
 
           <div class="section">
@@ -539,13 +605,22 @@
                 <label for="guestForeignCityInput">Cidade / residência</label>
                 <input id="guestForeignCityInput" placeholder="Cidade em texto livre">
               </div>
+              </div>
             </div>
-            </div>
+            <div id="guestFnrhCheckinStatus" class="guest-fnrh-status"></div>
 
             <div class="button-row" style="margin-top:12px;">
               <button id="saveGuestBtn" type="button">Salvar hóspede principal</button>
+              <button id="guestFnrhCheckinBtn" type="button" class="secondary">Check-in FNRH</button>
             </div>
             <div id="guestStatus" class="status-line"></div>
+          </div>
+
+          <div class="section">
+            <h2>Pré-check-in FNRH</h2>
+            <div id="fnrhPrecheckinBox" class="precheckin-box">
+              <div class="muted">Consultando status de pré-check-in oficial...</div>
+            </div>
           </div>
 
           <div class="action-box">
@@ -556,6 +631,8 @@
             <div class="button-row" style="margin-top:12px;">
               <button id="sendFnrhBtn" type="button">Enviar para FNRH</button>
               <button id="copyFnrhLinkBtn" type="button" class="secondary">Copiar link oficial</button>
+              <button id="copyWhatsappMessageBtn" type="button" class="secondary">Copiar mensagem WhatsApp</button>
+              <span id="copyLinkFeedback" class="copy-feedback" aria-live="polite"></span>
               <button id="openFnrhLinkBtn" type="button" class="secondary">Abrir link oficial</button>
               <button id="showQrBtn" type="button" class="secondary">Mostrar QR Code</button>
             </div>
@@ -577,6 +654,13 @@
     let selectedGuests = [];
     let lastGuestCepLookup = "";
     let isSendingFnrh = false;
+    let isCheckingInGuestFnrh = false;
+    let guestFnrhCheckinStatusById = {};
+    let copyFeedbackTimer = null;
+    let fnrhPrecheckins = null;
+    let fnrhPrecheckinsError = "";
+    let fnrhPrecheckinsPromise = null;
+    let fnrhPrecheckinsRangeKey = "";
 
     function setStatus(elementId, message, tone = "") {
       const element = document.getElementById(elementId);
@@ -657,6 +741,225 @@
 
     function getMainGuest() {
       return selectedGuests.find((guest) => Number(guest.is_main_guest) === 1) || selectedGuests[0] || null;
+    }
+
+    function normalizeMatchText(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ");
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function collectFnrhPrecheckinItems(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.dados)) return payload.dados;
+      if (Array.isArray(payload?.data)) return payload.data;
+      if (Array.isArray(payload?.items)) return payload.items;
+      if (Array.isArray(payload?.dados?.hospedes)) return payload.dados.hospedes;
+      if (Array.isArray(payload?.dados?.dados_hospedes)) return payload.dados.dados_hospedes;
+      return [];
+    }
+
+    function getPrecheckinDocument(item) {
+      return onlyDigits(
+        item?.cpf ||
+        item?.numero_documento ||
+        item?.documento ||
+        item?.documento_id?.numero_documento ||
+        item?.hospede?.cpf ||
+        item?.hospede?.numero_documento ||
+        item?.hospede?.documento_id?.numero_documento ||
+        item?.pessoa?.cpf ||
+        item?.pessoa?.numero_documento ||
+        item?.pessoa?.documento_id?.numero_documento
+      );
+    }
+
+    function getPrecheckinName(item) {
+      return normalizeMatchText(
+        item?.nome ||
+        item?.full_name ||
+        item?.nomeCompleto ||
+        item?.dados_pessoais?.nome ||
+        item?.hospede?.nome ||
+        item?.hospede?.dados_pessoais?.nome ||
+        item?.pessoa?.nome ||
+        item?.pessoa?.dados_pessoais?.nome
+      );
+    }
+
+    async function loadFnrhPreCheckins() {
+      if (!selectedStay) {
+        fnrhPrecheckins = [];
+        fnrhPrecheckinsError = "Selecione uma reserva para consultar o pré-check-in da FNRH.";
+        return fnrhPrecheckins;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const stayDataEntrada = normalizeDateValue(selectedStay.data_entrada);
+      const stayDataSaida = normalizeDateValue(selectedStay.data_saida);
+      // A FNRH rejeita data_inicio futura.
+      const computedDataInicio = stayDataEntrada && stayDataEntrada <= today ? stayDataEntrada : today;
+      const computedDataFim = stayDataSaida && stayDataSaida >= computedDataInicio ? stayDataSaida : computedDataInicio;
+      const dataInicio = today;
+      const dataFim = today;
+
+      if (!dataInicio || !dataFim) {
+        fnrhPrecheckins = [];
+        fnrhPrecheckinsError = "Informe data de entrada e data de saída para consultar o pré-check-in da FNRH.";
+        return fnrhPrecheckins;
+      }
+
+      const rangeKey = `${dataInicio}|${dataFim}`;
+
+      if (fnrhPrecheckinsRangeKey === rangeKey && (fnrhPrecheckins || fnrhPrecheckinsError)) {
+        return fnrhPrecheckins || [];
+      }
+
+      if (!fnrhPrecheckinsPromise) {
+        fnrhPrecheckinsRangeKey = rangeKey;
+        const query = new URLSearchParams({
+          data_inicio: dataInicio,
+          data_fim: dataFim
+        });
+        const precheckinsUrl = `${API_BASE}/fnrh/precheckins?${query.toString()}`;
+
+        console.log("[FNRH precheckins debug]", {
+          today,
+          stayDataEntrada,
+          stayDataSaida,
+          computedDataInicio,
+          computedDataFim,
+          dataInicio,
+          dataFim,
+          precheckinsUrl
+        });
+
+        fnrhPrecheckinsPromise = fetchJson(precheckinsUrl)
+          .then((data) => {
+            fnrhPrecheckins = collectFnrhPrecheckinItems(data);
+            fnrhPrecheckinsError = "";
+            return fnrhPrecheckins;
+          })
+          .catch((error) => {
+            fnrhPrecheckins = [];
+            fnrhPrecheckinsError = error.message || "Não foi possível consultar o status de pré-check-in da FNRH agora.";
+            return fnrhPrecheckins;
+          })
+          .finally(() => {
+            fnrhPrecheckinsPromise = null;
+          });
+      }
+
+      return fnrhPrecheckinsPromise;
+    }
+
+    function hasAnsweredFnrhPrecheckin(guest) {
+      const guestCpf = onlyDigits(guest?.cpf);
+      const guestName = normalizeMatchText(guest?.full_name);
+
+      return (fnrhPrecheckins || []).some((item) => {
+        const precheckinDocument = getPrecheckinDocument(item);
+        if (guestCpf && precheckinDocument && guestCpf === precheckinDocument) {
+          return true;
+        }
+
+        const precheckinName = getPrecheckinName(item);
+        return guestName && precheckinName && !precheckinDocument && guestName === precheckinName;
+      });
+    }
+
+    function renderFnrhPrecheckinStatus() {
+      const container = document.getElementById("fnrhPrecheckinBox");
+
+      if (fnrhPrecheckinsError) {
+        container.innerHTML = `<div class="muted">${escapeHtml(fnrhPrecheckinsError)}</div>`;
+        return;
+      }
+
+      if (!selectedGuests.length) {
+        container.innerHTML = `<div class="muted">Nenhum hóspede cadastrado para comparar com o pré-check-in oficial.</div>`;
+        return;
+      }
+
+      const rows = selectedGuests.map((guest) => {
+        const answered = hasAnsweredFnrhPrecheckin(guest);
+        const statusClass = answered ? "answered" : "pending";
+        const statusText = answered ? "Respondido" : "Pendente";
+
+        return `
+          <div class="precheckin-row">
+            <span>${escapeHtml(guest.full_name || "Hóspede sem nome")}</span>
+            <span class="${statusClass}">${statusText}</span>
+          </div>
+        `;
+      });
+
+      const hasAnsweredGuest = selectedGuests.some((guest) => hasAnsweredFnrhPrecheckin(guest));
+      container.innerHTML = hasAnsweredGuest
+        ? `<div class="precheckin-list">${rows.join("")}</div>`
+        : `
+          <div class="muted">Nenhum hóspede confirmado no pré-check-in oficial.</div>
+          <div class="precheckin-list">${rows.join("")}</div>
+        `;
+    }
+
+    function getReservationStateMessages() {
+      const messages = [];
+      const hasGuest = !!getMainGuest();
+      const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
+
+      if (!hasGuest) {
+        messages.push({ text: "Sem h\u00f3spede cadastrado", tone: "pending" });
+      } else if (selectedStay?.fnrh_last_status === "success") {
+        messages.push({ text: "Enviado para FNRH", tone: "success" });
+      } else {
+        messages.push({ text: "Pronto para envio", tone: "success" });
+      }
+
+      if (officialLink) {
+        messages.push({ text: "Link oficial dispon\u00edvel", tone: "success" });
+      }
+
+      return messages;
+    }
+
+    function renderReservationStateLine() {
+      const element = document.getElementById("reservationStateLine");
+      element.innerHTML = getReservationStateMessages()
+        .map((message) => `<span class="status-badge ${message.tone}">${message.text}</span>`)
+        .join("");
+    }
+
+    function showCopyLinkFeedback(message = "Link copiado") {
+      const element = document.getElementById("copyLinkFeedback");
+      if (copyFeedbackTimer) {
+        clearTimeout(copyFeedbackTimer);
+        copyFeedbackTimer = null;
+      }
+
+      if (!message) {
+        element.textContent = "";
+        return;
+      }
+
+      element.textContent = message;
+
+      copyFeedbackTimer = setTimeout(() => {
+        element.textContent = "";
+        copyFeedbackTimer = null;
+      }, 2200);
     }
 
     function setGuestCepStatus(message, tone = "") {
@@ -799,6 +1102,7 @@
       document.getElementById("dataSaidaInput").value = normalizeDateValue(stay?.data_saida);
       document.getElementById("selectedReservationTitle").textContent = stay?.reservation_id || "-";
       document.getElementById("selectedReservationMeta").textContent = `Datas: ${formatDateRange(stay)} | ID interno: #${stay?.id || "-"}`;
+      renderReservationStateLine();
     }
 
     function populateGuestForm(guest) {
@@ -819,6 +1123,21 @@
       lastGuestCepLookup = onlyDigits(guest?.cep || "");
       setGuestCepStatus("");
       updateAddressSectionVisibility();
+      updateGuestFnrhCheckinControls();
+    }
+
+    function updateGuestFnrhCheckinControls() {
+      const guest = getMainGuest();
+      const button = document.getElementById("guestFnrhCheckinBtn");
+      const statusElement = document.getElementById("guestFnrhCheckinStatus");
+      const statusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
+
+      button.disabled = !guest?.id || isCheckingInGuestFnrh;
+      button.textContent = isCheckingInGuestFnrh ? "Fazendo check-in..." : "Check-in FNRH";
+      button.style.display = guest?.id ? "inline-block" : "none";
+
+      statusElement.textContent = statusValue || (guest?.id ? "" : "Salve o hóspede antes de fazer check-in FNRH.");
+      statusElement.className = `guest-fnrh-status${statusValue ? " success" : ""}`;
     }
 
     function updateActionButtons() {
@@ -834,9 +1153,12 @@
       sendButton.disabled = !hasStay || isSendingFnrh;
       sendButton.textContent = isSendingFnrh ? "Enviando..." : "Enviar para FNRH";
       document.getElementById("copyFnrhLinkBtn").disabled = !officialLink;
+      document.getElementById("copyWhatsappMessageBtn").disabled = !officialLink;
       document.getElementById("openFnrhLinkBtn").disabled = !officialLink;
       document.getElementById("showQrBtn").disabled = !officialLink;
-      document.getElementById("fnrhLinkBox").textContent = officialLink || "Link oficial da FNRH ainda não gerado.";
+      const linkBox = document.getElementById("fnrhLinkBox");
+      linkBox.textContent = officialLink || "Link oficial da FNRH ainda não gerado.";
+      linkBox.classList.toggle("available", !!officialLink);
 
       if (selectedStay?.fnrh_last_status || selectedStay?.fnrh_last_message) {
         document.getElementById("fnrhStatusLine").innerHTML = `
@@ -869,7 +1191,9 @@
       content.style.display = "flex";
       populateStayForm(selectedStay);
       populateGuestForm(getMainGuest());
+      renderFnrhPrecheckinStatus();
       updateActionButtons();
+      updateGuestFnrhCheckinControls();
     }
 
     async function loadStays(preferredStayId = null) {
@@ -904,6 +1228,7 @@
         selectedStay = stay;
         selectedGuests = guests;
         setSelectedStayId(stay.id);
+        await loadFnrhPreCheckins();
 
         const currentIndex = stays.findIndex((item) => String(item.id) === String(stay.id));
         if (currentIndex >= 0) {
@@ -915,6 +1240,7 @@
         setStatus("actionStatus", "");
         setStatus("stayStatus", "");
         setStatus("guestStatus", "");
+        showCopyLinkFeedback("");
       } catch (error) {
         setStatus("actionStatus", error.message || "Erro ao carregar reserva.", "error");
       }
@@ -1040,6 +1366,36 @@
       }
     }
 
+    async function checkInMainGuestFnrh() {
+      const guest = getMainGuest();
+      if (!guest?.id) {
+        setStatus("guestStatus", "Salve o hóspede antes de fazer check-in FNRH.", "warning");
+        return;
+      }
+
+      if (isCheckingInGuestFnrh) {
+        return;
+      }
+
+      isCheckingInGuestFnrh = true;
+      updateGuestFnrhCheckinControls();
+      setStatus("guestStatus", "Fazendo check-in FNRH...", "warning");
+
+      try {
+        const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkin`, {
+          method: "POST"
+        });
+        const situacaoId = data?.response_body?.dados?.situacao_id || "CHECKIN_REALIZADO";
+        guestFnrhCheckinStatusById[guest.id] = situacaoId;
+        setStatus("guestStatus", data.message || "Check-in FNRH realizado com sucesso", "success");
+      } catch (error) {
+        setStatus("guestStatus", error.message || "Não foi possível realizar check-in FNRH.", "error");
+      } finally {
+        isCheckingInGuestFnrh = false;
+        updateGuestFnrhCheckinControls();
+      }
+    }
+
     async function sendSelectedStayToFNRH() {
       if (!selectedStay?.id) {
         setStatus("actionStatus", "Selecione uma reserva antes de enviar.", "warning");
@@ -1077,9 +1433,36 @@
 
       try {
         await navigator.clipboard.writeText(link);
-        setStatus("actionStatus", "Link oficial copiado.", "success");
+        showCopyLinkFeedback();
+        setStatus("actionStatus", "Link copiado", "success");
       } catch (error) {
-        setStatus("actionStatus", "Não foi possível copiar o link oficial.", "error");
+        setStatus("actionStatus", error.message || "Não foi possível copiar o link oficial.", "error");
+      }
+    }
+
+    function buildWhatsappPrecheckinMessage(link) {
+      return `Para agilizar seu check-in, pedimos que preencha o cadastro obrigatório pelo link abaixo:
+
+🔗 ${link}
+
+Por favor, inclua também os dados dos acompanhantes.
+
+Obrigado!`;
+    }
+
+    async function copyWhatsappMessage() {
+      const link = getOfficialFnrhPrecheckinLink(selectedStay);
+      if (!link) {
+        setStatus("actionStatus", "O link oficial da FNRH ainda não foi gerado para esta reserva.", "warning");
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(buildWhatsappPrecheckinMessage(link));
+        showCopyLinkFeedback("Mensagem copiada");
+        setStatus("actionStatus", "Mensagem copiada", "success");
+      } catch (error) {
+        setStatus("actionStatus", error.message || "Não foi possível copiar a mensagem.", "error");
       }
     }
 
@@ -1124,8 +1507,10 @@
     document.getElementById("reloadListBtn").addEventListener("click", () => loadStays(selectedStayId));
     document.getElementById("saveStayBtn").addEventListener("click", saveStay);
     document.getElementById("saveGuestBtn").addEventListener("click", saveMainGuest);
+    document.getElementById("guestFnrhCheckinBtn").addEventListener("click", checkInMainGuestFnrh);
     document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
     document.getElementById("copyFnrhLinkBtn").addEventListener("click", copyOfficialLink);
+    document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copyWhatsappMessage);
     document.getElementById("openFnrhLinkBtn").addEventListener("click", openOfficialLink);
     document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
     document.getElementById("isForeignerInput").addEventListener("change", updateForeignerFields);
