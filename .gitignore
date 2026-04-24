@@ -8,6 +8,7 @@ yarn-debug.log*
 yarn-error.log*
 backend/server.stdout.log
 backend/server.stderr.log
+scripts/backup-sqlite.log
 
 # Env
 .env

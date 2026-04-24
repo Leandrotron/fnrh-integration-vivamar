@@ -68,6 +68,14 @@ Regra prática:
 * `backend/.env` é local
 * `backend/database.sqlite` é local
 
+Proteção operacional dos dados:
+
+* Git/GitHub protege o código
+* `database.sqlite` nao deve ser versionado no Git
+* o banco local continua sendo dado operacional critico
+* o projeto agora inclui backup versionado em `scripts/`
+* destino recomendado do backup: `G:\Meu Drive\fnrh-integration-vivamar-backups`
+
 Fluxo mínimo ao abrir o projeto em outra máquina:
 
 ```bash

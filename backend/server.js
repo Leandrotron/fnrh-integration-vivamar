@@ -164,8 +164,13 @@ function buildFNRHPayload(stay, guests) {
   const safeGuests = Array.isArray(guests) ? guests : [];
   const debugInfo = [];
   const validationWarnings = [];
-  const quantidadeHospedeAdulto = safeGuests.filter((guest) => Number(guest?.is_adult) === 1).length;
-  const quantidadeHospedeMenor = safeGuests.filter((guest) => Number(guest?.is_adult) === 0).length;
+  const computedAdultCount = safeGuests.filter((guest) => Number(guest?.is_adult) === 1).length;
+  const computedMinorCount = safeGuests.filter((guest) => Number(guest?.is_adult) === 0).length;
+  const quantidadeHospedeAdulto = Math.max(1, Number(stay?.quantidade_hospede_adulto) || computedAdultCount || 1);
+  const quantidadeHospedeMenor = Math.max(0, Number(stay?.quantidade_hospede_menor) || computedMinorCount || 0);
+
+  console.log("[FNRH] quantidade adultos:", quantidadeHospedeAdulto);
+  console.log("[FNRH] quantidade menores:", quantidadeHospedeMenor);
 
   const payload = {
     reserva: {
@@ -647,6 +652,98 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
   };
 }
 
+async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
+  const mode = process.env.FNRH_MODE || "mock";
+  console.log("[FNRH] guest check-out mode:", mode);
+
+  if (mode === "mock") {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        mode: "mock",
+        hospede_id: fnrhHospedeId,
+        situacao_id: "CHECKOUT_REALIZADO",
+        data_hora: checkoutAtIso
+      }
+    };
+  }
+
+  const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
+  const user = String(process.env.FNRH_USER || "").trim();
+  const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+  const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
+  const finalUrl = `${baseUrl}/hospedes/${encodeURIComponent(fnrhHospedeId)}/checkout`;
+
+  const missingVars = [
+    !baseUrl && "FNRH_BASE_URL",
+    !user && "FNRH_USER",
+    !apiKey && "FNRH_API_KEY",
+    !cpfSolicitante && "FNRH_CPF_SOLICITANTE"
+  ].filter(Boolean);
+
+  if (missingVars.length) {
+    const configurationError = new Error(
+      `FNRH_MODE=real, mas faltam as variÃ¡veis obrigatÃ³rias: ${missingVars.join(", ")}`
+    );
+    configurationError.fnrhStatus = null;
+    configurationError.fnrhBody = { error: configurationError.message };
+    throw configurationError;
+  }
+
+  const authorization = buildBasicAuthorization(user, apiKey);
+  const requestHeaders = {
+    "Content-Type": "text/plain",
+    Authorization: authorization,
+    cpf_solicitante: cpfSolicitante
+  };
+
+  console.log("[FNRH] guest check-out request url:", finalUrl);
+  console.log("[FNRH] guest check-out request headers:", {
+    "Content-Type": "text/plain",
+    Authorization: `Basic ${maskValue(Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64"), 8, 4)}`,
+    FNRH_USER: maskValue(user, 4, 4),
+    FNRH_API_KEY: maskValue(apiKey, 3, 2),
+    cpf_solicitante: maskValue(cpfSolicitante, 3, 2)
+  });
+  console.log("[FNRH] guest check-out request body:", checkoutAtIso);
+
+  let response;
+
+  try {
+    response = await fetch(finalUrl, {
+      method: "PATCH",
+      headers: requestHeaders,
+      body: checkoutAtIso
+    });
+  } catch (networkError) {
+    console.error("[FNRH] guest check-out network error:", networkError);
+    networkError.fnrhStatus = null;
+    networkError.fnrhBody = {
+      error: networkError.message || "Erro de rede ao realizar check-out na FNRH"
+    };
+    throw networkError;
+  }
+
+  let body;
+  const text = await response.text();
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+
+  console.log("[FNRH] guest check-out response status:", response.status);
+  console.log("[FNRH] guest check-out response body:", JSON.stringify(body, null, 2));
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
 function updateGuestsFNRHStatus(guestIds, fnrhStatus, statusValue, callback) {
   if (!guestIds.length) return callback();
 
@@ -859,6 +956,7 @@ app.get("/fnrh/precheckins", async (req, res) => {
   }
 });
 
+
 app.get("/checkins", (req, res) => {
   db.all(
     "SELECT * FROM checkins WHERE property_id = ? ORDER BY created_at DESC",
@@ -1050,7 +1148,7 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
 
 // cria ou busca uma suíte (stay)
 app.post("/stays", (req, res) => {
-  const { reservation_id, sub_reservation_id, data_entrada, data_saida } = req.body;
+  const { reservation_id, sub_reservation_id, data_entrada, data_saida, quantidade_hospede_adulto, quantidade_hospede_menor } = req.body;
 
   if (!reservation_id) {
     return res.status(400).json({
@@ -1062,6 +1160,8 @@ app.post("/stays", (req, res) => {
   const subReservationId = String(sub_reservation_id || reservation_id).trim();
   const dataEntrada = String(data_entrada || "").trim();
   const dataSaida = String(data_saida || "").trim();
+  const quantidadeHospedeAdulto = Math.max(1, Number(quantidade_hospede_adulto) || 1);
+  const quantidadeHospedeMenor = Math.max(0, Number(quantidade_hospede_menor) || 0);
 
   if (dataEntrada && !isValidBirthDate(dataEntrada)) {
     return res.status(400).json({
@@ -1094,7 +1194,11 @@ app.post("/stays", (req, res) => {
 
           return res.json({
             message: "Stay já existe",
-            stay: stayWithToken
+            stay: {
+              ...stayWithToken,
+              quantidade_hospede_adulto: quantidadeHospedeAdulto,
+              quantidade_hospede_menor: quantidadeHospedeMenor
+            }
           });
         });
       }
@@ -1120,7 +1224,9 @@ app.post("/stays", (req, res) => {
                 sub_reservation_id: subReservationId,
                 data_entrada: dataEntrada,
                 data_saida: dataSaida,
-                public_token: publicToken
+                public_token: publicToken,
+                quantidade_hospede_adulto: quantidadeHospedeAdulto,
+                quantidade_hospede_menor: quantidadeHospedeMenor
               }
             });
           }
@@ -1201,7 +1307,7 @@ app.get("/stays/public/:token", (req, res) => {
 
 app.put("/stays/:id", (req, res) => {
   const stayId = req.params.id;
-  const { reservation_id, sub_reservation_id, data_entrada, data_saida } = req.body;
+  const { reservation_id, sub_reservation_id, data_entrada, data_saida, quantidade_hospede_adulto, quantidade_hospede_menor } = req.body;
   if (!reservation_id) {
     return res.status(400).json({
       error: "ID da reserva e obrigatorio"
@@ -1212,6 +1318,8 @@ app.put("/stays/:id", (req, res) => {
   const subReservationId = String(sub_reservation_id || reservation_id).trim();
   const dataEntrada = String(data_entrada || "").trim();
   const dataSaida = String(data_saida || "").trim();
+  const quantidadeHospedeAdulto = Math.max(1, Number(quantidade_hospede_adulto) || 1);
+  const quantidadeHospedeMenor = Math.max(0, Number(quantidade_hospede_menor) || 0);
   if (dataEntrada && !isValidBirthDate(dataEntrada)) {
     return res.status(400).json({
       error: "Data de entrada invalida"
@@ -1247,7 +1355,9 @@ app.put("/stays/:id", (req, res) => {
           reservation_id: reservationId,
           sub_reservation_id: subReservationId,
           data_entrada: dataEntrada,
-          data_saida: dataSaida
+          data_saida: dataSaida,
+          quantidade_hospede_adulto: quantidadeHospedeAdulto,
+          quantidade_hospede_menor: quantidadeHospedeMenor
         }
       });
     }
@@ -1514,6 +1624,81 @@ app.post("/guests/:id/fnrh-checkin", (req, res) => {
   );
 });
 
+app.post("/guests/:id/fnrh-checkout", (req, res) => {
+  const guestId = req.params.id;
+
+  db.get(
+    `SELECT guests.id, guests.full_name, guests.fnrh_hospede_id, guests.stay_id
+     FROM guests
+     INNER JOIN stays ON stays.id = guests.stay_id
+     WHERE guests.id = ? AND stays.property_id = ?`,
+    [guestId, PROPERTY_ID],
+    async (err, guest) => {
+      if (err) {
+        console.error("Erro ao buscar hÃ³spede para check-out FNRH:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hÃ³spede" });
+      }
+
+      if (!guest) {
+        return res.status(404).json({ error: "HÃ³spede nÃ£o encontrado" });
+      }
+
+      const fnrhHospedeId = String(guest.fnrh_hospede_id || "").trim();
+      if (!fnrhHospedeId) {
+        return res.status(400).json({
+          error: "HÃ³spede sem fnrh_hospede_id para check-out na FNRH",
+          guest_id: guest.id
+        });
+      }
+
+      const checkoutAtIso = new Date().toISOString();
+
+      try {
+        const result = await sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso);
+
+        if (!result.ok) {
+          const errorMessage = String(
+            result.body?.error ||
+            result.body?.message ||
+            "Falha ao realizar check-out na FNRH"
+          ).trim();
+
+          return res.status(502).json({
+            error: errorMessage,
+            guest_id: guest.id,
+            fnrh_hospede_id: fnrhHospedeId,
+            checkout_at: checkoutAtIso,
+            fnrh_mode: process.env.FNRH_MODE || "mock",
+            response_status: result.status,
+            response_body: result.body
+          });
+        }
+
+        return res.json({
+          message: "Check-out FNRH realizado com sucesso",
+          guest_id: guest.id,
+          fnrh_hospede_id: fnrhHospedeId,
+          checkout_at: checkoutAtIso,
+          response_status: result.status,
+          response_body: result.body
+        });
+      } catch (checkoutErr) {
+        console.error("Erro ao realizar check-out FNRH:", checkoutErr);
+
+        return res.status(500).json({
+          error: checkoutErr.message || "Erro interno ao realizar check-out FNRH",
+          guest_id: guest.id,
+          fnrh_hospede_id: fnrhHospedeId,
+          checkout_at: checkoutAtIso,
+          fnrh_mode: process.env.FNRH_MODE || "mock",
+          response_status: checkoutErr.fnrhStatus ?? null,
+          response_body: checkoutErr.fnrhBody || null
+        });
+      }
+    }
+  );
+});
+
 app.delete("/guests/:id", (req, res) => {
   const guestId = req.params.id;
 
@@ -1770,6 +1955,8 @@ app.put("/guests/:id", (req, res) => {
 
 app.post("/stays/:id/send-fnrh", (req, res) => {
   const stayId = req.params.id;
+  const quantidadeHospedeAdultoFromRequest = Math.max(1, Number(req.body?.quantidade_hospede_adulto) || 1);
+  const quantidadeHospedeMenorFromRequest = Math.max(0, Number(req.body?.quantidade_hospede_menor) || 0);
 
   db.get(
     `SELECT * FROM stays
@@ -1805,9 +1992,14 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
             return res.status(400).json({ error: "Nenhum hóspede titular encontrado na stay" });
           }
 
+          const stayWithGuestCounts = {
+            ...stay,
+            quantidade_hospede_adulto: quantidadeHospedeAdultoFromRequest,
+            quantidade_hospede_menor: quantidadeHospedeMenorFromRequest
+          };
           const payload = useMinimalPayload
-            ? buildFNRHPayloadMinimal(stay, guests)
-            : buildFNRHPayload(stay, guests);
+            ? buildFNRHPayloadMinimal(stayWithGuestCounts, guests)
+            : buildFNRHPayload(stayWithGuestCounts, guests);
           const guestIds = guests.map((g) => g.id);
           const guestCountSent = Array.isArray(payload?.dados_hospede) ? payload.dados_hospede.length : guests.length;
 

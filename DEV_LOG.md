@@ -1,3 +1,76 @@
+## [2026-04-24] Wrap-up: Checkout real, UX operacional e backup versionado
+
+### Contexto
+- Check-out individual foi implementado e validado com sucesso real na FNRH.
+- Endpoint local usado: `POST /guests/:id/fnrh-checkout`.
+- Endpoint FNRH chamado: `PATCH /hospedes/{hospede_id}/checkout`.
+- Resposta real confirmada: HTTP `200` com `situacao_id = CHECKOUT_REALIZADO`.
+- Ciclo validado no hospede testado: `PRECHECKIN_PENDENTE -> CHECKIN_REALIZADO -> CHECKOUT_REALIZADO`.
+
+### Ajustes operacionais
+- UX da `reservas.html` deixou de depender operacionalmente de `GET /hospedes/pre-checkins`.
+- Motivo: o endpoint retornou `{}` em testes reais de producao e nao serviu como fonte confiavel de status.
+- Texto principal ajustado para: `Preenchimento do pré-check-in deve ser conferido no portal oficial da FNRH.`
+- Lista de hospedes ajustada para exibir `Conferir no portal`.
+- Botao de check-out foi criado e validado no frontend.
+- Botao de envio passa a exibir `Reenviar para FNRH` quando ja existe link oficial.
+
+### Backup operacional
+- Sistema simples de backup versionado do SQLite foi criado em `scripts/`.
+- Banco original continua em `backend/database.sqlite`.
+- Caminho configurado para backup no Google Drive: `G:\Meu Drive\fnrh-integration-vivamar-backups`.
+
+### Quantidade de hospedes
+- Foi identificado que `quantidade_hospede_adulto` e `quantidade_hospede_menor` controlam quantas pessoas podem preencher no link oficial da FNRH.
+- Implementacao inicial foi adicionada no frontend/backend sem alteracao de schema.
+- No estado atual, os valores sao enviados no request e usados no payload FNRH, com fallback operacional para `1` adulto e `0` menores.
+- Persistencia em banco ainda nao foi feita.
+
+### Pendencias
+- Amanhã: testar reserva real controlada com `2` adultos e `0` menores.
+- Se o link oficial aceitar `2` adultos, planejar persistencia de `quantidade_hospede_adulto` e `quantidade_hospede_menor` em `stays`.
+- Futuro: configurar Agendador de Tarefas do Windows para backup automatico.
+
+## [2026-04-24] UX: Remove pre-checkin status dependency from FNRH endpoint
+
+### Contexto
+- O endpoint oficial `GET /hospedes/pre-checkins` retornou `{}` em testes reais de producao.
+- Leitura de status de pre-check-in por esse endpoint foi considerada nao confiavel para uso operacional no painel.
+- Ajuste aplicado apenas no frontend, sem alteracao de backend ou banco.
+
+### Mudancas realizadas
+- Bloco de pre-check-in deixou de interpretar status com base na API da FNRH.
+- Texto principal atualizado para: `Preenchimento do pré-check-in deve ser conferido no portal oficial da FNRH.`
+- Lista de hospedes passou a exibir `Conferir no portal` para cada hospede.
+- Botoes de check-in e check-out passam a desabilitar automaticamente apos execucao na sessao.
+- Tooltips adicionados: `Check-in já realizado` e `Check-out já realizado`.
+- Botao `Enviar para FNRH` passa a exibir `Reenviar para FNRH` quando ja existe link oficial.
+
+### Impacto
+- Painel deixa de exibir informacao incorreta sobre confirmacao de pre-check-in oficial.
+- Operacao passa a depender de conferencia direta no portal oficial da FNRH para esse status.
+
+## [2026-04-24] Validation: Check-out individual FNRH real
+
+### Contexto
+- Endpoint experimental `POST /guests/:id/fnrh-checkout` testado contra a FNRH real.
+- Teste executado de forma controlada em um hospede especifico ja existente na FNRH.
+- Estado anterior confirmado no fluxo real: `CHECKIN_REALIZADO`.
+
+### Evidencia
+- Retorno HTTP `200`.
+- Timestamp enviado e retornado: `2026-04-24T12:01:01.956Z`.
+- Resposta FNRH trouxe `situacao_id = CHECKOUT_REALIZADO`.
+- `hospede_id` validado no retorno: `8a4804f1-f16c-4515-a6c9-a56f1a666bbd`.
+
+### Resultado
+- Fluxo individual de check-out validado tecnicamente em caso real controlado.
+- Ciclo completo confirmado: `PRECHECKIN_PENDENTE -> CHECKIN_REALIZADO -> CHECKOUT_REALIZADO`.
+
+### Proximos passos recomendados
+- Criar botao de check-out no frontend.
+- Testar fluxo completo com reserva real controlada.
+
 ## [2026-04-23] Validation: Check-in individual FNRH real
 
 ### Contexto

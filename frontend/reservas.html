@@ -474,6 +474,14 @@
               <label for="createDataSaida">Data de saída</label>
               <input id="createDataSaida" type="date">
             </div>
+            <div class="field">
+              <label for="createAdultCount">Adultos</label>
+              <input id="createAdultCount" type="number" min="1" value="1">
+            </div>
+            <div class="field">
+              <label for="createMinorCount">Menores</label>
+              <input id="createMinorCount" type="number" min="0" value="0">
+            </div>
           </div>
           <div class="button-row" style="margin-top:12px;">
             <button id="createStayBtn" type="button">Criar reserva</button>
@@ -520,6 +528,14 @@
               <div class="field">
                 <label for="dataSaidaInput">Data de saída</label>
                 <input id="dataSaidaInput" type="date">
+              </div>
+              <div class="field">
+                <label for="adultCountInput">Adultos</label>
+                <input id="adultCountInput" type="number" min="1" value="1">
+              </div>
+              <div class="field">
+                <label for="minorCountInput">Menores</label>
+                <input id="minorCountInput" type="number" min="0" value="0">
               </div>
             </div>
             <div class="button-row" style="margin-top:12px;">
@@ -612,6 +628,7 @@
             <div class="button-row" style="margin-top:12px;">
               <button id="saveGuestBtn" type="button">Salvar hóspede principal</button>
               <button id="guestFnrhCheckinBtn" type="button" class="secondary">Check-in FNRH</button>
+              <button id="guestFnrhCheckoutBtn" type="button" class="secondary">Check-out FNRH</button>
             </div>
             <div id="guestStatus" class="status-line"></div>
           </div>
@@ -652,10 +669,13 @@
     let selectedStayId = null;
     let selectedStay = null;
     let selectedGuests = [];
+    let stayGuestCountsById = {};
     let lastGuestCepLookup = "";
     let isSendingFnrh = false;
     let isCheckingInGuestFnrh = false;
     let guestFnrhCheckinStatusById = {};
+    let isCheckingOutGuestFnrh = false;
+    let guestFnrhCheckoutStatusById = {};
     let copyFeedbackTimer = null;
     let fnrhPrecheckins = null;
     let fnrhPrecheckinsError = "";
@@ -741,6 +761,24 @@
 
     function getMainGuest() {
       return selectedGuests.find((guest) => Number(guest.is_main_guest) === 1) || selectedGuests[0] || null;
+    }
+
+    function normalizeGuestCount(value, fallback = 0, min = 0) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) {
+        return fallback;
+      }
+
+      return Math.max(min, Math.trunc(numericValue));
+    }
+
+    function getStayGuestCounts(stay) {
+      const stayId = stay?.id;
+      const cachedCounts = stayId != null ? stayGuestCountsById[String(stayId)] : null;
+      return {
+        adultos: normalizeGuestCount(cachedCounts?.adultos ?? stay?.quantidade_hospede_adulto, 1, 1),
+        menores: normalizeGuestCount(cachedCounts?.menores ?? stay?.quantidade_hospede_menor, 0, 0)
+      };
     }
 
     function normalizeMatchText(value) {
@@ -893,26 +931,17 @@
         return;
       }
 
-      const rows = selectedGuests.map((guest) => {
-        const answered = hasAnsweredFnrhPrecheckin(guest);
-        const statusClass = answered ? "answered" : "pending";
-        const statusText = answered ? "Respondido" : "Pendente";
+      const rows = selectedGuests.map((guest) => `
+        <div class="precheckin-row">
+          <span>${escapeHtml(guest.full_name || "Hóspede sem nome")}</span>
+          <span>Conferir no portal</span>
+        </div>
+      `);
 
-        return `
-          <div class="precheckin-row">
-            <span>${escapeHtml(guest.full_name || "Hóspede sem nome")}</span>
-            <span class="${statusClass}">${statusText}</span>
-          </div>
-        `;
-      });
-
-      const hasAnsweredGuest = selectedGuests.some((guest) => hasAnsweredFnrhPrecheckin(guest));
-      container.innerHTML = hasAnsweredGuest
-        ? `<div class="precheckin-list">${rows.join("")}</div>`
-        : `
-          <div class="muted">Nenhum hóspede confirmado no pré-check-in oficial.</div>
-          <div class="precheckin-list">${rows.join("")}</div>
-        `;
+      container.innerHTML = `
+        <div class="muted">Preenchimento do pré-check-in deve ser conferido no portal oficial da FNRH.</div>
+        <div class="precheckin-list">${rows.join("")}</div>
+      `;
     }
 
     function getReservationStateMessages() {
@@ -1096,10 +1125,13 @@
     }
 
     function populateStayForm(stay) {
+      const guestCounts = getStayGuestCounts(stay);
       document.getElementById("reservationIdInput").value = stay?.reservation_id || "";
       document.getElementById("subReservationIdInput").value = stay?.sub_reservation_id || "";
       document.getElementById("dataEntradaInput").value = normalizeDateValue(stay?.data_entrada);
       document.getElementById("dataSaidaInput").value = normalizeDateValue(stay?.data_saida);
+      document.getElementById("adultCountInput").value = guestCounts.adultos;
+      document.getElementById("minorCountInput").value = guestCounts.menores;
       document.getElementById("selectedReservationTitle").textContent = stay?.reservation_id || "-";
       document.getElementById("selectedReservationMeta").textContent = `Datas: ${formatDateRange(stay)} | ID interno: #${stay?.id || "-"}`;
       renderReservationStateLine();
@@ -1129,12 +1161,22 @@
     function updateGuestFnrhCheckinControls() {
       const guest = getMainGuest();
       const button = document.getElementById("guestFnrhCheckinBtn");
+      const checkoutButton = document.getElementById("guestFnrhCheckoutBtn");
       const statusElement = document.getElementById("guestFnrhCheckinStatus");
-      const statusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
+      const checkinStatusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
+      const checkoutStatusValue = guest?.id ? guestFnrhCheckoutStatusById[guest.id] : "";
+      const statusValue = checkoutStatusValue || checkinStatusValue || "";
+      const hasCheckinDone = checkinStatusValue === "CHECKIN_REALIZADO";
+      const hasCheckoutDone = checkoutStatusValue === "CHECKOUT_REALIZADO";
 
-      button.disabled = !guest?.id || isCheckingInGuestFnrh;
+      button.disabled = !guest?.id || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckinDone;
       button.textContent = isCheckingInGuestFnrh ? "Fazendo check-in..." : "Check-in FNRH";
       button.style.display = guest?.id ? "inline-block" : "none";
+      button.title = hasCheckinDone ? "Check-in já realizado" : "";
+      checkoutButton.disabled = !guest?.id || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckoutDone;
+      checkoutButton.textContent = isCheckingOutGuestFnrh ? "Fazendo check-out..." : "Check-out FNRH";
+      checkoutButton.style.display = guest?.id ? "inline-block" : "none";
+      checkoutButton.title = hasCheckoutDone ? "Check-out já realizado" : "";
 
       statusElement.textContent = statusValue || (guest?.id ? "" : "Salve o hóspede antes de fazer check-in FNRH.");
       statusElement.className = `guest-fnrh-status${statusValue ? " success" : ""}`;
@@ -1151,7 +1193,11 @@
           ? "error"
           : "pending";
       sendButton.disabled = !hasStay || isSendingFnrh;
-      sendButton.textContent = isSendingFnrh ? "Enviando..." : "Enviar para FNRH";
+      sendButton.textContent = isSendingFnrh
+        ? "Enviando..."
+        : officialLink
+          ? "Reenviar para FNRH"
+          : "Enviar para FNRH";
       document.getElementById("copyFnrhLinkBtn").disabled = !officialLink;
       document.getElementById("copyWhatsappMessageBtn").disabled = !officialLink;
       document.getElementById("openFnrhLinkBtn").disabled = !officialLink;
@@ -1251,6 +1297,8 @@
       const subReservationId = document.getElementById("createSubReservationId").value.trim();
       const dataEntrada = document.getElementById("createDataEntrada").value.trim();
       const dataSaida = document.getElementById("createDataSaida").value.trim();
+      const adultCount = normalizeGuestCount(document.getElementById("createAdultCount").value, 1, 1);
+      const minorCount = normalizeGuestCount(document.getElementById("createMinorCount").value, 0, 0);
 
       if (!reservationId) {
         setStatus("createStatus", "Informe o número da reserva.", "error");
@@ -1267,15 +1315,22 @@
             reservation_id: reservationId,
             sub_reservation_id: subReservationId || reservationId,
             data_entrada: dataEntrada,
-            data_saida: dataSaida
+            data_saida: dataSaida,
+            quantidade_hospede_adulto: adultCount,
+            quantidade_hospede_menor: minorCount
           })
         });
 
         setStatus("createStatus", data.message || "Reserva criada com sucesso.", "success");
+        if (data?.stay?.id != null) {
+          stayGuestCountsById[String(data.stay.id)] = { adultos: adultCount, menores: minorCount };
+        }
         document.getElementById("createReservationId").value = "";
         document.getElementById("createSubReservationId").value = "";
         document.getElementById("createDataEntrada").value = "";
         document.getElementById("createDataSaida").value = "";
+        document.getElementById("createAdultCount").value = "1";
+        document.getElementById("createMinorCount").value = "0";
         await loadStays(data?.stay?.id || null);
       } catch (error) {
         setStatus("createStatus", error.message || "Não foi possível criar a reserva.", "error");
@@ -1291,6 +1346,8 @@
       setStatus("stayStatus", "Salvando reserva...");
 
       try {
+        const adultCount = normalizeGuestCount(document.getElementById("adultCountInput").value, 1, 1);
+        const minorCount = normalizeGuestCount(document.getElementById("minorCountInput").value, 0, 0);
         const data = await fetchJson(`${API_BASE}/stays/${selectedStay.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1298,10 +1355,13 @@
             reservation_id: document.getElementById("reservationIdInput").value.trim(),
             sub_reservation_id: document.getElementById("subReservationIdInput").value.trim(),
             data_entrada: document.getElementById("dataEntradaInput").value.trim(),
-            data_saida: document.getElementById("dataSaidaInput").value.trim()
+            data_saida: document.getElementById("dataSaidaInput").value.trim(),
+            quantidade_hospede_adulto: adultCount,
+            quantidade_hospede_menor: minorCount
           })
         });
 
+        stayGuestCountsById[String(selectedStay.id)] = { adultos: adultCount, menores: minorCount };
         setStatus("stayStatus", data.message || "Reserva salva com sucesso.", "success");
         await loadStays(selectedStay.id);
       } catch (error) {
@@ -1396,6 +1456,40 @@
       }
     }
 
+    async function checkOutMainGuestFnrh() {
+      const guest = getMainGuest();
+      if (!guest?.id) {
+        setStatus("guestStatus", "Salve o hóspede antes de fazer check-out FNRH.", "warning");
+        return;
+      }
+
+      if (isCheckingOutGuestFnrh || isCheckingInGuestFnrh) {
+        return;
+      }
+
+      if (!window.confirm("Confirmar check-out FNRH deste hóspede?")) {
+        return;
+      }
+
+      isCheckingOutGuestFnrh = true;
+      updateGuestFnrhCheckinControls();
+      setStatus("guestStatus", "Fazendo check-out FNRH...", "warning");
+
+      try {
+        const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkout`, {
+          method: "POST"
+        });
+        const situacaoId = data?.response_body?.dados?.situacao_id || "CHECKOUT_REALIZADO";
+        guestFnrhCheckoutStatusById[guest.id] = situacaoId;
+        setStatus("guestStatus", data.message || "Check-out FNRH realizado com sucesso", "success");
+      } catch (error) {
+        setStatus("guestStatus", error.message || "Não foi possível realizar check-out FNRH.", "error");
+      } finally {
+        isCheckingOutGuestFnrh = false;
+        updateGuestFnrhCheckinControls();
+      }
+    }
+
     async function sendSelectedStayToFNRH() {
       if (!selectedStay?.id) {
         setStatus("actionStatus", "Selecione uma reserva antes de enviar.", "warning");
@@ -1411,10 +1505,18 @@
       setStatus("actionStatus", "Enviando reserva para a FNRH...", "warning");
 
       try {
+        const adultCount = normalizeGuestCount(document.getElementById("adultCountInput").value, 1, 1);
+        const minorCount = normalizeGuestCount(document.getElementById("minorCountInput").value, 0, 0);
         const data = await fetchJson(`${API_BASE}/stays/${selectedStay.id}/send-fnrh`, {
-          method: "POST"
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quantidade_hospede_adulto: adultCount,
+            quantidade_hospede_menor: minorCount
+          })
         });
 
+        stayGuestCountsById[String(selectedStay.id)] = { adultos: adultCount, menores: minorCount };
         setStatus("actionStatus", data.message || "Envio realizado com sucesso", "success");
       } catch (error) {
         setStatus("actionStatus", error.message || "Erro ao enviar para FNRH", "error");
@@ -1508,6 +1610,7 @@ Obrigado!`;
     document.getElementById("saveStayBtn").addEventListener("click", saveStay);
     document.getElementById("saveGuestBtn").addEventListener("click", saveMainGuest);
     document.getElementById("guestFnrhCheckinBtn").addEventListener("click", checkInMainGuestFnrh);
+    document.getElementById("guestFnrhCheckoutBtn").addEventListener("click", checkOutMainGuestFnrh);
     document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
     document.getElementById("copyFnrhLinkBtn").addEventListener("click", copyOfficialLink);
     document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copyWhatsappMessage);
