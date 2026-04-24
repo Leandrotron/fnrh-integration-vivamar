@@ -9,6 +9,11 @@ Backend:
 - SQLite
 - Modelo: stays + guests
 
+Nota tecnica 2026-04-23:
+- O endpoint individual de check-in real foi validado via `POST /guests/:id/fnrh-checkin`.
+- A FNRH aceitou `PATCH /hospedes/{hospede_id}/checkin` com body `text/plain` em timestamp ISO 8601.
+- Retorno de sucesso observado: `situacao_id = CHECKIN_REALIZADO`.
+
 Status atual:
 - Integração real funcionando
 - Reserva sendo criada com sucesso

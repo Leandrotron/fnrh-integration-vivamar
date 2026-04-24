@@ -1,3 +1,23 @@
+## [2026-04-23] Validation: Check-in individual FNRH real
+
+### Contexto
+- Endpoint experimental `POST /guests/:id/fnrh-checkin` testado contra a FNRH real.
+- Teste executado de forma controlada em um hospede especifico ja existente na FNRH.
+
+### Evidencia
+- Retorno HTTP `200`.
+- Timestamp enviado e retornado: `2026-04-23T15:15:11.541Z`.
+- Resposta FNRH trouxe `situacao_id = CHECKIN_REALIZADO`.
+- `hospede_id` validado no retorno: `f069d046-cc02-46dd-bbdf-342901ca1964`.
+
+### Resultado
+- Fluxo individual de check-in validado tecnicamente em pelo menos um caso real.
+
+### Proximos passos recomendados
+- Fazer mais 1 ou 2 testes reais controlados.
+- Nao expor botao no frontend ainda.
+- Avaliar uso operacional no painel somente depois desses testes.
+
 ## [2026-04-18] Fix: Stay selection reset + guest save reload
 
 ### Problema

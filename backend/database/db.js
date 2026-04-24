@@ -1,7 +1,10 @@
 const crypto = require("crypto");
+const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 
-const db = new sqlite3.Database("./database.sqlite");
+const dbPath = path.join(__dirname, "..", "database.sqlite");
+console.log("[DB] SQLite em uso:", path.resolve(dbPath));
+const db = new sqlite3.Database(dbPath);
 
 function ensureColumn(tableName, columnName, definition) {
   db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
