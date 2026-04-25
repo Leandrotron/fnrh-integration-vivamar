@@ -58,3 +58,45 @@ https://fnrh.turismo.serpro.gov.br/FNRH_API/rest/v2
   "reserva": {},
   "dados_hospede": []
 }
+```
+
+---
+
+## Nota operacional 2026-04-25
+
+### Dois modos validados
+
+- Modo 1: reserva sem hóspede
+  - cria a reserva
+  - retorna `link_precheckin`
+  - acelera a operação da recepção
+- Modo 2: reserva com hóspede no payload
+  - envia `dados_hospede`
+  - permite receber `fnrh_hospede_id`
+  - libera controle de check-in/check-out pelo sistema
+
+### Descoberta crítica de produto
+
+- `1 link oficial != múltiplos hóspedes estruturados`
+- O link pode ser reutilizado, mas isso não garante que a FNRH devolva uma estrutura de grupo equivalente à quantidade informada.
+- Na prática, cada hóspede preenche individualmente no portal oficial.
+- `quantidade_hospede_adulto` e `quantidade_hospede_menor` devem ser tratados como dados informativos/contextuais, não como garantia de vínculo estruturado.
+
+### Regras operacionais observadas
+
+- Quando `dados_hospede = []`, a FNRH aceita criar a reserva e devolver o link oficial.
+- Quando há `dados_hospede`, `logradouro` é obrigatório.
+- No fluxo com hóspede, os campos mínimos funcionais observados foram:
+  - nome completo
+  - CPF
+  - data de nascimento
+  - CEP
+  - logradouro
+  - `cidade_id`
+  - `estado_id`
+- `GET /hospedes/pre-checkins` não deve ser usado como fonte confiável de status operacional.
+
+### Conclusão prática
+
+- Fluxo sem hóspede = velocidade para geração do link oficial.
+- Fluxo com hóspede = controle real para recepção, especialmente quando o objetivo é operar check-in/check-out pelo painel.

@@ -370,3 +370,50 @@ Objetivo operacional central:
 - permanece disponivel como tela anterior e mais completa
 - segue util para operacoes e testes detalhados
 - nao deve ser removida neste momento
+
+---
+
+## Modo de uso local (beta)
+
+Fluxo mais simples para uso operacional local:
+
+1. Execute `scripts/start-local.bat`
+2. Aguarde o backend subir no terminal
+3. Abra o navegador em `http://localhost:3000`
+4. Use `reservas.html` como tela principal da recepcao
+
+Regras praticas:
+
+* nao fechar o terminal enquanto o sistema estiver em uso
+* o backend agora serve tambem o frontend
+* nao e mais necessario usar Live Server no VS Code
+
+Fluxo basico da recepcao:
+
+* criar ou selecionar a reserva
+* salvar dados basicos da reserva
+* enviar para a FNRH
+* copiar ou abrir o link oficial
+* opcionalmente vincular hospede para liberar controle de check-in/check-out pelo painel
+
+Observacao operacional:
+
+* fluxo sem hospede = geracao rapida do link oficial
+* fluxo com hospede = controle completo, incluindo `fnrh_hospede_id`, check-in e check-out
+
+## Atualizacao beta 2026-04-25
+
+- O backend passou a servir o frontend localmente em `http://localhost:3000`.
+- O produto agora opera em dois modos:
+  - link rapido sem hospede
+  - controle completo com hospede, check-in e check-out
+- O fluxo com hospede passou a exigir tambem `logradouro` para evitar erro `logradouro e obrigatorio` na FNRH.
+- O cadastro opcional de hospede usa dados minimos: nome completo, CPF, data de nascimento, CEP e logradouro.
+- `frontend/reservas.html` foi consolidada como a interface beta operacional da recepcao.
+
+## Observacoes atuais da integracao FNRH
+
+- `quantidade_hospede_adulto` e `quantidade_hospede_menor` sao informativos e nao garantem vinculo estruturado dos hospedes.
+- Um link oficial pode ser reutilizado, mas isso nao representa um grupo estruturado de hospedes no retorno da FNRH.
+- Cada hospede tende a preencher individualmente no portal oficial.
+- `GET /hospedes/pre-checkins` nao deve ser tratado como fonte operacional confiavel.

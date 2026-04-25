@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -108,6 +108,7 @@
     }
 
     .field input,
+    .field select,
     .field textarea {
       width: 100%;
       padding: 10px 12px;
@@ -310,23 +311,164 @@
       text-align: center;
     }
 
-    .action-box {
-      border: 1px solid #b9ddc8;
-      background: linear-gradient(180deg, #f4fbf7 0%, #ebf8f1 100%);
+    .flow-box {
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 14px 28px rgba(21, 111, 82, 0.08);
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
     }
 
-    .action-box h3 {
-      margin-bottom: 8px;
-      font-size: 21px;
+    .flow-box.before {
+      border: 1px solid #b9ddc8;
+      background: linear-gradient(180deg, #f7fcf8 0%, #eef8f1 100%);
     }
 
-    .action-box .button-row button:first-child {
-      min-width: 168px;
+    .flow-box.before.compact {
+      box-shadow: 0 10px 20px rgba(21, 111, 82, 0.06);
+    }
+
+    .flow-box.after {
+      border: 1px solid #c7d8fb;
+      background: linear-gradient(180deg, #f8fbff 0%, #f1f6ff 100%);
+    }
+
+    .flow-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .flow-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .flow-title h2,
+    .flow-title h3 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .flow-box.before .flow-title h2,
+    .flow-box.before .flow-title h3 {
+      color: var(--accent);
+    }
+
+    .flow-box.after .flow-title h2,
+    .flow-box.after .flow-title h3 {
+      color: #2456c7;
+    }
+
+    .flow-kicker {
+      font-size: 13px;
+      color: var(--muted);
       font-weight: bold;
-      box-shadow: 0 10px 20px rgba(21, 111, 82, 0.18);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .flow-note {
+      max-width: 280px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      border-left: 2px solid rgba(100, 116, 139, 0.25);
+      padding-left: 14px;
+    }
+
+    .before-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-top: 16px;
+    }
+
+    .send-box {
+      min-width: 240px;
+      max-width: 280px;
+      padding-left: 18px;
+      border-left: 1px solid #d7dfdb;
+    }
+
+    .send-box button {
+      width: 100%;
+      min-height: 44px;
+      font-weight: bold;
+    }
+
+    .send-box .status-line {
+      margin-top: 10px;
+    }
+
+    .send-box .muted {
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .guest-optional-box {
+      border: 1px dashed #d8dde3;
+      border-radius: 16px;
+      background: #fbfcfd;
+      padding: 0 16px 16px;
+    }
+
+    .guest-optional-box summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 0;
+      font-weight: bold;
+      color: #334155;
+    }
+
+    .guest-optional-box summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .guest-optional-box summary::after {
+      content: "+";
+      color: var(--secondary);
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .guest-optional-box[open] summary::after {
+      content: "-";
+    }
+
+    .guest-optional-body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-top: 4px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .guest-inline-summary {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .text-button {
+      border: none;
+      background: transparent;
+      color: var(--secondary);
+      padding: 0;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .text-button:hover {
+      background: transparent;
+      color: #095a97;
     }
 
     .link-box {
@@ -430,6 +572,85 @@
       line-height: 1.45;
     }
 
+    .after-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .after-status {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .status-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .status-list .status-badge {
+      font-size: 13px;
+      padding: 7px 10px;
+    }
+
+    .qr-panel {
+      border: 1px solid #d8e3f8;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .qr-panel strong {
+      color: #2456c7;
+      font-size: 14px;
+    }
+
+    .qr-inline {
+      width: 100%;
+      min-height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qr-inline canvas {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .after-checkin-row {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #d7e3fa;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .after-checkin-copy {
+      max-width: 320px;
+    }
+
+    .after-checkin-copy h4 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      color: #2456c7;
+    }
+
+    .after-checkin-copy p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
     #qrModal canvas {
       max-width: 100%;
       height: auto;
@@ -443,6 +664,29 @@
       .form-grid {
         grid-template-columns: 1fr;
       }
+
+      .flow-header,
+      .before-actions,
+      .after-grid,
+      .after-checkin-row {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+      }
+
+      .send-box {
+        max-width: none;
+        min-width: 0;
+        width: 100%;
+        padding-left: 0;
+        border-left: none;
+        border-top: 1px solid #d7dfdb;
+        padding-top: 16px;
+      }
+
+      .flow-note,
+      .after-checkin-copy {
+        max-width: none;
+      }
     }
   </style>
 </head>
@@ -450,48 +694,21 @@
   <div class="page">
     <div class="page-header">
       <h1>Reservas</h1>
-      <div class="subtitle">Tela experimental enxuta para recepção, focada no fluxo atual de FNRH e ações rápidas.</div>
+      <div class="subtitle">Fluxo direto de reserva para geração rápida do link FNRH.</div>
     </div>
 
     <div class="layout">
       <section class="panel">
         <div class="section">
-          <h2>Nova Reserva</h2>
-          <div class="form-grid">
-            <div class="field">
-              <label for="createReservationId">Número da reserva</label>
-              <input id="createReservationId" placeholder="Ex: 3573641849646">
-            </div>
-            <div class="field">
-              <label for="createSubReservationId">Identificador interno</label>
-              <input id="createSubReservationId" placeholder="Opcional, ex: UH-01">
-            </div>
-            <div class="field">
-              <label for="createDataEntrada">Data de entrada</label>
-              <input id="createDataEntrada" type="date">
-            </div>
-            <div class="field">
-              <label for="createDataSaida">Data de saída</label>
-              <input id="createDataSaida" type="date">
-            </div>
-            <div class="field">
-              <label for="createAdultCount">Adultos</label>
-              <input id="createAdultCount" type="number" min="1" value="1">
-            </div>
-            <div class="field">
-              <label for="createMinorCount">Menores</label>
-              <input id="createMinorCount" type="number" min="0" value="0">
-            </div>
-          </div>
-          <div class="button-row" style="margin-top:12px;">
-            <button id="createStayBtn" type="button">Criar reserva</button>
+          <h2>Reservas</h2>
+          <div class="button-row" style="margin-bottom:12px;">
+            <button id="newStayBtn" type="button">Nova reserva</button>
             <button id="reloadListBtn" type="button" class="secondary">Atualizar lista</button>
           </div>
-          <div id="createStatus" class="status-line"></div>
-        </div>
-
-        <div class="section">
-          <h2>Reservas</h2>
+          <div class="field">
+            <label for="staySearchInput">Buscar reserva</label>
+            <input id="staySearchInput" placeholder="Código, referência ou origem">
+          </div>
           <div id="listStatus" class="status-line">Carregando reservas...</div>
           <div id="stayList" class="list"></div>
         </div>
@@ -499,7 +716,7 @@
 
       <section class="panel">
         <div id="detailsEmpty" class="empty-state">
-          Selecione uma reserva para ver os dados mínimos, o hóspede principal e as ações rápidas da FNRH.
+          Clique em Nova reserva ou selecione uma reserva da lista.
         </div>
 
         <div id="detailsContent" style="display:none;" class="stack">
@@ -510,16 +727,34 @@
             <div id="reservationStateLine" class="status-inline reservation-state-line"></div>
           </div>
 
-          <div class="section">
-            <h2>Dados da Reserva</h2>
+          <div id="beforeFnrhSection" class="flow-box before">
+            <div class="flow-header">
+              <div class="flow-title">
+                <div class="flow-kicker">Fluxo principal</div>
+                <h2>ANTES DA FNRH</h2>
+                <div class="muted">Criação e edição da reserva antes do envio.</div>
+              </div>
+              <div class="flow-note">Salve a reserva e envie para a FNRH sem depender de hóspede cadastrado.</div>
+            </div>
             <div class="form-grid">
               <div class="field">
-                <label for="reservationIdInput">Número da reserva</label>
-                <input id="reservationIdInput">
+                <label for="originInput">Origem da Reserva</label>
+                <select id="originInput">
+                  <option value="MEIOHOSPEDAGEM">MEIOHOSPEDAGEM</option>
+                  <option value="OTA">OTA</option>
+                </select>
               </div>
               <div class="field">
-                <label for="subReservationIdInput">Identificador interno</label>
-                <input id="subReservationIdInput">
+                <label for="reservationIdInput">Código da Reserva</label>
+                <input id="reservationIdInput">
+              </div>
+              <div id="otaField" class="field" style="display:none;">
+                <label for="otaCodeInput">Código da Reserva informado pela OTA/Agência</label>
+                <input id="otaCodeInput" placeholder="Opcional">
+              </div>
+              <div class="field">
+                <label for="internalNameInput">Nome / referência interna</label>
+                <input id="internalNameInput" placeholder="Opcional">
               </div>
               <div class="field">
                 <label for="dataEntradaInput">Data de entrada</label>
@@ -534,126 +769,112 @@
                 <input id="adultCountInput" type="number" min="1" value="1">
               </div>
               <div class="field">
-                <label for="minorCountInput">Menores</label>
+                <label for="minorCountInput">Crianças</label>
                 <input id="minorCountInput" type="number" min="0" value="0">
               </div>
             </div>
-            <div class="button-row" style="margin-top:12px;">
-              <button id="saveStayBtn" type="button">Salvar reserva</button>
+            <div class="before-actions">
+              <div style="flex:1;">
+                <div class="button-row">
+                  <button id="saveStayBtn" type="button">Salvar reserva</button>
+                </div>
+                <div id="createStatus" class="status-line" style="margin-top:10px;"></div>
+              </div>
+              <div class="send-box">
+                <button id="sendFnrhBtn" type="button">Enviar para FNRH</button>
+                <div id="actionStatus" class="status-line"></div>
+                <div class="muted">Gera o link oficial para o hóspede preencher no portal da FNRH.</div>
+              </div>
             </div>
-            <div id="stayStatus" class="status-line"></div>
           </div>
 
-          <div class="section">
-            <h2>Hóspede Principal</h2>
-            <div class="checkbox-row">
-              <input id="isForeignerInput" type="checkbox">
-              <label for="isForeignerInput">Hóspede estrangeiro</label>
-            </div>
-
-            <div class="guest-primary-box" style="margin-top:12px;">
-              <div class="section-eyebrow">Essencial Para Ação</div>
+          <details id="guestOptionalDetails" class="guest-optional-box">
+            <summary>
+              <span>Dados do hóspede para check-in/check-out (opcional)</span>
+            </summary>
+            <div class="guest-optional-body">
+              <div id="guestLinkedSummary" class="guest-inline-summary">Nenhum hóspede vinculado.</div>
               <div class="form-grid">
-                <div class="field full">
+                <div class="field">
                   <label for="guestNameInput">Nome completo</label>
-                  <input id="guestNameInput" placeholder="Nome do hóspede principal">
+                  <input id="guestNameInput" placeholder="Nome do hóspede">
                 </div>
-
-                <div id="cpfField" class="field">
+                <div class="field">
                   <label for="guestCpfInput">CPF</label>
                   <input id="guestCpfInput" placeholder="000.000.000-00">
                 </div>
-
-                <div id="passportField" class="field" style="display:none;">
-                  <label for="guestPassportInput">Passaporte</label>
-                  <input id="guestPassportInput" placeholder="Número do passaporte">
-                </div>
-
                 <div class="field">
                   <label for="guestBirthDateInput">Data de nascimento</label>
                   <input id="guestBirthDateInput" type="date">
                 </div>
-
-                <div id="cepField" class="field">
+                <div class="field">
                   <label for="guestCepInput">CEP</label>
                   <input id="guestCepInput" placeholder="00000-000">
-                  <div id="guestCepStatus" class="muted">Preencha o CEP para buscar o endereço automaticamente.</div>
                 </div>
-
-                <div id="foreignerCountryField" class="field" style="display:none;">
-                  <label for="guestCountryInput">País</label>
-                  <input id="guestCountryInput" placeholder="Ex: Argentina">
-                </div>
-              </div>
-            </div>
-
-            <div id="brazilianAddressFields" class="subtle-box" style="display:none;">
-              <div class="section-eyebrow">Endereço Complementar</div>
-              <div class="subtle-copy">Esses campos aparecem com menos destaque para completar o endereço depois do CEP.</div>
-              <div class="form-grid">
-                <div id="estadoField" class="field">
-                  <label for="guestEstadoInput">UF</label>
-                  <input id="guestEstadoInput" maxlength="2" placeholder="Ex: SP">
-                </div>
-
-                <div id="cidadeField" class="field">
-                  <label for="guestCidadeInput">Cidade / código IBGE</label>
-                  <input id="guestCidadeInput" placeholder="Ex: 3550308">
-                </div>
-
                 <div class="field">
-                  <label for="guestNumeroInput">Número</label>
-                  <input id="guestNumeroInput" placeholder="Ex: 120">
-                </div>
-
-                <div class="field full">
                   <label for="guestLogradouroInput">Logradouro</label>
                   <input id="guestLogradouroInput" placeholder="Rua, avenida ou similar">
                 </div>
               </div>
-            </div>
-
-            <div id="foreignerAddressFields" class="subtle-box" style="display:none;">
-              <div class="section-eyebrow">Residência Informada</div>
-              <div class="subtle-copy">No fluxo estrangeiro, mantemos apenas um contexto mínimo de localização.</div>
-              <div class="form-grid">
-              <div class="field">
-                <label for="guestForeignCityInput">Cidade / residência</label>
-                <input id="guestForeignCityInput" placeholder="Cidade em texto livre">
+              <div class="button-row">
+                <button id="saveGuestBtn" type="button" class="secondary">Salvar hóspede</button>
               </div>
+              <div id="guestCepStatus" class="muted"></div>
+              <div id="guestFormStatus" class="status-line"></div>
+            </div>
+          </details>
+
+          <div id="afterFnrhSection" class="flow-box after" style="display:none;">
+            <div class="flow-header">
+              <div class="flow-title">
+                <div class="flow-kicker">Após o envio</div>
+                <h3>DEPOIS DA FNRH</h3>
+                <div class="muted">Link oficial, QR Code e operações após o envio.</div>
+              </div>
+              <div class="flow-note">Esse bloco aparece quando a FNRH retorna o link oficial de pré-check-in.</div>
+            </div>
+
+            <div class="after-grid">
+              <div>
+                <div class="field">
+                  <label for="fnrhLinkBox">Link oficial da FNRH</label>
+                  <div id="fnrhLinkBox" class="link-box">Link oficial da FNRH ainda não gerado.</div>
+                </div>
+                <div class="button-row" style="margin-top:12px;">
+                  <button id="copyFnrhLinkBtn" type="button" class="secondary">Copiar link</button>
+                  <button id="openFnrhLinkBtn" type="button" class="secondary">Abrir link</button>
+                  <button id="copyWhatsappMessageBtn" type="button" class="secondary">WhatsApp</button>
+                  <button id="showQrBtn" type="button" class="secondary">QR Code</button>
+                  <span id="copyLinkFeedback" class="copy-feedback" aria-live="polite"></span>
+                </div>
+                <div id="fnrhStatusLine" class="status-line" style="margin-top:12px;">Nenhum envio realizado ainda.</div>
+              </div>
+
+              <div class="after-status">
+                <div class="qr-panel">
+                  <strong>QR Code do link oficial</strong>
+                  <div id="qrInlineContainer" class="qr-inline"></div>
+                </div>
+                <div>
+                  <strong style="display:block; margin-bottom:8px; color:#2456c7;">Status atual</strong>
+                  <div id="afterStatusList" class="status-list"></div>
+                </div>
               </div>
             </div>
-            <div id="guestFnrhCheckinStatus" class="guest-fnrh-status"></div>
 
-            <div class="button-row" style="margin-top:12px;">
-              <button id="saveGuestBtn" type="button">Salvar hóspede principal</button>
-              <button id="guestFnrhCheckinBtn" type="button" class="secondary">Check-in FNRH</button>
-              <button id="guestFnrhCheckoutBtn" type="button" class="secondary">Check-out FNRH</button>
+            <div class="after-checkin-row">
+              <div class="after-checkin-copy">
+                <h4>Check-in / Check-out</h4>
+                <p>As ações ficam disponíveis quando houver hóspede com <code>fnrh_hospede_id</code>.</p>
+                <button id="openGuestDetailsBtn" type="button" class="text-button" style="display:none;">Abrir dados do hóspede</button>
+                <div id="guestFnrhCheckinStatus" class="guest-fnrh-status"></div>
+                <div id="guestStatus" class="status-line"></div>
+              </div>
+              <div class="button-row">
+                <button id="guestFnrhCheckinBtn" type="button" class="secondary">Check-in FNRH</button>
+                <button id="guestFnrhCheckoutBtn" type="button" class="secondary">Check-out FNRH</button>
+              </div>
             </div>
-            <div id="guestStatus" class="status-line"></div>
-          </div>
-
-          <div class="section">
-            <h2>Pré-check-in FNRH</h2>
-            <div id="fnrhPrecheckinBox" class="precheckin-box">
-              <div class="muted">Consultando status de pré-check-in oficial...</div>
-            </div>
-          </div>
-
-          <div class="action-box">
-            <h3>Ações FNRH</h3>
-            <div class="section-eyebrow">Principal Ação Da Tela</div>
-            <div id="fnrhStatusLine" class="status-line">Nenhum envio realizado ainda.</div>
-            <div id="fnrhLinkBox" class="link-box">Link oficial da FNRH ainda não gerado.</div>
-            <div class="button-row" style="margin-top:12px;">
-              <button id="sendFnrhBtn" type="button">Enviar para FNRH</button>
-              <button id="copyFnrhLinkBtn" type="button" class="secondary">Copiar link oficial</button>
-              <button id="copyWhatsappMessageBtn" type="button" class="secondary">Copiar mensagem WhatsApp</button>
-              <span id="copyLinkFeedback" class="copy-feedback" aria-live="polite"></span>
-              <button id="openFnrhLinkBtn" type="button" class="secondary">Abrir link oficial</button>
-              <button id="showQrBtn" type="button" class="secondary">Mostrar QR Code</button>
-            </div>
-            <div id="actionStatus" class="status-line"></div>
           </div>
         </div>
       </section>
@@ -664,23 +885,81 @@
   <script>
     const API_BASE = window.getApiBase();
     const ACTIVE_STAY_STORAGE_KEY = "reservas.activeStayId";
+    const STAY_UI_META_STORAGE_KEY = "reservas.stayUiMeta";
+    const DEFAULT_GUEST_ESTADO_ID = "SP";
+    const DEFAULT_GUEST_CIDADE_ID = "3550308";
 
     let stays = [];
     let selectedStayId = null;
     let selectedStay = null;
     let selectedGuests = [];
+    let isCreatingStay = false;
+    let staySearchTerm = "";
     let stayGuestCountsById = {};
-    let lastGuestCepLookup = "";
     let isSendingFnrh = false;
     let isCheckingInGuestFnrh = false;
     let guestFnrhCheckinStatusById = {};
     let isCheckingOutGuestFnrh = false;
     let guestFnrhCheckoutStatusById = {};
+    let guestCepLookupPromise = null;
+    let guestCepResolvedCityId = "";
+    let guestCepResolvedStateId = "";
     let copyFeedbackTimer = null;
     let fnrhPrecheckins = null;
     let fnrhPrecheckinsError = "";
     let fnrhPrecheckinsPromise = null;
     let fnrhPrecheckinsRangeKey = "";
+
+    function getStoredStayUiMetaMap() {
+      try {
+        return JSON.parse(localStorage.getItem(STAY_UI_META_STORAGE_KEY) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function getStayUiMeta(stayId) {
+      const metaMap = getStoredStayUiMetaMap();
+      return metaMap[String(stayId)] || {
+        origem_reserva_id: "MEIOHOSPEDAGEM",
+        ota_code: "",
+        internal_name: ""
+      };
+    }
+
+    function saveStayUiMeta(stayId, meta) {
+      if (stayId == null) return;
+      const metaMap = getStoredStayUiMetaMap();
+      metaMap[String(stayId)] = {
+        origem_reserva_id: meta?.origem_reserva_id === "OTA" ? "OTA" : "MEIOHOSPEDAGEM",
+        ota_code: String(meta?.ota_code || "").trim(),
+        internal_name: String(meta?.internal_name || "").trim()
+      };
+      localStorage.setItem(STAY_UI_META_STORAGE_KEY, JSON.stringify(metaMap));
+    }
+
+    function getSelectedStayUiMeta() {
+      return {
+        origem_reserva_id: document.getElementById("originInput").value === "OTA" ? "OTA" : "MEIOHOSPEDAGEM",
+        ota_code: document.getElementById("otaCodeInput").value.trim(),
+        internal_name: document.getElementById("internalNameInput").value.trim()
+      };
+    }
+
+    function updateOriginVisibility() {
+      const originInput = document.getElementById("originInput");
+      const otaField = document.getElementById("otaField");
+      const otaInput = document.getElementById("otaCodeInput");
+      const isOta = originInput?.value === "OTA";
+
+      if (otaField) {
+        otaField.style.display = isOta ? "flex" : "none";
+      }
+
+      if (!isOta && otaInput) {
+        otaInput.value = "";
+      }
+    }
 
     function setStatus(elementId, message, tone = "") {
       const element = document.getElementById(elementId);
@@ -728,7 +1007,7 @@
     }
 
     function formatDateRange(stay) {
-      return `${formatDate(stay?.data_entrada)} → ${formatDate(stay?.data_saida)}`;
+      return `${formatDate(stay?.data_entrada)} -> ${formatDate(stay?.data_saida)}`;
     }
 
     function onlyDigits(value) {
@@ -761,6 +1040,20 @@
 
     function getMainGuest() {
       return selectedGuests.find((guest) => Number(guest.is_main_guest) === 1) || selectedGuests[0] || null;
+    }
+
+    function setGuestOptionalOpen(shouldOpen) {
+      const details = document.getElementById("guestOptionalDetails");
+      if (!details) return;
+      details.open = !!shouldOpen;
+    }
+
+    function getGuestLocationDefaults() {
+      const guest = getMainGuest();
+      return {
+        cidade_id: String(guestCepResolvedCityId || guest?.cidade_id || DEFAULT_GUEST_CIDADE_ID).trim(),
+        estado_id: String(guestCepResolvedStateId || guest?.estado_id || DEFAULT_GUEST_ESTADO_ID).trim().toUpperCase()
+      };
     }
 
     function normalizeGuestCount(value, fallback = 0, min = 0) {
@@ -797,151 +1090,6 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
-    }
-
-    function collectFnrhPrecheckinItems(payload) {
-      if (Array.isArray(payload)) return payload;
-      if (Array.isArray(payload?.dados)) return payload.dados;
-      if (Array.isArray(payload?.data)) return payload.data;
-      if (Array.isArray(payload?.items)) return payload.items;
-      if (Array.isArray(payload?.dados?.hospedes)) return payload.dados.hospedes;
-      if (Array.isArray(payload?.dados?.dados_hospedes)) return payload.dados.dados_hospedes;
-      return [];
-    }
-
-    function getPrecheckinDocument(item) {
-      return onlyDigits(
-        item?.cpf ||
-        item?.numero_documento ||
-        item?.documento ||
-        item?.documento_id?.numero_documento ||
-        item?.hospede?.cpf ||
-        item?.hospede?.numero_documento ||
-        item?.hospede?.documento_id?.numero_documento ||
-        item?.pessoa?.cpf ||
-        item?.pessoa?.numero_documento ||
-        item?.pessoa?.documento_id?.numero_documento
-      );
-    }
-
-    function getPrecheckinName(item) {
-      return normalizeMatchText(
-        item?.nome ||
-        item?.full_name ||
-        item?.nomeCompleto ||
-        item?.dados_pessoais?.nome ||
-        item?.hospede?.nome ||
-        item?.hospede?.dados_pessoais?.nome ||
-        item?.pessoa?.nome ||
-        item?.pessoa?.dados_pessoais?.nome
-      );
-    }
-
-    async function loadFnrhPreCheckins() {
-      if (!selectedStay) {
-        fnrhPrecheckins = [];
-        fnrhPrecheckinsError = "Selecione uma reserva para consultar o pré-check-in da FNRH.";
-        return fnrhPrecheckins;
-      }
-
-      const today = new Date().toISOString().slice(0, 10);
-      const stayDataEntrada = normalizeDateValue(selectedStay.data_entrada);
-      const stayDataSaida = normalizeDateValue(selectedStay.data_saida);
-      // A FNRH rejeita data_inicio futura.
-      const computedDataInicio = stayDataEntrada && stayDataEntrada <= today ? stayDataEntrada : today;
-      const computedDataFim = stayDataSaida && stayDataSaida >= computedDataInicio ? stayDataSaida : computedDataInicio;
-      const dataInicio = today;
-      const dataFim = today;
-
-      if (!dataInicio || !dataFim) {
-        fnrhPrecheckins = [];
-        fnrhPrecheckinsError = "Informe data de entrada e data de saída para consultar o pré-check-in da FNRH.";
-        return fnrhPrecheckins;
-      }
-
-      const rangeKey = `${dataInicio}|${dataFim}`;
-
-      if (fnrhPrecheckinsRangeKey === rangeKey && (fnrhPrecheckins || fnrhPrecheckinsError)) {
-        return fnrhPrecheckins || [];
-      }
-
-      if (!fnrhPrecheckinsPromise) {
-        fnrhPrecheckinsRangeKey = rangeKey;
-        const query = new URLSearchParams({
-          data_inicio: dataInicio,
-          data_fim: dataFim
-        });
-        const precheckinsUrl = `${API_BASE}/fnrh/precheckins?${query.toString()}`;
-
-        console.log("[FNRH precheckins debug]", {
-          today,
-          stayDataEntrada,
-          stayDataSaida,
-          computedDataInicio,
-          computedDataFim,
-          dataInicio,
-          dataFim,
-          precheckinsUrl
-        });
-
-        fnrhPrecheckinsPromise = fetchJson(precheckinsUrl)
-          .then((data) => {
-            fnrhPrecheckins = collectFnrhPrecheckinItems(data);
-            fnrhPrecheckinsError = "";
-            return fnrhPrecheckins;
-          })
-          .catch((error) => {
-            fnrhPrecheckins = [];
-            fnrhPrecheckinsError = error.message || "Não foi possível consultar o status de pré-check-in da FNRH agora.";
-            return fnrhPrecheckins;
-          })
-          .finally(() => {
-            fnrhPrecheckinsPromise = null;
-          });
-      }
-
-      return fnrhPrecheckinsPromise;
-    }
-
-    function hasAnsweredFnrhPrecheckin(guest) {
-      const guestCpf = onlyDigits(guest?.cpf);
-      const guestName = normalizeMatchText(guest?.full_name);
-
-      return (fnrhPrecheckins || []).some((item) => {
-        const precheckinDocument = getPrecheckinDocument(item);
-        if (guestCpf && precheckinDocument && guestCpf === precheckinDocument) {
-          return true;
-        }
-
-        const precheckinName = getPrecheckinName(item);
-        return guestName && precheckinName && !precheckinDocument && guestName === precheckinName;
-      });
-    }
-
-    function renderFnrhPrecheckinStatus() {
-      const container = document.getElementById("fnrhPrecheckinBox");
-
-      if (fnrhPrecheckinsError) {
-        container.innerHTML = `<div class="muted">${escapeHtml(fnrhPrecheckinsError)}</div>`;
-        return;
-      }
-
-      if (!selectedGuests.length) {
-        container.innerHTML = `<div class="muted">Nenhum hóspede cadastrado para comparar com o pré-check-in oficial.</div>`;
-        return;
-      }
-
-      const rows = selectedGuests.map((guest) => `
-        <div class="precheckin-row">
-          <span>${escapeHtml(guest.full_name || "Hóspede sem nome")}</span>
-          <span>Conferir no portal</span>
-        </div>
-      `);
-
-      container.innerHTML = `
-        <div class="muted">Preenchimento do pré-check-in deve ser conferido no portal oficial da FNRH.</div>
-        <div class="precheckin-list">${rows.join("")}</div>
-      `;
     }
 
     function getReservationStateMessages() {
@@ -995,7 +1143,7 @@
       const element = document.getElementById("guestCepStatus");
       if (!element) return;
 
-      element.textContent = message || "Preencha o CEP para buscar o endereço automaticamente.";
+      element.textContent = message || "";
       element.style.color =
         tone === "error" ? "#b42318" :
         tone === "success" ? "#18794e" :
@@ -1003,92 +1151,179 @@
         "#64748b";
     }
 
-    function updateAddressSectionVisibility() {
-      const isForeigner = document.getElementById("isForeignerInput").checked;
-      const hasCep = !!onlyDigits(document.getElementById("guestCepInput")?.value || "");
-      const hasAddressDetails = [
-        document.getElementById("guestEstadoInput")?.value,
-        document.getElementById("guestCidadeInput")?.value,
-        document.getElementById("guestLogradouroInput")?.value,
-        document.getElementById("guestNumeroInput")?.value
-      ].some((value) => String(value || "").trim());
-
-      document.getElementById("brazilianAddressFields").style.display = !isForeigner && (hasCep || hasAddressDetails) ? "block" : "none";
-      document.getElementById("foreignerAddressFields").style.display = isForeigner ? "block" : "none";
-    }
-
-    function updateForeignerFields() {
-      const isForeigner = document.getElementById("isForeignerInput").checked;
-      document.getElementById("cpfField").style.display = isForeigner ? "none" : "flex";
-      document.getElementById("passportField").style.display = isForeigner ? "flex" : "none";
-      document.getElementById("cepField").style.display = isForeigner ? "none" : "flex";
-      document.getElementById("foreignerCountryField").style.display = isForeigner ? "flex" : "none";
-      updateAddressSectionVisibility();
-    }
-
-    async function lookupGuestAddressByCep(forceLookup = false) {
-      if (document.getElementById("isForeignerInput").checked) {
-        return;
-      }
-
+    async function resolveGuestLocationFromCep(forceLookup = false) {
       const cepInput = document.getElementById("guestCepInput");
+      const logradouroInput = document.getElementById("guestLogradouroInput");
       const cepDigits = onlyDigits(cepInput?.value || "").slice(0, 8);
 
       if (!cepDigits) {
-        lastGuestCepLookup = "";
+        guestCepResolvedCityId = "";
+        guestCepResolvedStateId = "";
+        if (logradouroInput && !forceLookup) {
+          logradouroInput.value = "";
+        }
         setGuestCepStatus("");
-        return;
+        return null;
       }
 
       if (cepDigits.length < 8) {
-        setGuestCepStatus("Complete os 8 dígitos do CEP para buscar o endereço.", "warning");
+        guestCepResolvedCityId = "";
+        guestCepResolvedStateId = "";
+        setGuestCepStatus("Informe os 8 dígitos do CEP.", "warning");
+        return null;
+      }
+
+      if (!forceLookup && guestCepLookupPromise) {
+        return guestCepLookupPromise;
+      }
+
+      setGuestCepStatus("Buscando cidade e UF pelo CEP...", "warning");
+
+      guestCepLookupPromise = fetch(`https://viacep.com.br/ws/${cepDigits}/json/`)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Erro ${response.status} ao consultar CEP`);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data.erro || !data.ibge || !data.uf) {
+            throw new Error("CEP não encontrado.");
+          }
+
+          guestCepResolvedCityId = String(data.ibge || "").trim();
+          guestCepResolvedStateId = String(data.uf || "").trim().toUpperCase();
+          if (logradouroInput && data.logradouro) {
+            logradouroInput.value = String(data.logradouro || "").trim();
+          }
+          setGuestCepStatus(`CEP localizado: ${data.localidade || ""} - ${guestCepResolvedStateId}`, "success");
+          return {
+            cidade_id: guestCepResolvedCityId,
+            estado_id: guestCepResolvedStateId
+          };
+        })
+        .catch((error) => {
+          guestCepResolvedCityId = "";
+          guestCepResolvedStateId = "";
+          setGuestCepStatus(error.message || "Não foi possível consultar o CEP.", "error");
+          return null;
+        })
+        .finally(() => {
+          guestCepLookupPromise = null;
+        });
+
+      return guestCepLookupPromise;
+    }
+
+    function renderInlineQrCode(link) {
+      const container = document.getElementById("qrInlineContainer");
+      if (!container) return;
+
+      container.innerHTML = "";
+      if (!link) {
+        container.innerHTML = `<span class="muted">QR Code disponível após o envio.</span>`;
         return;
       }
 
-      if (!forceLookup && cepDigits === lastGuestCepLookup) {
-        return;
-      }
-
-      setGuestCepStatus("Buscando endereço...", "warning");
-
-      try {
-        const response = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
-
-        if (!response.ok) {
-          throw new Error(`Erro ${response.status} ao consultar CEP`);
-        }
-
-        const data = await response.json();
-
-        if (data.erro) {
-          lastGuestCepLookup = "";
-          setGuestCepStatus("CEP não encontrado. Você pode preencher o endereço manualmente.", "error");
+      QRCode.toCanvas(link, { width: 168 }, function (err, canvas) {
+        if (err) {
+          container.innerHTML = `<span class="muted">Não foi possível gerar o QR Code agora.</span>`;
           return;
         }
 
-        document.getElementById("guestLogradouroInput").value = data.logradouro || "";
-        document.getElementById("guestCidadeInput").value = data.ibge || "";
-        document.getElementById("guestEstadoInput").value = data.uf || "";
-        lastGuestCepLookup = cepDigits;
-        updateAddressSectionVisibility();
+        container.appendChild(canvas);
+      });
+    }
 
-        const localityLabel = [data.localidade, data.uf].filter(Boolean).join(" - ");
-        setGuestCepStatus(
-          localityLabel
-            ? `Endereço preenchido automaticamente para ${localityLabel}.`
-            : "Endereço preenchido automaticamente.",
-          "success"
-        );
-      } catch (error) {
-        console.error(error);
-        lastGuestCepLookup = "";
-        setGuestCepStatus("Não foi possível buscar o endereço agora. O preenchimento manual continua disponível.", "error");
+    function renderAfterStatusList() {
+      const container = document.getElementById("afterStatusList");
+      if (!container) return;
+
+      const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
+      const guest = getMainGuest();
+      const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
+      const checkinStatusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
+      const checkoutStatusValue = guest?.id ? guestFnrhCheckoutStatusById[guest.id] : "";
+      const items = [];
+
+      if (officialLink) {
+        items.push({ text: "Link gerado", tone: "success" });
       }
+
+      if (checkoutStatusValue === "CHECKOUT_REALIZADO") {
+        items.push({ text: "Check-in realizado", tone: "success" });
+        items.push({ text: "Check-out realizado", tone: "success" });
+      } else if (checkinStatusValue === "CHECKIN_REALIZADO") {
+        items.push({ text: "Check-in realizado", tone: "success" });
+      } else if (hasFnrhHospedeId) {
+        items.push({ text: "Check-in disponível", tone: "pending" });
+      } else {
+        items.push({ text: "Sem hóspede FNRH", tone: "pending" });
+      }
+
+      container.innerHTML = items
+        .map((item) => `<span class="status-badge ${item.tone}">${escapeHtml(item.text)}</span>`)
+        .join("");
+    }
+
+    function refreshOptionalGuestSummary() {
+      const summaryElement = document.getElementById("guestLinkedSummary");
+      if (!summaryElement) return;
+
+      const guest = getMainGuest();
+      if (!guest?.id) {
+        summaryElement.textContent = selectedStay?.id
+          ? "Nenhum hóspede vinculado."
+          : "Salve a reserva antes de cadastrar o hóspede.";
+        return;
+      }
+
+      const cpfLabel = guest.cpf ? formatCPF(guest.cpf) : "-";
+      summaryElement.textContent = `${guest.full_name || "Hóspede"} | CPF ${cpfLabel} | Nascimento ${formatDate(guest.birth_date)}`;
+    }
+
+    function populateOptionalGuestForm(guest) {
+      document.getElementById("guestNameInput").value = guest?.full_name || "";
+      document.getElementById("guestCpfInput").value = guest?.cpf ? formatCPF(guest.cpf) : "";
+      document.getElementById("guestBirthDateInput").value = normalizeDateValue(guest?.birth_date);
+      document.getElementById("guestCepInput").value = guest?.cep ? formatCep(guest.cep) : "";
+      document.getElementById("guestLogradouroInput").value = guest?.logradouro || "";
+      guestCepResolvedCityId = String(guest?.cidade_id || "").trim();
+      guestCepResolvedStateId = String(guest?.estado_id || "").trim().toUpperCase();
+      setGuestCepStatus(guest?.cep && guestCepResolvedCityId && guestCepResolvedStateId ? `CEP vinculado: ${formatCep(guest.cep)}.` : "");
+      refreshOptionalGuestSummary();
+    }
+
+    function updateFnrhSectionsVisibility() {
+      const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
+      const beforeSection = document.getElementById("beforeFnrhSection");
+      const afterSection = document.getElementById("afterFnrhSection");
+
+      if (beforeSection) {
+        beforeSection.classList.toggle("compact", !!officialLink);
+      }
+
+      if (afterSection) {
+        afterSection.style.display = officialLink ? "block" : "none";
+      }
+
+      renderInlineQrCode(officialLink);
+      renderAfterStatusList();
     }
 
     function renderStayList() {
       const container = document.getElementById("stayList");
       container.innerHTML = "";
+      const filteredStays = stays.filter((stay) => {
+        if (!staySearchTerm) return true;
+        const stayMeta = getStayUiMeta(stay.id);
+        const haystack = normalizeMatchText([
+          stay.reservation_id,
+          stayMeta.internal_name,
+          stayMeta.origem_reserva_id
+        ].join(" "));
+        return haystack.includes(staySearchTerm);
+      });
 
       if (!stays.length) {
         document.getElementById("listStatus").textContent = "Nenhuma reserva encontrada.";
@@ -1096,11 +1331,18 @@
         return;
       }
 
-      document.getElementById("listStatus").textContent = `${stays.length} reserva(s) encontrada(s).`;
+      if (!filteredStays.length) {
+        document.getElementById("listStatus").textContent = "Nenhuma reserva encontrada na busca.";
+        container.innerHTML = `<div class="empty-state">Nenhuma reserva corresponde à busca.</div>`;
+        return;
+      }
 
-      for (const stay of stays) {
+      document.getElementById("listStatus").textContent = `${filteredStays.length} reserva(s) encontrada(s).`;
+
+      for (const stay of filteredStays) {
         const card = document.createElement("div");
         card.className = "card" + (String(stay.id) === String(selectedStayId) ? " active" : "");
+        const stayMeta = getStayUiMeta(stay.id);
         const statusLabel = stay.fnrh_last_status || "pendente";
         const statusVariant = stay.fnrh_last_status === "success"
           ? "success"
@@ -1113,6 +1355,8 @@
             <span class="status-badge ${statusVariant}">${statusLabel}</span>
           </div>
           <div class="card-meta">
+            <div><strong>Nome:</strong> ${escapeHtml(stayMeta.internal_name || "-")}</div>
+            <div><strong>Origem:</strong> ${stayMeta.origem_reserva_id}</div>
             <div><strong>Datas:</strong> ${formatDateRange(stay)}</div>
             <div>${stay.fnrh_last_message || "Aguardando envio para FNRH."}</div>
           </div>
@@ -1126,36 +1370,36 @@
 
     function populateStayForm(stay) {
       const guestCounts = getStayGuestCounts(stay);
+      const stayMeta = getStayUiMeta(stay?.id);
+      document.getElementById("originInput").value = stayMeta.origem_reserva_id || "MEIOHOSPEDAGEM";
+      document.getElementById("otaCodeInput").value = stayMeta.ota_code || "";
+      document.getElementById("internalNameInput").value = stayMeta.internal_name || "";
       document.getElementById("reservationIdInput").value = stay?.reservation_id || "";
-      document.getElementById("subReservationIdInput").value = stay?.sub_reservation_id || "";
       document.getElementById("dataEntradaInput").value = normalizeDateValue(stay?.data_entrada);
       document.getElementById("dataSaidaInput").value = normalizeDateValue(stay?.data_saida);
       document.getElementById("adultCountInput").value = guestCounts.adultos;
       document.getElementById("minorCountInput").value = guestCounts.menores;
-      document.getElementById("selectedReservationTitle").textContent = stay?.reservation_id || "-";
-      document.getElementById("selectedReservationMeta").textContent = `Datas: ${formatDateRange(stay)} | ID interno: #${stay?.id || "-"}`;
+      document.getElementById("selectedReservationTitle").textContent = stayMeta.internal_name || stay?.reservation_id || "-";
+      document.getElementById("selectedReservationMeta").textContent = `Origem: ${stayMeta.origem_reserva_id || "MEIOHOSPEDAGEM"} | Código: ${stay?.reservation_id || "-"} | Datas: ${formatDateRange(stay)} | Adultos: ${guestCounts.adultos} | Crianças: ${guestCounts.menores}`;
+      updateOriginVisibility();
       renderReservationStateLine();
     }
 
-    function populateGuestForm(guest) {
-      const isForeigner = false;
-      document.getElementById("isForeignerInput").checked = isForeigner;
-      updateForeignerFields();
-      document.getElementById("guestNameInput").value = guest?.full_name || "";
-      document.getElementById("guestCpfInput").value = guest?.cpf ? formatCPF(guest.cpf) : "";
-      document.getElementById("guestPassportInput").value = "";
-      document.getElementById("guestBirthDateInput").value = normalizeDateValue(guest?.birth_date);
-      document.getElementById("guestCepInput").value = guest?.cep ? formatCep(guest.cep) : "";
-      document.getElementById("guestEstadoInput").value = guest?.estado_id || "";
-      document.getElementById("guestCidadeInput").value = guest?.cidade_id || "";
-      document.getElementById("guestNumeroInput").value = guest?.numero || "";
-      document.getElementById("guestLogradouroInput").value = guest?.logradouro || "";
-      document.getElementById("guestCountryInput").value = "";
-      document.getElementById("guestForeignCityInput").value = "";
-      lastGuestCepLookup = onlyDigits(guest?.cep || "");
-      setGuestCepStatus("");
-      updateAddressSectionVisibility();
-      updateGuestFnrhCheckinControls();
+    function populateCreateForm() {
+      document.getElementById("originInput").value = "MEIOHOSPEDAGEM";
+      document.getElementById("otaCodeInput").value = "";
+      document.getElementById("internalNameInput").value = "";
+      document.getElementById("reservationIdInput").value = "";
+      document.getElementById("dataEntradaInput").value = "";
+      document.getElementById("dataSaidaInput").value = "";
+      document.getElementById("adultCountInput").value = "1";
+      document.getElementById("minorCountInput").value = "0";
+      document.getElementById("selectedReservationTitle").textContent = "Nova reserva";
+      document.getElementById("selectedReservationMeta").textContent = "Preencha os dados para criar a reserva.";
+      updateOriginVisibility();
+      populateOptionalGuestForm(null);
+      setGuestOptionalOpen(false);
+      renderReservationStateLine();
     }
 
     function updateGuestFnrhCheckinControls() {
@@ -1163,23 +1407,29 @@
       const button = document.getElementById("guestFnrhCheckinBtn");
       const checkoutButton = document.getElementById("guestFnrhCheckoutBtn");
       const statusElement = document.getElementById("guestFnrhCheckinStatus");
+      const openGuestDetailsButton = document.getElementById("openGuestDetailsBtn");
       const checkinStatusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
       const checkoutStatusValue = guest?.id ? guestFnrhCheckoutStatusById[guest.id] : "";
+      const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
       const statusValue = checkoutStatusValue || checkinStatusValue || "";
       const hasCheckinDone = checkinStatusValue === "CHECKIN_REALIZADO";
       const hasCheckoutDone = checkoutStatusValue === "CHECKOUT_REALIZADO";
 
-      button.disabled = !guest?.id || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckinDone;
+      button.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckinDone;
       button.textContent = isCheckingInGuestFnrh ? "Fazendo check-in..." : "Check-in FNRH";
-      button.style.display = guest?.id ? "inline-block" : "none";
-      button.title = hasCheckinDone ? "Check-in já realizado" : "";
-      checkoutButton.disabled = !guest?.id || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckoutDone;
+      button.style.display = "inline-block";
+      button.title = hasCheckinDone ? "Check-in já realizado" : !hasFnrhHospedeId && guest?.id ? "Disponível após a FNRH retornar fnrh_hospede_id" : "";
+      checkoutButton.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckoutDone;
       checkoutButton.textContent = isCheckingOutGuestFnrh ? "Fazendo check-out..." : "Check-out FNRH";
-      checkoutButton.style.display = guest?.id ? "inline-block" : "none";
-      checkoutButton.title = hasCheckoutDone ? "Check-out já realizado" : "";
+      checkoutButton.style.display = "inline-block";
+      checkoutButton.title = hasCheckoutDone ? "Check-out já realizado" : !hasFnrhHospedeId && guest?.id ? "Disponível após a FNRH retornar fnrh_hospede_id" : "";
 
-      statusElement.textContent = statusValue || (guest?.id ? "" : "Salve o hóspede antes de fazer check-in FNRH.");
+      statusElement.textContent = statusValue || (!guest?.id ? "Check-in disponível após vincular hóspede." : !hasFnrhHospedeId ? "Check-in e check-out ficam disponíveis quando a FNRH retornar fnrh_hospede_id para este hóspede." : "");
       statusElement.className = `guest-fnrh-status${statusValue ? " success" : ""}`;
+      if (openGuestDetailsButton) {
+        openGuestDetailsButton.style.display = !guest?.id ? "inline-block" : "none";
+      }
+      renderAfterStatusList();
     }
 
     function updateActionButtons() {
@@ -1221,13 +1471,15 @@
           </div>
         `;
       }
+
+      updateFnrhSectionsVisibility();
     }
 
     function renderDetails() {
       const empty = document.getElementById("detailsEmpty");
       const content = document.getElementById("detailsContent");
 
-      if (!selectedStay) {
+      if (!selectedStay && !isCreatingStay) {
         empty.style.display = "block";
         content.style.display = "none";
         return;
@@ -1235,11 +1487,28 @@
 
       empty.style.display = "none";
       content.style.display = "flex";
-      populateStayForm(selectedStay);
-      populateGuestForm(getMainGuest());
-      renderFnrhPrecheckinStatus();
+      if (isCreatingStay) {
+        populateCreateForm();
+      } else {
+        populateStayForm(selectedStay);
+        populateOptionalGuestForm(getMainGuest());
+      }
       updateActionButtons();
       updateGuestFnrhCheckinControls();
+      updateFnrhSectionsVisibility();
+    }
+
+    function enterCreateMode() {
+      isCreatingStay = true;
+      selectedStay = null;
+      selectedGuests = [];
+      setSelectedStayId(null);
+      setStatus("createStatus", "");
+      setStatus("guestStatus", "");
+      setStatus("guestFormStatus", "");
+      setStatus("actionStatus", "");
+      renderStayList();
+      renderDetails();
     }
 
     async function loadStays(preferredStayId = null) {
@@ -1251,6 +1520,7 @@
         if (!stays.length) {
           selectedStay = null;
           selectedGuests = [];
+          isCreatingStay = false;
           setSelectedStayId(null);
           renderDetails();
           return;
@@ -1273,8 +1543,8 @@
 
         selectedStay = stay;
         selectedGuests = guests;
+        isCreatingStay = false;
         setSelectedStayId(stay.id);
-        await loadFnrhPreCheckins();
 
         const currentIndex = stays.findIndex((item) => String(item.id) === String(stay.id));
         if (currentIndex >= 0) {
@@ -1284,28 +1554,104 @@
 
         renderDetails();
         setStatus("actionStatus", "");
-        setStatus("stayStatus", "");
+        setStatus("createStatus", "");
         setStatus("guestStatus", "");
+        setStatus("guestFormStatus", "");
         showCopyLinkFeedback("");
       } catch (error) {
         setStatus("actionStatus", error.message || "Erro ao carregar reserva.", "error");
       }
     }
 
-    async function createStay() {
-      const reservationId = document.getElementById("createReservationId").value.trim();
-      const subReservationId = document.getElementById("createSubReservationId").value.trim();
-      const dataEntrada = document.getElementById("createDataEntrada").value.trim();
-      const dataSaida = document.getElementById("createDataSaida").value.trim();
-      const adultCount = normalizeGuestCount(document.getElementById("createAdultCount").value, 1, 1);
-      const minorCount = normalizeGuestCount(document.getElementById("createMinorCount").value, 0, 0);
-
-      if (!reservationId) {
-        setStatus("createStatus", "Informe o número da reserva.", "error");
+    async function saveOptionalGuest() {
+      if (!selectedStay?.id) {
+        setStatus("guestFormStatus", "Salve a reserva antes de cadastrar o hóspede.", "warning");
+        setGuestOptionalOpen(true);
         return;
       }
 
-      setStatus("createStatus", "Criando reserva...");
+      const mainGuest = getMainGuest();
+      const fullName = document.getElementById("guestNameInput").value.trim();
+      const cpf = onlyDigits(document.getElementById("guestCpfInput").value);
+      const birthDate = document.getElementById("guestBirthDateInput").value.trim();
+      const cep = onlyDigits(document.getElementById("guestCepInput").value);
+      const logradouro = document.getElementById("guestLogradouroInput").value.trim();
+
+      if (!fullName || !cpf || !birthDate || !cep || !logradouro) {
+        setStatus("guestFormStatus", "Preencha nome, CPF, data de nascimento, CEP e logradouro.", "warning");
+        setGuestOptionalOpen(true);
+        return;
+      }
+
+      setStatus("guestFormStatus", "Salvando hóspede...", "warning");
+      const resolvedLocation = await resolveGuestLocationFromCep(true);
+      const locationDefaults = resolvedLocation || getGuestLocationDefaults();
+
+      if (!locationDefaults.cidade_id || !locationDefaults.estado_id) {
+        setStatus("guestFormStatus", "Não foi possível resolver cidade e UF pelo CEP informado.", "error");
+        setGuestOptionalOpen(true);
+        return;
+      }
+
+      const payload = {
+        stay_id: selectedStay.id,
+        full_name: fullName,
+        cpf,
+        birth_date: birthDate,
+        cep,
+        cidade_id: locationDefaults.cidade_id,
+        estado_id: locationDefaults.estado_id,
+        logradouro,
+        is_adult: 1,
+        is_main_guest: 1
+      };
+
+      try {
+        const url = mainGuest?.id ? `${API_BASE}/guests/${mainGuest.id}` : `${API_BASE}/guests`;
+        const method = mainGuest?.id ? "PUT" : "POST";
+        const requestBody = mainGuest?.id
+          ? {
+              full_name: payload.full_name,
+              cpf: payload.cpf,
+              birth_date: payload.birth_date,
+              cep: payload.cep,
+              cidade_id: payload.cidade_id,
+              estado_id: payload.estado_id,
+              logradouro: payload.logradouro,
+              is_adult: payload.is_adult,
+              is_main_guest: payload.is_main_guest
+            }
+          : payload;
+
+        const data = await fetchJson(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
+
+        setGuestOptionalOpen(true);
+        await loadStayDetails(selectedStay.id);
+        setStatus("guestFormStatus", data.message || "Hóspede salvo com sucesso.", "success");
+      } catch (error) {
+        setStatus("guestFormStatus", error.message || "Não foi possível salvar o hóspede.", "error");
+        setGuestOptionalOpen(true);
+      }
+    }
+
+    async function createStay() {
+      const uiMeta = getSelectedStayUiMeta();
+      const reservationId = document.getElementById("reservationIdInput").value.trim();
+      const dataEntrada = document.getElementById("dataEntradaInput").value.trim();
+      const dataSaida = document.getElementById("dataSaidaInput").value.trim();
+      const adultCount = normalizeGuestCount(document.getElementById("adultCountInput").value, 1, 1);
+      const minorCount = normalizeGuestCount(document.getElementById("minorCountInput").value, 0, 0);
+
+      if (!reservationId) {
+        setStatus("createStatus", "Informe o código da reserva.", "error");
+        return;
+      }
+
+      setStatus("createStatus", "Salvando reserva...");
 
       try {
         const data = await fetchJson(`${API_BASE}/stays`, {
@@ -1313,7 +1659,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             reservation_id: reservationId,
-            sub_reservation_id: subReservationId || reservationId,
+            sub_reservation_id: reservationId,
             data_entrada: dataEntrada,
             data_saida: dataSaida,
             quantidade_hospede_adulto: adultCount,
@@ -1324,13 +1670,9 @@
         setStatus("createStatus", data.message || "Reserva criada com sucesso.", "success");
         if (data?.stay?.id != null) {
           stayGuestCountsById[String(data.stay.id)] = { adultos: adultCount, menores: minorCount };
+          saveStayUiMeta(data.stay.id, uiMeta);
         }
-        document.getElementById("createReservationId").value = "";
-        document.getElementById("createSubReservationId").value = "";
-        document.getElementById("createDataEntrada").value = "";
-        document.getElementById("createDataSaida").value = "";
-        document.getElementById("createAdultCount").value = "1";
-        document.getElementById("createMinorCount").value = "0";
+        isCreatingStay = false;
         await loadStays(data?.stay?.id || null);
       } catch (error) {
         setStatus("createStatus", error.message || "Não foi possível criar a reserva.", "error");
@@ -1338,14 +1680,20 @@
     }
 
     async function saveStay() {
-      if (!selectedStay?.id) {
-        setStatus("stayStatus", "Selecione uma reserva antes de salvar.", "warning");
+      if (isCreatingStay) {
+        await createStay();
         return;
       }
 
-      setStatus("stayStatus", "Salvando reserva...");
+      if (!selectedStay?.id) {
+        setStatus("createStatus", "Clique em Nova reserva ou selecione uma reserva.", "warning");
+        return;
+      }
+
+      setStatus("createStatus", "Salvando reserva...");
 
       try {
+        const uiMeta = getSelectedStayUiMeta();
         const adultCount = normalizeGuestCount(document.getElementById("adultCountInput").value, 1, 1);
         const minorCount = normalizeGuestCount(document.getElementById("minorCountInput").value, 0, 0);
         const data = await fetchJson(`${API_BASE}/stays/${selectedStay.id}`, {
@@ -1353,7 +1701,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             reservation_id: document.getElementById("reservationIdInput").value.trim(),
-            sub_reservation_id: document.getElementById("subReservationIdInput").value.trim(),
+            sub_reservation_id: document.getElementById("reservationIdInput").value.trim(),
             data_entrada: document.getElementById("dataEntradaInput").value.trim(),
             data_saida: document.getElementById("dataSaidaInput").value.trim(),
             quantidade_hospede_adulto: adultCount,
@@ -1362,74 +1710,18 @@
         });
 
         stayGuestCountsById[String(selectedStay.id)] = { adultos: adultCount, menores: minorCount };
-        setStatus("stayStatus", data.message || "Reserva salva com sucesso.", "success");
+        saveStayUiMeta(selectedStay.id, uiMeta);
+        setStatus("createStatus", data.message || "Reserva salva com sucesso.", "success");
         await loadStays(selectedStay.id);
       } catch (error) {
-        setStatus("stayStatus", error.message || "Não foi possível salvar a reserva.", "error");
-      }
-    }
-
-    async function saveMainGuest() {
-      if (!selectedStay?.id) {
-        setStatus("guestStatus", "Selecione uma reserva antes de salvar o hóspede.", "warning");
-        return;
-      }
-
-      if (document.getElementById("isForeignerInput").checked) {
-        setStatus("guestStatus", "O backend atual desta tela experimental ainda exige CPF válido para salvar hóspede estrangeiro.", "warning");
-        return;
-      }
-
-      const mainGuest = getMainGuest();
-      const payload = {
-        stay_id: selectedStay.id,
-        full_name: document.getElementById("guestNameInput").value.trim(),
-        cpf: onlyDigits(document.getElementById("guestCpfInput").value),
-        birth_date: document.getElementById("guestBirthDateInput").value.trim(),
-        cep: onlyDigits(document.getElementById("guestCepInput").value),
-        estado_id: document.getElementById("guestEstadoInput").value.trim().toUpperCase(),
-        cidade_id: document.getElementById("guestCidadeInput").value.trim(),
-        logradouro: document.getElementById("guestLogradouroInput").value.trim(),
-        numero: document.getElementById("guestNumeroInput").value.trim(),
-        complemento: "",
-        bairro: "",
-        email: "",
-        phone: "",
-        genero_id: "",
-        raca_id: "",
-        deficiencia_id: "",
-        vehicle_plate: "",
-        is_adult: 1,
-        is_main_guest: 1
-      };
-
-      if (!payload.full_name || !payload.cpf || !payload.birth_date || !payload.estado_id || !payload.cidade_id) {
-        setStatus("guestStatus", "Preencha nome, CPF, data de nascimento, UF e cidade/código IBGE.", "error");
-        return;
-      }
-
-      setStatus("guestStatus", "Salvando hóspede principal...");
-
-      try {
-        const url = mainGuest?.id ? `${API_BASE}/guests/${mainGuest.id}` : `${API_BASE}/guests`;
-        const method = mainGuest?.id ? "PUT" : "POST";
-        const data = await fetchJson(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        setStatus("guestStatus", data.message || "Hóspede salvo com sucesso.", "success");
-        await loadStayDetails(selectedStay.id);
-      } catch (error) {
-        setStatus("guestStatus", error.message || "Não foi possível salvar o hóspede.", "error");
+        setStatus("createStatus", error.message || "Não foi possível salvar a reserva.", "error");
       }
     }
 
     async function checkInMainGuestFnrh() {
       const guest = getMainGuest();
       if (!guest?.id) {
-        setStatus("guestStatus", "Salve o hóspede antes de fazer check-in FNRH.", "warning");
+        setStatus("guestStatus", "Check-in indisponível para esta reserva.", "warning");
         return;
       }
 
@@ -1459,7 +1751,7 @@
     async function checkOutMainGuestFnrh() {
       const guest = getMainGuest();
       if (!guest?.id) {
-        setStatus("guestStatus", "Salve o hóspede antes de fazer check-out FNRH.", "warning");
+        setStatus("guestStatus", "Check-out indisponível para esta reserva.", "warning");
         return;
       }
 
@@ -1545,7 +1837,7 @@
     function buildWhatsappPrecheckinMessage(link) {
       return `Para agilizar seu check-in, pedimos que preencha o cadastro obrigatório pelo link abaixo:
 
-🔗 ${link}
+${link}
 
 Por favor, inclua também os dados dos acompanhantes.
 
@@ -1605,46 +1897,59 @@ Obrigado!`;
       showQrCode(link);
     }
 
-    document.getElementById("createStayBtn").addEventListener("click", createStay);
-    document.getElementById("reloadListBtn").addEventListener("click", () => loadStays(selectedStayId));
-    document.getElementById("saveStayBtn").addEventListener("click", saveStay);
-    document.getElementById("saveGuestBtn").addEventListener("click", saveMainGuest);
-    document.getElementById("guestFnrhCheckinBtn").addEventListener("click", checkInMainGuestFnrh);
-    document.getElementById("guestFnrhCheckoutBtn").addEventListener("click", checkOutMainGuestFnrh);
-    document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
-    document.getElementById("copyFnrhLinkBtn").addEventListener("click", copyOfficialLink);
-    document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copyWhatsappMessage);
-    document.getElementById("openFnrhLinkBtn").addEventListener("click", openOfficialLink);
-    document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
-    document.getElementById("isForeignerInput").addEventListener("change", updateForeignerFields);
-    document.getElementById("guestCpfInput").addEventListener("input", (event) => {
-      event.target.value = formatCPF(event.target.value);
-    });
-    document.getElementById("guestCepInput").addEventListener("input", async (event) => {
-      const digits = onlyDigits(event.target.value).slice(0, 8);
-      event.target.value = formatCep(digits);
-      if (digits.length < 8) {
-        lastGuestCepLookup = "";
-        updateAddressSectionVisibility();
-      }
-      if (digits.length === 8) {
-        await lookupGuestAddressByCep();
-      }
-    });
-    document.getElementById("guestCepInput").addEventListener("blur", () => {
-      lookupGuestAddressByCep(true);
-    });
-    ["guestEstadoInput", "guestCidadeInput", "guestNumeroInput", "guestLogradouroInput"].forEach((id) => {
-      document.getElementById(id).addEventListener("input", updateAddressSectionVisibility);
-    });
-    document.getElementById("qrModal").addEventListener("click", (event) => {
-      if (event.target.id === "qrModal") {
-        closeQrModal();
-      }
-    });
+    function initializeReservationsPage() {
+      document.getElementById("newStayBtn").addEventListener("click", enterCreateMode);
+      document.getElementById("reloadListBtn").addEventListener("click", () => loadStays(selectedStayId));
+      document.getElementById("saveStayBtn").addEventListener("click", saveStay);
+      document.getElementById("saveGuestBtn").addEventListener("click", saveOptionalGuest);
+      document.getElementById("guestFnrhCheckinBtn").addEventListener("click", checkInMainGuestFnrh);
+      document.getElementById("guestFnrhCheckoutBtn").addEventListener("click", checkOutMainGuestFnrh);
+      document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
+      document.getElementById("copyFnrhLinkBtn").addEventListener("click", copyOfficialLink);
+      document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copyWhatsappMessage);
+      document.getElementById("openFnrhLinkBtn").addEventListener("click", openOfficialLink);
+      document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
+      document.getElementById("openGuestDetailsBtn").addEventListener("click", () => {
+        setGuestOptionalOpen(true);
+        document.getElementById("guestOptionalDetails").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+      document.getElementById("originInput").addEventListener("change", updateOriginVisibility);
+      document.getElementById("guestCpfInput").addEventListener("input", (event) => {
+        event.target.value = formatCPF(event.target.value);
+      });
+      document.getElementById("guestCepInput").addEventListener("input", (event) => {
+        const digits = onlyDigits(event.target.value).slice(0, 8);
+        event.target.value = formatCep(digits);
+        if (digits.length < 8) {
+          guestCepResolvedCityId = "";
+          guestCepResolvedStateId = "";
+          setGuestCepStatus(digits.length ? "Informe os 8 dígitos do CEP." : "");
+          return;
+        }
+        resolveGuestLocationFromCep();
+      });
+      document.getElementById("guestCepInput").addEventListener("blur", () => {
+        resolveGuestLocationFromCep(true);
+      });
+      document.getElementById("staySearchInput").addEventListener("input", (event) => {
+        staySearchTerm = normalizeMatchText(event.target.value);
+        renderStayList();
+      });
+      document.getElementById("qrModal").addEventListener("click", (event) => {
+        if (event.target.id === "qrModal") {
+          closeQrModal();
+        }
+      });
 
-    updateForeignerFields();
-    loadStays();
+      updateOriginVisibility();
+      loadStays();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initializeReservationsPage);
+    } else {
+      initializeReservationsPage();
+    }
   </script>
 
   <div id="qrModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
@@ -1656,3 +1961,5 @@ Obrigado!`;
   </div>
 </body>
 </html>
+
+

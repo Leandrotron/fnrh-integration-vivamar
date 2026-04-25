@@ -1,3 +1,53 @@
+## [2026-04-25] Beta local operacional + fluxo duplo FNRH validado
+
+### Contexto
+- O produto passou a operar em dois modos reais e complementares:
+  - fluxo sem hóspede para geração rápida do link oficial da FNRH
+  - fluxo com hóspede para controle completo, incluindo check-in e check-out
+- O foco da recepção agora é operacional: criar reserva, enviar para FNRH, compartilhar link oficial e só cadastrar hóspede localmente quando precisar de controle direto no painel.
+
+### Correções funcionais do dia
+- Corrigido o bug de carregamento inicial da lista de reservas em `frontend/reservas.html`.
+- Causa raiz encontrada: a inicialização da tela quebrava antes de `loadStays()` por causa do acesso ao `qrModal` antes do elemento existir no DOM.
+- A tela agora inicializa via `DOMContentLoaded` e carrega a lista automaticamente ao abrir ou dar refresh, sem depender do botão `Atualizar lista`.
+- Corrigido o erro real da FNRH `logradouro é obrigatório` no fluxo com hóspede.
+- O bloco opcional de hóspede passou a incluir `CEP` e `logradouro`, com reaproveitamento da resolução de `cidade_id` e `estado_id` via CEP.
+
+### Evolução da interface
+- A UI operacional foi reorganizada em dois blocos:
+  - `ANTES DA FNRH`
+  - `DEPOIS DA FNRH`
+- A ficha completa obrigatória deixou de ser o fluxo principal.
+- Foi criado um bloco colapsável para hóspede opcional, discreto, usado apenas quando a recepção quiser habilitar fluxo com hóspede e check-in/check-out pelo sistema.
+- O bloco opcional foi reduzido ao mínimo funcional do momento:
+  - nome completo
+  - CPF
+  - data de nascimento
+  - CEP
+  - logradouro
+- Textos visíveis e trechos com encoding quebrado foram ajustados na tela principal da recepção.
+
+### Validações reais e descoberta de produto
+- Foi validado em ambiente real que a FNRH aceita criar reserva sem hóspede e retorna `link_precheckin`.
+- Foi validado também o fluxo com hóspede quando o payload contém os campos mínimos aceitos pela FNRH.
+- Descoberta crítica: `1 link oficial != múltiplos hóspedes estruturados`.
+- O link oficial pode ser reutilizado, mas cada pessoa preenche individualmente no portal da FNRH.
+- `quantidade_hospede_adulto` e `quantidade_hospede_menor` funcionam como informação de capacidade/contexto, não como garantia de vínculo estruturado dos hóspedes.
+- Conclusão operacional:
+  - fluxo sem hóspede = velocidade para gerar link
+  - fluxo com hóspedes no payload = controle real de grupo e disponibilidade de check-in/check-out
+
+### Infra local beta
+- O backend passou a servir também os arquivos do frontend.
+- A dependência de Live Server foi removida do fluxo local beta.
+- Foi criado `scripts/start-local.bat` para subir o sistema de forma simples no Windows.
+- O acesso local passa a ser feito pelo navegador via backend, em `http://localhost:3000`.
+
+### Observações FNRH importantes
+- `GET /hospedes/pre-checkins` continua não confiável como fonte operacional de status.
+- Quando há `dados_hospede`, `logradouro` precisa estar presente para evitar erro `400`.
+- Check-in e check-out continuam dependendo de `fnrh_hospede_id`.
+
 ## [2026-04-24] Wrap-up: Checkout real, UX operacional e backup versionado
 
 ### Contexto

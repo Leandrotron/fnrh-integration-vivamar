@@ -114,6 +114,8 @@ db.serialize(() => {
       sub_reservation_id TEXT NOT NULL,
       data_entrada TEXT,
       data_saida TEXT,
+      quantidade_hospede_adulto INTEGER DEFAULT 1,
+      quantidade_hospede_menor INTEGER DEFAULT 0,
       fnrh_reserva_id TEXT,
       fnrh_link_precheckin_oficial TEXT,
       fnrh_last_status TEXT,
@@ -130,6 +132,8 @@ db.serialize(() => {
 
   ensureColumn("stays", "data_entrada", "TEXT");
   ensureColumn("stays", "data_saida", "TEXT");
+  ensureColumn("stays", "quantidade_hospede_adulto", "INTEGER DEFAULT 1");
+  ensureColumn("stays", "quantidade_hospede_menor", "INTEGER DEFAULT 0");
   ensureColumn("stays", "fnrh_last_status", "TEXT");
   ensureColumn("stays", "fnrh_last_message", "TEXT");
   ensureColumn("stays", "fnrh_last_sent_at", "TEXT");

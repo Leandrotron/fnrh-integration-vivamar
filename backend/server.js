@@ -1,18 +1,29 @@
-console.log("SERVER COM SUB_RESERVATION_ID 🚀");
+﻿console.log("SERVER COM SUB_RESERVATION_ID ðŸš€");
 require("dotenv").config();
 
 const crypto = require("crypto");
+const path = require("path");
 const db = require("./database/db");
 const express = require("express");
 const cors = require("cors");
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const FRONTEND_DIR = path.join(__dirname, "../frontend");
 
 app.use(cors({
   origin: "*"
 }));
 app.use(express.json());
+app.use(express.static(FRONTEND_DIR));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, "reservas.html"));
+});
+
+app.get("/reservas.html", (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, "reservas.html"));
+});
 
 const PROPERTY_ID = "vivamar";
 const EMPTY_STAY_SEED = {
@@ -23,7 +34,7 @@ const EMPTY_STAY_SEED = {
 };
 
 // =========================
-// Funções auxiliares
+// FunÃ§Ãµes auxiliares
 // =========================
 
 function onlyDigits(value) {
@@ -407,7 +418,7 @@ async function sendToFNRH(payload) {
 
   if (missingVars.length) {
     const configurationError = new Error(
-      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+      `FNRH_MODE=real, mas faltam as variÃ¡veis obrigatÃ³rias: ${missingVars.join(", ")}`
     );
     configurationError.fnrhStatus = null;
     configurationError.fnrhBody = { error: configurationError.message };
@@ -502,7 +513,7 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim) {
 
   if (missingVars.length) {
     const configurationError = new Error(
-      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+      `FNRH_MODE=real, mas faltam as variÃ¡veis obrigatÃ³rias: ${missingVars.join(", ")}`
     );
     configurationError.fnrhStatus = null;
     configurationError.fnrhBody = { error: configurationError.message };
@@ -536,7 +547,7 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim) {
     console.error("[FNRH] pre-checkins network error:", networkError);
     networkError.fnrhStatus = null;
     networkError.fnrhBody = {
-      error: networkError.message || "Erro de rede ao consultar pré-check-ins da FNRH"
+      error: networkError.message || "Erro de rede ao consultar prÃ©-check-ins da FNRH"
     };
     throw networkError;
   }
@@ -592,7 +603,7 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
 
   if (missingVars.length) {
     const configurationError = new Error(
-      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+      `FNRH_MODE=real, mas faltam as variÃ¡veis obrigatÃ³rias: ${missingVars.join(", ")}`
     );
     configurationError.fnrhStatus = null;
     configurationError.fnrhBody = { error: configurationError.message };
@@ -684,7 +695,7 @@ async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
 
   if (missingVars.length) {
     const configurationError = new Error(
-      `FNRH_MODE=real, mas faltam as variÃ¡veis obrigatÃ³rias: ${missingVars.join(", ")}`
+      `FNRH_MODE=real, mas faltam as variÃƒÂ¡veis obrigatÃƒÂ³rias: ${missingVars.join(", ")}`
     );
     configurationError.fnrhStatus = null;
     configurationError.fnrhBody = { error: configurationError.message };
@@ -827,7 +838,7 @@ function persistFNRHReturnData(stayId, guests, resultBody, callback) {
             const fnrhHospedeId = String(returnedGuest?.hospede_id || "").trim();
             const fnrhPessoaId = String(returnedGuest?.hospede?.pessoa_id || "").trim();
 
-            // O payload e o retorno da FNRH seguem a ordem do array local de hóspedes neste fluxo atual.
+            // O payload e o retorno da FNRH seguem a ordem do array local de hÃ³spedes neste fluxo atual.
             db.run(
               `UPDATE guests
                SET fnrh_hospede_id = ?,
@@ -865,7 +876,7 @@ function ensureEmptyTestStay() {
     [PROPERTY_ID, EMPTY_STAY_SEED.reservation_id, EMPTY_STAY_SEED.sub_reservation_id],
     (err, row) => {
       if (err) {
-        console.error("Erro ao verificar stay de teste sem hóspedes:", err);
+        console.error("Erro ao verificar stay de teste sem hÃ³spedes:", err);
         return;
       }
 
@@ -876,7 +887,7 @@ function ensureEmptyTestStay() {
             return;
           }
 
-          console.log(`Stay de teste sem hóspedes já existe (#${stayWithToken.id})`);
+          console.log(`Stay de teste sem hÃ³spedes jÃ¡ existe (#${stayWithToken.id})`);
         });
         return;
       }
@@ -896,11 +907,11 @@ function ensureEmptyTestStay() {
         ],
         function (insertErr) {
           if (insertErr) {
-            console.error("Erro ao criar stay de teste sem hóspedes:", insertErr);
+            console.error("Erro ao criar stay de teste sem hÃ³spedes:", insertErr);
             return;
           }
 
-          console.log(`Stay de teste sem hóspedes criada (#${this.lastID})`);
+          console.log(`Stay de teste sem hÃ³spedes criada (#${this.lastID})`);
         }
       );
     }
@@ -912,7 +923,7 @@ function ensureEmptyTestStay() {
 // =========================
 
 app.get("/", (req, res) => {
-  res.send("FNRH Integration API rodando 🚀");
+  res.send("FNRH Integration API rodando ðŸš€");
 });
 
 app.get("/fnrh/precheckins", async (req, res) => {
@@ -921,7 +932,7 @@ app.get("/fnrh/precheckins", async (req, res) => {
 
   if (!dataInicio || !dataFim) {
     return res.status(400).json({
-      error: "data_inicio e data_fim são obrigatórios"
+      error: "data_inicio e data_fim sÃ£o obrigatÃ³rios"
     });
   }
 
@@ -932,7 +943,7 @@ app.get("/fnrh/precheckins", async (req, res) => {
       const errorMessage = String(
         result.body?.error ||
         result.body?.message ||
-        "Falha ao consultar pré-check-ins da FNRH"
+        "Falha ao consultar prÃ©-check-ins da FNRH"
       ).trim();
 
       return res.status(502).json({
@@ -945,17 +956,16 @@ app.get("/fnrh/precheckins", async (req, res) => {
 
     return res.status(result.status).json(result.body);
   } catch (error) {
-    console.error("Erro ao consultar pré-check-ins da FNRH:", error);
+    console.error("Erro ao consultar prÃ©-check-ins da FNRH:", error);
 
     return res.status(500).json({
-      error: error.message || "Erro interno ao consultar pré-check-ins da FNRH",
+      error: error.message || "Erro interno ao consultar prÃ©-check-ins da FNRH",
       fnrh_mode: process.env.FNRH_MODE || "mock",
       response_status: error.fnrhStatus ?? null,
       response_body: error.fnrhBody || null
     });
   }
 });
-
 
 app.get("/checkins", (req, res) => {
   db.all(
@@ -985,7 +995,7 @@ app.post("/checkin", (req, res) => {
 
   if (!reservation_id || !full_name || !cpf) {
     return res.status(400).json({
-      error: "ID da reserva, nome completo e CPF são obrigatórios"
+      error: "ID da reserva, nome completo e CPF sÃ£o obrigatÃ³rios"
     });
   }
 
@@ -999,13 +1009,13 @@ app.post("/checkin", (req, res) => {
 
   if (!isValidCPF(cpfClean)) {
     return res.status(400).json({
-      error: "CPF inválido"
+      error: "CPF invÃ¡lido"
     });
   }
 
   if (!isValidBirthDate(birthDateClean)) {
     return res.status(400).json({
-      error: "Data de nascimento inválida"
+      error: "Data de nascimento invÃ¡lida"
     });
   }
 
@@ -1101,12 +1111,12 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
       }
 
       if (!row) {
-        return res.status(404).json({ error: "Registro não encontrado" });
+        return res.status(404).json({ error: "Registro nÃ£o encontrado" });
       }
 
       if (row.status !== "validated") {
         return res.status(400).json({
-          error: "Registro ainda não está validado para envio"
+          error: "Registro ainda nÃ£o estÃ¡ validado para envio"
         });
       }
 
@@ -1133,6 +1143,18 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
             return res.status(500).json({ error: "Erro ao marcar envio" });
           }
 
+          db.run(
+            `UPDATE stays
+             SET quantidade_hospede_adulto = ?, quantidade_hospede_menor = ?
+             WHERE id = ? AND property_id = ?`,
+            [quantidadeHospedeAdulto, quantidadeHospedeMenor, stayWithToken.id, PROPERTY_ID],
+            (updateErr) => {
+              if (updateErr) {
+                console.error("Erro ao atualizar quantidades da stay existente:", updateErr);
+              }
+            }
+          );
+
           return res.json({
             message: "Envio simulado para FNRH realizado com sucesso",
             id: row.id
@@ -1146,13 +1168,13 @@ app.post("/checkins/:id/send-fnrh", (req, res) => {
 // NOVA ESTRUTURA (stays + guests) - FASE SEGURA
 // =========================
 
-// cria ou busca uma suíte (stay)
+// cria ou busca uma suÃ­te (stay)
 app.post("/stays", (req, res) => {
   const { reservation_id, sub_reservation_id, data_entrada, data_saida, quantidade_hospede_adulto, quantidade_hospede_menor } = req.body;
 
   if (!reservation_id) {
     return res.status(400).json({
-      error: "ID da reserva é obrigatório"
+      error: "ID da reserva obrigatorio"
     });
   }
 
@@ -1165,13 +1187,13 @@ app.post("/stays", (req, res) => {
 
   if (dataEntrada && !isValidBirthDate(dataEntrada)) {
     return res.status(400).json({
-      error: "Data de entrada inválida"
+      error: "Data de entrada invalida"
     });
   }
 
   if (dataSaida && !isValidBirthDate(dataSaida)) {
     return res.status(400).json({
-      error: "Data de saída inválida"
+      error: "Data de saida invalida"
     });
   }
 
@@ -1189,26 +1211,48 @@ app.post("/stays", (req, res) => {
         return ensureStayHasPublicToken(row, (tokenErr, stayWithToken) => {
           if (tokenErr) {
             console.error("Erro ao garantir public_token da stay existente:", tokenErr);
-            return res.status(500).json({ error: "Erro ao preparar link público da stay" });
+            return res.status(500).json({ error: "Erro ao preparar link publico da stay" });
           }
 
-          return res.json({
-            message: "Stay já existe",
-            stay: {
-              ...stayWithToken,
-              quantidade_hospede_adulto: quantidadeHospedeAdulto,
-              quantidade_hospede_menor: quantidadeHospedeMenor
+          return db.run(
+            `UPDATE stays
+             SET quantidade_hospede_adulto = ?, quantidade_hospede_menor = ?
+             WHERE id = ? AND property_id = ?`,
+            [quantidadeHospedeAdulto, quantidadeHospedeMenor, stayWithToken.id, PROPERTY_ID],
+            (updateErr) => {
+              if (updateErr) {
+                console.error("Erro ao atualizar quantidades da stay existente:", updateErr);
+                return res.status(500).json({ error: "Erro ao atualizar quantidades da stay" });
+              }
+
+              return res.json({
+                message: "Stay ja existe",
+                stay: {
+                  ...stayWithToken,
+                  quantidade_hospede_adulto: quantidadeHospedeAdulto,
+                  quantidade_hospede_menor: quantidadeHospedeMenor
+                }
+              });
             }
-          });
+          );
         });
       }
 
       const publicToken = generatePublicToken();
 
       db.run(
-        `INSERT INTO stays (property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [PROPERTY_ID, reservationId, subReservationId, dataEntrada, dataSaida, publicToken],
+        `INSERT INTO stays (
+           property_id,
+           reservation_id,
+           sub_reservation_id,
+           data_entrada,
+           data_saida,
+           public_token,
+           quantidade_hospede_adulto,
+           quantidade_hospede_menor
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [PROPERTY_ID, reservationId, subReservationId, dataEntrada, dataSaida, publicToken, quantidadeHospedeAdulto, quantidadeHospedeMenor],
         function (err) {
           if (err) {
             console.error("Erro ao criar stay:", err);
@@ -1217,20 +1261,20 @@ app.post("/stays", (req, res) => {
 
           return res.json({
             message: "Stay criado com sucesso",
-              stay: {
-                id: this.lastID,
-                property_id: PROPERTY_ID,
-                reservation_id: reservationId,
-                sub_reservation_id: subReservationId,
-                data_entrada: dataEntrada,
-                data_saida: dataSaida,
-                public_token: publicToken,
-                quantidade_hospede_adulto: quantidadeHospedeAdulto,
-                quantidade_hospede_menor: quantidadeHospedeMenor
-              }
-            });
-          }
-        );
+            stay: {
+              id: this.lastID,
+              property_id: PROPERTY_ID,
+              reservation_id: reservationId,
+              sub_reservation_id: subReservationId,
+              data_entrada: dataEntrada,
+              data_saida: dataSaida,
+              public_token: publicToken,
+              quantidade_hospede_adulto: quantidadeHospedeAdulto,
+              quantidade_hospede_menor: quantidadeHospedeMenor
+            }
+          });
+        }
+      );
     }
   );
 });
@@ -1259,7 +1303,7 @@ app.get("/stays/:id", (req, res) => {
   const stayId = req.params.id;
 
   db.get(
-    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token, fnrh_reserva_id, fnrh_link_precheckin_oficial, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, quantidade_hospede_adulto, quantidade_hospede_menor, public_token, fnrh_reserva_id, fnrh_link_precheckin_oficial, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
      FROM stays
      WHERE id = ? AND property_id = ?`,
     [stayId, PROPERTY_ID],
@@ -1270,7 +1314,7 @@ app.get("/stays/:id", (req, res) => {
       }
 
       if (!stay) {
-        return res.status(404).json({ error: "Stay não encontrada" });
+        return res.status(404).json({ error: "Stay nÃ£o encontrada" });
       }
 
       return res.json(stay);
@@ -1282,22 +1326,22 @@ app.get("/stays/public/:token", (req, res) => {
   const publicToken = String(req.params.token || "").trim();
 
   if (!publicToken) {
-    return res.status(400).json({ error: "Token público não informado" });
+    return res.status(400).json({ error: "Token pÃºblico nÃ£o informado" });
   }
 
   db.get(
-    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, public_token, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
+    `SELECT id, property_id, reservation_id, sub_reservation_id, data_entrada, data_saida, quantidade_hospede_adulto, quantidade_hospede_menor, public_token, fnrh_last_status, fnrh_last_message, fnrh_last_sent_at, fnrh_last_guest_count_sent, fnrh_last_guest_count_confirmed, created_at
      FROM stays
      WHERE public_token = ? AND property_id = ?`,
     [publicToken, PROPERTY_ID],
     (err, stay) => {
       if (err) {
-        console.error("Erro ao buscar stay pública por token:", err);
+        console.error("Erro ao buscar stay pÃºblica por token:", err);
         return res.status(500).json({ error: "Erro ao buscar stay" });
       }
 
       if (!stay) {
-        return res.status(404).json({ error: "Stay não encontrada" });
+        return res.status(404).json({ error: "Stay nÃ£o encontrada" });
       }
 
       return res.json(stay);
@@ -1334,9 +1378,9 @@ app.put("/stays/:id", (req, res) => {
 
   db.run(
     `UPDATE stays
-     SET reservation_id = ?, sub_reservation_id = ?, data_entrada = ?, data_saida = ?
+     SET reservation_id = ?, sub_reservation_id = ?, data_entrada = ?, data_saida = ?, quantidade_hospede_adulto = ?, quantidade_hospede_menor = ?
      WHERE id = ? AND property_id = ?`,
-    [reservationId, subReservationId, dataEntrada, dataSaida, stayId, PROPERTY_ID],
+    [reservationId, subReservationId, dataEntrada, dataSaida, quantidadeHospedeAdulto, quantidadeHospedeMenor, stayId, PROPERTY_ID],
     function (err) {
       if (err) {
         console.error("Erro ao atualizar stay:", err);
@@ -1364,7 +1408,7 @@ app.put("/stays/:id", (req, res) => {
   );
 });
 
-// cria hóspede vinculado a uma suíte
+// cria hÃ³spede vinculado a uma suÃ­te
 app.post("/guests", (req, res) => {
   const {
     stay_id,
@@ -1529,7 +1573,7 @@ app.post("/guests", (req, res) => {
     }
   );
 });
-// lista hóspedes de uma suíte
+// lista hÃ³spedes de uma suÃ­te
 app.get("/stays/:id/guests", (req, res) => {
   const stayId = req.params.id;
 
@@ -1540,8 +1584,8 @@ app.get("/stays/:id/guests", (req, res) => {
     [stayId],
     (err, rows) => {
       if (err) {
-        console.error("Erro ao buscar hóspedes:", err);
-        return res.status(500).json({ error: "Erro ao buscar hóspedes" });
+        console.error("Erro ao buscar hÃ³spedes:", err);
+        return res.status(500).json({ error: "Erro ao buscar hÃ³spedes" });
       }
 
       res.json(rows);
@@ -1560,18 +1604,18 @@ app.post("/guests/:id/fnrh-checkin", (req, res) => {
     [guestId, PROPERTY_ID],
     async (err, guest) => {
       if (err) {
-        console.error("Erro ao buscar hóspede para check-in FNRH:", err);
-        return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+        console.error("Erro ao buscar hÃ³spede para check-in FNRH:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hÃ³spede" });
       }
 
       if (!guest) {
-        return res.status(404).json({ error: "Hóspede não encontrado" });
+        return res.status(404).json({ error: "HÃ³spede nÃ£o encontrado" });
       }
 
       const fnrhHospedeId = String(guest.fnrh_hospede_id || "").trim();
       if (!fnrhHospedeId) {
         return res.status(400).json({
-          error: "Hóspede sem fnrh_hospede_id para check-in na FNRH",
+          error: "HÃ³spede sem fnrh_hospede_id para check-in na FNRH",
           guest_id: guest.id
         });
       }
@@ -1635,18 +1679,18 @@ app.post("/guests/:id/fnrh-checkout", (req, res) => {
     [guestId, PROPERTY_ID],
     async (err, guest) => {
       if (err) {
-        console.error("Erro ao buscar hÃ³spede para check-out FNRH:", err);
-        return res.status(500).json({ error: "Erro no banco ao buscar hÃ³spede" });
+        console.error("Erro ao buscar hÃƒÂ³spede para check-out FNRH:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hÃƒÂ³spede" });
       }
 
       if (!guest) {
-        return res.status(404).json({ error: "HÃ³spede nÃ£o encontrado" });
+        return res.status(404).json({ error: "HÃƒÂ³spede nÃƒÂ£o encontrado" });
       }
 
       const fnrhHospedeId = String(guest.fnrh_hospede_id || "").trim();
       if (!fnrhHospedeId) {
         return res.status(400).json({
-          error: "HÃ³spede sem fnrh_hospede_id para check-out na FNRH",
+          error: "HÃƒÂ³spede sem fnrh_hospede_id para check-out na FNRH",
           guest_id: guest.id
         });
       }
@@ -1710,12 +1754,12 @@ app.delete("/guests/:id", (req, res) => {
     [guestId, PROPERTY_ID],
     (err, guest) => {
       if (err) {
-        console.error("Erro ao buscar hóspede para remoção:", err);
-        return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+        console.error("Erro ao buscar hÃ³spede para remoÃ§Ã£o:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hÃ³spede" });
       }
 
       if (!guest) {
-        return res.status(404).json({ error: "Hóspede não encontrado" });
+        return res.status(404).json({ error: "HÃ³spede nÃ£o encontrado" });
       }
 
       const deleteGuest = () => {
@@ -1724,12 +1768,12 @@ app.delete("/guests/:id", (req, res) => {
           [guestId],
           function (deleteErr) {
             if (deleteErr) {
-              console.error("Erro ao remover hóspede:", deleteErr);
-              return res.status(500).json({ error: "Erro ao remover hóspede" });
+              console.error("Erro ao remover hÃ³spede:", deleteErr);
+              return res.status(500).json({ error: "Erro ao remover hÃ³spede" });
             }
 
             return res.json({
-              message: "Hóspede removido com sucesso",
+              message: "HÃ³spede removido com sucesso",
               guest_id: Number(guestId)
             });
           }
@@ -1747,13 +1791,13 @@ app.delete("/guests/:id", (req, res) => {
         [guest.stay_id],
         (countErr, countRow) => {
           if (countErr) {
-            console.error("Erro ao validar titulares antes da remoção:", countErr);
+            console.error("Erro ao validar titulares antes da remoÃ§Ã£o:", countErr);
             return res.status(500).json({ error: "Erro no banco ao validar titulares" });
           }
 
           if (Number(countRow?.main_guest_count || 0) <= 1) {
             return res.status(400).json({
-              error: "Não é possível deixar a stay sem hóspede titular."
+              error: "NÃ£o Ã© possÃ­vel deixar a stay sem hÃ³spede titular."
             });
           }
 
@@ -1788,7 +1832,7 @@ app.put("/guests/:id", (req, res) => {
   } = req.body;
 
   if (!full_name) {
-    return res.status(400).json({ error: "Nome completo é obrigatório" });
+    return res.status(400).json({ error: "Nome completo Ã© obrigatÃ³rio" });
   }
 
   const fullName = String(full_name || "").trim();
@@ -1812,44 +1856,44 @@ app.put("/guests/:id", (req, res) => {
   const isAdultValue = Number(is_adult) === 1 ? 1 : 0;
 
   if (!cpfClean) {
-    return res.status(400).json({ error: "CPF é obrigatório" });
+    return res.status(400).json({ error: "CPF Ã© obrigatÃ³rio" });
   }
 
   if (!isValidCPF(cpfClean)) {
     return res.status(400).json({
-      error: "CPF inválido"
+      error: "CPF invÃ¡lido"
     });
   }
 
   if (!birthDateClean) {
-    return res.status(400).json({ error: "Data de nascimento é obrigatória" });
+    return res.status(400).json({ error: "Data de nascimento Ã© obrigatÃ³ria" });
   }
   if (birthDateClean && !isValidBirthDate(birthDateClean)) {
-    return res.status(400).json({ error: "Data de nascimento inválida" });
+    return res.status(400).json({ error: "Data de nascimento invÃ¡lida" });
   }
 
   if (!isMainGuestProvided) {
-    return res.status(400).json({ error: "Tipo do hóspede é obrigatório" });
+    return res.status(400).json({ error: "Tipo do hÃ³spede Ã© obrigatÃ³rio" });
   }
 
   if (!cidadeIdClean) {
-    return res.status(400).json({ error: "cidade_id é obrigatório" });
+    return res.status(400).json({ error: "cidade_id Ã© obrigatÃ³rio" });
   }
 
   if (!estadoIdClean) {
-    return res.status(400).json({ error: "estado_id é obrigatório" });
+    return res.status(400).json({ error: "estado_id Ã© obrigatÃ³rio" });
   }
 
   if (generoIdClean && !VALID_GENERO_IDS.includes(generoIdClean)) {
-    return res.status(400).json({ error: "Gênero inválido" });
+    return res.status(400).json({ error: "GÃªnero invÃ¡lido" });
   }
 
   if (racaIdClean && !VALID_RACA_IDS.includes(racaIdClean)) {
-    return res.status(400).json({ error: "Raça/Cor inválida" });
+    return res.status(400).json({ error: "RaÃ§a/Cor invÃ¡lida" });
   }
 
   if (deficienciaIdClean && !VALID_DEFICIENCIA_IDS.includes(deficienciaIdClean)) {
-    return res.status(400).json({ error: "Informação de deficiência inválida" });
+    return res.status(400).json({ error: "InformaÃ§Ã£o de deficiÃªncia invÃ¡lida" });
   }
   db.get(
     `SELECT guests.*, stays.property_id
@@ -1859,12 +1903,12 @@ app.put("/guests/:id", (req, res) => {
     [guestId, PROPERTY_ID],
     (err, guest) => {
       if (err) {
-        console.error("Erro ao buscar hóspede para edição:", err);
-        return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+        console.error("Erro ao buscar hÃ³spede para ediÃ§Ã£o:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar hÃ³spede" });
       }
 
       if (!guest) {
-        return res.status(404).json({ error: "Hóspede não encontrado" });
+        return res.status(404).json({ error: "HÃ³spede nÃ£o encontrado" });
       }
 
       db.get(
@@ -1874,11 +1918,11 @@ app.put("/guests/:id", (req, res) => {
         (duplicateErr, duplicateGuest) => {
           if (duplicateErr) {
             console.error("Erro ao validar CPF duplicado:", duplicateErr);
-            return res.status(500).json({ error: "Erro no banco ao validar hóspede" });
+            return res.status(500).json({ error: "Erro no banco ao validar hÃ³spede" });
           }
 
           if (cpfClean && duplicateGuest) {
-            return res.status(400).json({ error: "Já existe um hóspede com este CPF na mesma stay" });
+            return res.status(400).json({ error: "JÃ¡ existe um hÃ³spede com este CPF na mesma stay" });
           }
 
           const executeUpdate = () => {
@@ -1909,12 +1953,12 @@ app.put("/guests/:id", (req, res) => {
               ],
               function (updateErr) {
                 if (updateErr) {
-                  console.error("Erro ao editar hóspede:", updateErr);
-                  return res.status(500).json({ error: "Erro ao editar hóspede" });
+                  console.error("Erro ao editar hÃ³spede:", updateErr);
+                  return res.status(500).json({ error: "Erro ao editar hÃ³spede" });
                 }
 
                 return res.json({
-                  message: "Hóspede atualizado com sucesso",
+                  message: "HÃ³spede atualizado com sucesso",
                   guest_id: Number(guestId)
                 });
               }
@@ -1929,13 +1973,13 @@ app.put("/guests/:id", (req, res) => {
               [guest.stay_id],
               (countErr, countRow) => {
                 if (countErr) {
-                  console.error("Erro ao validar titulares antes da edição:", countErr);
+                  console.error("Erro ao validar titulares antes da ediÃ§Ã£o:", countErr);
                   return res.status(500).json({ error: "Erro no banco ao validar titulares" });
                 }
 
                 if (Number(countRow?.main_guest_count || 0) <= 1) {
                   return res.status(400).json({
-                    error: "Não é possível deixar a stay sem hóspede titular."
+                    error: "NÃ£o Ã© possÃ­vel deixar a stay sem hÃ³spede titular."
                   });
                 }
 
@@ -1955,8 +1999,8 @@ app.put("/guests/:id", (req, res) => {
 
 app.post("/stays/:id/send-fnrh", (req, res) => {
   const stayId = req.params.id;
-  const quantidadeHospedeAdultoFromRequest = Math.max(1, Number(req.body?.quantidade_hospede_adulto) || 1);
-  const quantidadeHospedeMenorFromRequest = Math.max(0, Number(req.body?.quantidade_hospede_menor) || 0);
+  const quantidadeHospedeAdultoFromRequest = req.body?.quantidade_hospede_adulto;
+  const quantidadeHospedeMenorFromRequest = req.body?.quantidade_hospede_menor;
 
   db.get(
     `SELECT * FROM stays
@@ -1969,7 +2013,7 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
       }
 
       if (!stay) {
-        return res.status(404).json({ error: "Stay não encontrada" });
+        return res.status(404).json({ error: "Stay nao encontrada" });
       }
 
       db.all(
@@ -1979,38 +2023,149 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
         [stayId],
         async (err, guests) => {
           if (err) {
-            console.error("Erro ao buscar hóspedes:", err);
-            return res.status(500).json({ error: "Erro no banco ao buscar hóspedes" });
+            console.error("Erro ao buscar hospedes:", err);
+            return res.status(500).json({ error: "Erro no banco ao buscar hospedes" });
           }
 
-          if (!guests || !guests.length) {
-            return res.status(400).json({ error: "Stay sem hóspedes para envio" });
-          }
-
-          const missingMainGuest = !guests.some((g) => g.is_main_guest);
+          const safeGuests = Array.isArray(guests) ? guests : [];
+          const hasGuests = safeGuests.length > 0;
+          const missingMainGuest = hasGuests && !safeGuests.some((g) => g.is_main_guest);
           if (missingMainGuest) {
-            return res.status(400).json({ error: "Nenhum hóspede titular encontrado na stay" });
+            return res.status(400).json({ error: "Nenhum hospede titular encontrado na stay" });
           }
 
+          const quantidadeHospedeAdulto = Math.max(
+            1,
+            Number(quantidadeHospedeAdultoFromRequest ?? stay.quantidade_hospede_adulto) || 1
+          );
+          const quantidadeHospedeMenor = Math.max(
+            0,
+            Number(quantidadeHospedeMenorFromRequest ?? stay.quantidade_hospede_menor) || 0
+          );
           const stayWithGuestCounts = {
             ...stay,
-            quantidade_hospede_adulto: quantidadeHospedeAdultoFromRequest,
-            quantidade_hospede_menor: quantidadeHospedeMenorFromRequest
+            quantidade_hospede_adulto: quantidadeHospedeAdulto,
+            quantidade_hospede_menor: quantidadeHospedeMenor
           };
           const payload = useMinimalPayload
-            ? buildFNRHPayloadMinimal(stayWithGuestCounts, guests)
-            : buildFNRHPayload(stayWithGuestCounts, guests);
-          const guestIds = guests.map((g) => g.id);
-          const guestCountSent = Array.isArray(payload?.dados_hospede) ? payload.dados_hospede.length : guests.length;
+            ? buildFNRHPayloadMinimal(stayWithGuestCounts, safeGuests)
+            : buildFNRHPayload(stayWithGuestCounts, safeGuests);
+          const guestIds = safeGuests.map((g) => g.id);
+          const guestCountSent = Array.isArray(payload?.dados_hospede) ? payload.dados_hospede.length : safeGuests.length;
+
+          console.log("[FNRH] send-fnrh stay:", stay.id);
+          console.log("[FNRH] send-fnrh quantidade adultos:", quantidadeHospedeAdulto);
+          console.log("[FNRH] send-fnrh quantidade menores:", quantidadeHospedeMenor);
+          console.log("[FNRH] send-fnrh com hospedes:", hasGuests ? "sim" : "nao");
+
+          const persistSuccessResult = (result, guestCountConfirmed) => {
+            const successMessage = guestCountSent === guestCountConfirmed
+              ? "Envio concluido com todos os hospedes confirmados"
+              : "Envio concluido com confirmacao parcial de hospedes";
+
+            updateStayLastFNRHResult(
+              stay.id,
+              "success",
+              successMessage,
+              guestCountSent,
+              guestCountConfirmed,
+              (stayUpdateErr) => {
+                if (stayUpdateErr) {
+                  console.error("Erro ao salvar ultimo envio FNRH da stay:", stayUpdateErr);
+                  return res.json({
+                    message: "Stay enviada para FNRH com sucesso",
+                    stay_id: stay.id,
+                    fnrh_mode: process.env.FNRH_MODE || "mock",
+                    response_status: result.status,
+                    response_body: result.body,
+                    local_persistence_warning: "Falhou ao salvar status consolidado local da stay"
+                  });
+                }
+
+                persistFNRHReturnData(stay.id, safeGuests, result.body, (persistErr) => {
+                  if (persistErr) {
+                    console.error("Erro ao persistir identificadores retornados pela FNRH apos envio bem-sucedido:", persistErr);
+                    return res.json({
+                      message: "Stay enviada para FNRH com sucesso",
+                      stay_id: stay.id,
+                      fnrh_mode: process.env.FNRH_MODE || "mock",
+                      response_status: result.status,
+                      response_body: result.body,
+                      local_persistence_warning: "Envio externo concluido, mas falhou ao salvar identificadores retornados pela FNRH"
+                    });
+                  }
+
+                  return res.json({
+                    message: "Stay enviada para FNRH com sucesso",
+                    stay_id: stay.id,
+                    fnrh_mode: process.env.FNRH_MODE || "mock",
+                    response_status: result.status,
+                    response_body: result.body
+                  });
+                });
+              }
+            );
+          };
+
+          const persistErrorResult = (result) => {
+            const errorMessage = String(
+              result.body?.error ||
+              result.body?.message ||
+              "Falha no envio para FNRH"
+            ).trim();
+
+            updateStayLastFNRHResult(stay.id, "error", errorMessage, guestCountSent, 0, (stayUpdateErr) => {
+              if (stayUpdateErr) {
+                console.error("Erro ao salvar falha FNRH da stay:", stayUpdateErr);
+              }
+
+              return res.status(502).json({
+                error: "Falha no envio para FNRH",
+                stay_id: stay.id,
+                fnrh_mode: process.env.FNRH_MODE || "mock",
+                response_status: result.status,
+                response_body: result.body
+              });
+            });
+          };
+
+          const persistSendErrorResult = (sendErr) => {
+            const errorMessage = String(
+              sendErr.fnrhBody?.error ||
+              sendErr.message ||
+              "Erro interno ao enviar para FNRH"
+            ).trim();
+
+            updateStayLastFNRHResult(stay.id, "error", errorMessage, guestCountSent, 0, (stayUpdateErr) => {
+              if (stayUpdateErr) {
+                console.error("Erro ao salvar erro FNRH da stay:", stayUpdateErr);
+              }
+
+              return res.status(500).json({
+                error: sendErr.message || "Erro interno ao enviar para FNRH",
+                stay_id: stay.id,
+                fnrh_mode: process.env.FNRH_MODE || "mock",
+                response_status: sendErr.fnrhStatus ?? null,
+                response_body: sendErr.fnrhBody || null
+              });
+            });
+          };
 
           try {
             const result = await sendToFNRH(payload);
             const guestCountConfirmed = Array.isArray(result.body?.dados_hospedes) ? result.body.dados_hospedes.length : 0;
+            const returnedLink = String(result.body?.dados?.reserva?.link_precheckin || "").trim();
+
+            console.log("[FNRH] send-fnrh link_precheckin retornado:", returnedLink || "(vazio)");
 
             if (result.ok) {
-              updateGuestsFNRHStatus(guestIds, "sent", "sent_to_fnrh", (updateErr) => {
+              if (!guestIds.length) {
+                return persistSuccessResult(result, guestCountConfirmed);
+              }
+
+              return updateGuestsFNRHStatus(guestIds, "sent", "sent_to_fnrh", (updateErr) => {
                 if (updateErr) {
-                  console.error("Erro ao atualizar status FNRH dos hóspedes:", updateErr);
+                  console.error("Erro ao atualizar status FNRH dos hospedes:", updateErr);
                   updateStayLastFNRHResult(
                     stay.id,
                     "error",
@@ -2019,7 +2174,7 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
                     0,
                     (stayUpdateErr) => {
                       if (stayUpdateErr) {
-                        console.error("Erro ao salvar falha local após envio FNRH:", stayUpdateErr);
+                        console.error("Erro ao salvar falha local apos envio FNRH:", stayUpdateErr);
                       }
 
                       return res.status(500).json({
@@ -2030,107 +2185,34 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
                   return;
                 }
 
-                const successMessage = guestCountSent === guestCountConfirmed
-                  ? "Envio concluído com todos os hóspedes confirmados"
-                  : "Envio concluído com confirmação parcial de hóspedes";
-
-                updateStayLastFNRHResult(
-                  stay.id,
-                  "success",
-                  successMessage,
-                  guestCountSent,
-                  guestCountConfirmed,
-                  (stayUpdateErr) => {
-                    if (stayUpdateErr) {
-                      console.error("Erro ao salvar último envio FNRH da stay:", stayUpdateErr);
-                      return res.json({
-                        message: "Stay enviada para FNRH com sucesso",
-                        stay_id: stay.id,
-                        fnrh_mode: process.env.FNRH_MODE || "mock",
-                        response_status: result.status,
-                        response_body: result.body,
-                        local_persistence_warning: "Falhou ao salvar status consolidado local da stay"
-                      });
-                    }
-
-                    persistFNRHReturnData(stay.id, guests, result.body, (persistErr) => {
-                      if (persistErr) {
-                        console.error("Erro ao persistir identificadores retornados pela FNRH após envio bem-sucedido:", persistErr);
-                        return res.json({
-                          message: "Stay enviada para FNRH com sucesso",
-                          stay_id: stay.id,
-                          fnrh_mode: process.env.FNRH_MODE || "mock",
-                          response_status: result.status,
-                          response_body: result.body,
-                          local_persistence_warning: "Envio externo concluído, mas falhou ao salvar identificadores retornados pela FNRH"
-                        });
-                      }
-
-                      return res.json({
-                        message: "Stay enviada para FNRH com sucesso",
-                        stay_id: stay.id,
-                        fnrh_mode: process.env.FNRH_MODE || "mock",
-                        response_status: result.status,
-                        response_body: result.body
-                      });
-                    });
-                  }
-                );
-              });
-            } else {
-              updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
-                if (updateErr) {
-                  console.error("Erro ao marcar falha FNRH:", updateErr);
-                }
-
-                const errorMessage = String(
-                  result.body?.error ||
-                  result.body?.message ||
-                  "Falha no envio para FNRH"
-                ).trim();
-
-                updateStayLastFNRHResult(stay.id, "error", errorMessage, guestCountSent, 0, (stayUpdateErr) => {
-                  if (stayUpdateErr) {
-                    console.error("Erro ao salvar falha FNRH da stay:", stayUpdateErr);
-                  }
-
-                  return res.status(502).json({
-                    error: "Falha no envio para FNRH",
-                    stay_id: stay.id,
-                    fnrh_mode: process.env.FNRH_MODE || "mock",
-                    response_status: result.status,
-                    response_body: result.body
-                  });
-                });
+                return persistSuccessResult(result, guestCountConfirmed);
               });
             }
+
+            if (!guestIds.length) {
+              return persistErrorResult(result);
+            }
+
+            return updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
+              if (updateErr) {
+                console.error("Erro ao marcar falha FNRH:", updateErr);
+              }
+
+              return persistErrorResult(result);
+            });
           } catch (sendErr) {
             console.error("Erro ao enviar para FNRH:", sendErr);
 
-            updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
+            if (!guestIds.length) {
+              return persistSendErrorResult(sendErr);
+            }
+
+            return updateGuestsFNRHStatus(guestIds, "error", "validated", (updateErr) => {
               if (updateErr) {
                 console.error("Erro ao marcar status de erro FNRH:", updateErr);
               }
 
-              const errorMessage = String(
-                sendErr.fnrhBody?.error ||
-                sendErr.message ||
-                "Erro interno ao enviar para FNRH"
-              ).trim();
-
-              updateStayLastFNRHResult(stay.id, "error", errorMessage, guestCountSent, 0, (stayUpdateErr) => {
-                if (stayUpdateErr) {
-                  console.error("Erro ao salvar erro FNRH da stay:", stayUpdateErr);
-                }
-
-                return res.status(500).json({
-                  error: sendErr.message || "Erro interno ao enviar para FNRH",
-                  stay_id: stay.id,
-                  fnrh_mode: process.env.FNRH_MODE || "mock",
-                  response_status: sendErr.fnrhStatus ?? null,
-                  response_body: sendErr.fnrhBody || null
-                });
-              });
+              return persistSendErrorResult(sendErr);
             });
           }
         }
@@ -2142,3 +2224,4 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
+
