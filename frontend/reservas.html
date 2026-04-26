@@ -709,6 +709,16 @@
             <label for="staySearchInput">Buscar reserva</label>
             <input id="staySearchInput" placeholder="Código, referência ou origem">
           </div>
+          <div class="field">
+            <label for="filterDate">Data operacional</label>
+            <input type="date" id="filterDate">
+          </div>
+          <div class="button-row" id="dateFilterButtons" style="margin-bottom:12px;">
+            <button type="button" data-filter="checkin" class="secondary">Entradas</button>
+            <button type="button" data-filter="inhouse" class="secondary">Hospedados</button>
+            <button type="button" data-filter="checkout" class="secondary">Saídas</button>
+            <button type="button" data-filter="all">Todas</button>
+          </div>
           <div id="listStatus" class="status-line">Carregando reservas...</div>
           <div id="stayList" class="list"></div>
         </div>
@@ -755,6 +765,10 @@
               <div class="field">
                 <label for="internalNameInput">Nome / referência interna</label>
                 <input id="internalNameInput" placeholder="Opcional">
+              </div>
+              <div class="field">
+                <label for="reservationWhatsappInput">WhatsApp da reserva</label>
+                <input id="reservationWhatsappInput" placeholder="(DDD) número" inputmode="tel">
               </div>
               <div class="field">
                 <label for="dataEntradaInput">Data de entrada</label>
@@ -875,6 +889,27 @@
                 <button id="guestFnrhCheckoutBtn" type="button" class="secondary">Check-out FNRH</button>
               </div>
             </div>
+
+            <details id="internalGuestChecklist" class="guest-optional-box" style="margin-top:16px;">
+              <summary>
+                <span>Lista interna de hóspedes</span>
+              </summary>
+              <div class="guest-optional-body">
+                <div class="muted">Marque quem já preencheu a FNRH.</div>
+                <div id="internalGuestChecklistCount" class="guest-inline-summary">0/0 preenchidos</div>
+                <div class="field">
+                  <label for="internalGuestChecklistInput">Nomes da lista</label>
+                  <textarea id="internalGuestChecklistInput" placeholder="Digite um nome por linha. Ex:
+Pax 1
+Pax 2
+João Silva"></textarea>
+                </div>
+                <div class="button-row">
+                  <button id="saveInternalGuestChecklistBtn" type="button" class="secondary">Salvar lista</button>
+                </div>
+                <div id="internalGuestChecklistItems" class="stack"></div>
+              </div>
+            </details>
           </div>
         </div>
       </section>
@@ -886,6 +921,8 @@
     const API_BASE = window.getApiBase();
     const ACTIVE_STAY_STORAGE_KEY = "reservas.activeStayId";
     const STAY_UI_META_STORAGE_KEY = "reservas.stayUiMeta";
+    const INTERNAL_GUEST_CHECKLIST_STORAGE_KEY_PREFIX = "fnrh_guest_checklist_";
+    const RESERVATION_PHONE_STORAGE_KEY_PREFIX = "fnrh_reservation_phone_";
     const DEFAULT_GUEST_ESTADO_ID = "SP";
     const DEFAULT_GUEST_CIDADE_ID = "3550308";
 
@@ -895,6 +932,7 @@
     let selectedGuests = [];
     let isCreatingStay = false;
     let staySearchTerm = "";
+    let currentDateFilter = "all";
     let stayGuestCountsById = {};
     let isSendingFnrh = false;
     let isCheckingInGuestFnrh = false;
@@ -916,6 +954,49 @@
       } catch {
         return {};
       }
+    }
+
+    function getInternalGuestChecklistStorageKey(stayId) {
+      return `${INTERNAL_GUEST_CHECKLIST_STORAGE_KEY_PREFIX}${stayId}`;
+    }
+
+    function getReservationPhoneStorageKey(stayId) {
+      return `${RESERVATION_PHONE_STORAGE_KEY_PREFIX}${stayId}`;
+    }
+
+    function getStoredReservationPhone(stayId) {
+      if (!stayId) return "";
+      return cleanPhone(localStorage.getItem(getReservationPhoneStorageKey(stayId)) || "");
+    }
+
+    function saveStoredReservationPhone(stayId, phone) {
+      if (!stayId) return;
+      localStorage.setItem(getReservationPhoneStorageKey(stayId), cleanPhone(phone));
+    }
+
+    function getStoredInternalGuestChecklist(stayId) {
+      if (!stayId) return [];
+
+      try {
+        const parsed = JSON.parse(localStorage.getItem(getInternalGuestChecklistStorageKey(stayId)) || "[]");
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+
+        return parsed
+          .map((item) => ({
+            name: String(item?.name || "").trim(),
+            checked: Boolean(item?.checked)
+          }))
+          .filter((item) => item.name);
+      } catch {
+        return [];
+      }
+    }
+
+    function saveStoredInternalGuestChecklist(stayId, items) {
+      if (!stayId) return;
+      localStorage.setItem(getInternalGuestChecklistStorageKey(stayId), JSON.stringify(items));
     }
 
     function getStayUiMeta(stayId) {
@@ -988,7 +1069,11 @@
         : null;
 
       if (!response.ok) {
-        throw new Error(data?.error || data?.message || `Erro ${response.status}`);
+        const apiMessage = data?.error?.message || data?.error || data?.message || `Erro ${response.status}`;
+        const error = new Error(getFriendlyFnrhMessage(apiMessage));
+        error.apiMessage = apiMessage;
+        error.isFnrhDuplicate = isFnrhDuplicateMessage(apiMessage);
+        throw error;
       }
 
       return data;
@@ -1010,8 +1095,52 @@
       return `${formatDate(stay?.data_entrada)} -> ${formatDate(stay?.data_saida)}`;
     }
 
+    function getTodayDateValue() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      const day = String(today.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
     function onlyDigits(value) {
       return String(value || "").replace(/\D/g, "");
+    }
+
+    function formatPhone(value) {
+      const numbers = (value || "").replace(/\D/g, "").slice(0, 11);
+
+      if (numbers.length <= 2) {
+        return numbers;
+      }
+
+      if (numbers.length <= 7) {
+        return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+      }
+
+      return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+    }
+
+    function cleanPhone(value) {
+      return (value || "").replace(/\D/g, "");
+    }
+
+    function getWhatsappPhoneValue() {
+      return cleanPhone(document.getElementById("reservationWhatsappInput")?.value || "");
+    }
+
+    function normalizeWhatsappPhone(value) {
+      let normalized = cleanPhone(value).replace(/^0+/, "");
+
+      if (!normalized) {
+        return "";
+      }
+
+      if (!normalized.startsWith("55")) {
+        normalized = `55${normalized}`;
+      }
+
+      return normalized;
     }
 
     function formatCPF(value) {
@@ -1074,12 +1203,17 @@
       };
     }
 
-    function normalizeMatchText(value) {
-      return String(value || "")
-        .trim()
+    function normalize(text) {
+      return (text || "")
+        .toString()
         .toLowerCase()
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function normalizeMatchText(value) {
+      return normalize(value)
+        .trim()
         .replace(/\s+/g, " ");
     }
 
@@ -1092,21 +1226,182 @@
         .replace(/'/g, "&#039;");
     }
 
+    function isFnrhDuplicateMessage(message) {
+      return normalizeMatchText(message).includes("ja existe uma reserva com o codigo informado");
+    }
+
+    function getFriendlyFnrhMessage(message) {
+      if (isFnrhDuplicateMessage(message)) {
+        return "Reserva já existe na FNRH com este código.";
+      }
+
+      return String(message || "").trim();
+    }
+
+    function getFnrhStatusMeta(stay) {
+      const rawStatus = String(stay?.fnrh_last_status || "").trim();
+      const rawMessage = String(stay?.fnrh_last_message || "").trim();
+      const isDuplicate = rawStatus === "error" && isFnrhDuplicateMessage(rawMessage);
+
+      if (isDuplicate) {
+        return {
+          label: "Duplicada",
+          tone: "error",
+          message: getFriendlyFnrhMessage(rawMessage)
+        };
+      }
+
+      return {
+        label: rawStatus || "pendente",
+        tone: rawStatus === "success" ? "success" : rawStatus === "error" ? "error" : "pending",
+        message: rawMessage
+      };
+    }
+
+    function updateInternalGuestChecklistCount(items) {
+      const countElement = document.getElementById("internalGuestChecklistCount");
+      if (!countElement) return;
+
+      const total = Array.isArray(items) ? items.length : 0;
+      const checkedCount = Array.isArray(items) ? items.filter((item) => item.checked).length : 0;
+      countElement.textContent = `${checkedCount}/${total} preenchidos`;
+    }
+
+    function renderInternalGuestChecklist(items) {
+      const listElement = document.getElementById("internalGuestChecklistItems");
+      if (!listElement) return;
+
+      if (!items.length) {
+        listElement.innerHTML = `<div class="muted">Nenhum hóspede listado.</div>`;
+        updateInternalGuestChecklistCount([]);
+        return;
+      }
+
+      listElement.innerHTML = items
+        .map((item, index) => `
+          <label class="checkbox-row">
+            <input type="checkbox" data-checklist-index="${index}" ${item.checked ? "checked" : ""}>
+            <span>${escapeHtml(item.name)}</span>
+          </label>
+        `)
+        .join("");
+
+      updateInternalGuestChecklistCount(items);
+    }
+
+    function loadInternalGuestChecklist() {
+      const textarea = document.getElementById("internalGuestChecklistInput");
+      const details = document.getElementById("internalGuestChecklist");
+      if (!textarea || !details) return;
+
+      details.open = false;
+
+      if (!selectedStay?.id) {
+        textarea.value = "";
+        renderInternalGuestChecklist([]);
+        return;
+      }
+
+      const items = getStoredInternalGuestChecklist(selectedStay.id);
+      textarea.value = items.map((item) => item.name).join("\n");
+      renderInternalGuestChecklist(items);
+    }
+
+    function saveInternalGuestChecklistFromTextarea() {
+      if (!selectedStay?.id) {
+        return;
+      }
+
+      const textarea = document.getElementById("internalGuestChecklistInput");
+      const existingItems = getStoredInternalGuestChecklist(selectedStay.id);
+      const existingCheckedByName = new Map(existingItems.map((item) => [item.name, item.checked]));
+      const items = String(textarea?.value || "")
+        .split(/\r?\n/)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean)
+        .map((name) => ({
+          name,
+          checked: existingCheckedByName.get(name) || false
+        }));
+
+      saveStoredInternalGuestChecklist(selectedStay.id, items);
+      renderInternalGuestChecklist(items);
+    }
+
+    function updateInternalGuestChecklistItem(index, checked) {
+      if (!selectedStay?.id) {
+        return;
+      }
+
+      const items = getStoredInternalGuestChecklist(selectedStay.id);
+      if (!items[index]) {
+        return;
+      }
+
+      items[index].checked = !!checked;
+      saveStoredInternalGuestChecklist(selectedStay.id, items);
+      updateInternalGuestChecklistCount(items);
+    }
+
+    function getDateFilterValue() {
+      return normalizeDateValue(document.getElementById("filterDate")?.value);
+    }
+
+    function matchesCurrentDateFilter(stay) {
+      if (currentDateFilter === "all") {
+        return true;
+      }
+
+      const selectedDate = getDateFilterValue();
+      const entrada = normalizeDateValue(stay?.data_entrada);
+      const saida = normalizeDateValue(stay?.data_saida);
+
+      if (!selectedDate || !entrada || !saida) {
+        return false;
+      }
+
+      if (currentDateFilter === "checkin") {
+        return entrada === selectedDate;
+      }
+
+      if (currentDateFilter === "checkout") {
+        return saida === selectedDate;
+      }
+
+      if (currentDateFilter === "inhouse") {
+        return entrada <= selectedDate && saida > selectedDate;
+      }
+
+      return true;
+    }
+
+    function updateDateFilterButtons() {
+      document.querySelectorAll("#dateFilterButtons [data-filter]").forEach((button) => {
+        const isActive = button.dataset.filter === currentDateFilter;
+        button.classList.toggle("secondary", !isActive);
+      });
+    }
+
     function getReservationStateMessages() {
       const messages = [];
       const hasGuest = !!getMainGuest();
       const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
+      const fnrhStatus = getFnrhStatusMeta(selectedStay);
 
       if (!hasGuest) {
         messages.push({ text: "Sem h\u00f3spede cadastrado", tone: "pending" });
       } else if (selectedStay?.fnrh_last_status === "success") {
         messages.push({ text: "Enviado para FNRH", tone: "success" });
+      } else if (selectedStay?.fnrh_last_status === "error" && fnrhStatus.label === "Duplicada") {
+        messages.push({ text: "Reserva já existe na FNRH", tone: "error" });
       } else {
         messages.push({ text: "Pronto para envio", tone: "success" });
       }
 
       if (officialLink) {
         messages.push({ text: "Link oficial dispon\u00edvel", tone: "success" });
+      } else if (fnrhStatus.message && selectedStay?.fnrh_last_status === "error") {
+        messages.push({ text: fnrhStatus.message, tone: "error" });
       }
 
       return messages;
@@ -1315,14 +1610,14 @@
       const container = document.getElementById("stayList");
       container.innerHTML = "";
       const filteredStays = stays.filter((stay) => {
-        if (!staySearchTerm) return true;
         const stayMeta = getStayUiMeta(stay.id);
-        const haystack = normalizeMatchText([
-          stay.reservation_id,
-          stayMeta.internal_name,
-          stayMeta.origem_reserva_id
-        ].join(" "));
-        return haystack.includes(staySearchTerm);
+        const textMatch = !staySearchTerm || (
+          normalize(stay.reservation_id || "").includes(staySearchTerm) ||
+          normalize(stayMeta.internal_name || "").includes(staySearchTerm) ||
+          normalize(stayMeta.ota_code || "").includes(staySearchTerm)
+        );
+        const dateMatch = matchesCurrentDateFilter(stay);
+        return textMatch && dateMatch;
       });
 
       if (!stays.length) {
@@ -1343,22 +1638,17 @@
         const card = document.createElement("div");
         card.className = "card" + (String(stay.id) === String(selectedStayId) ? " active" : "");
         const stayMeta = getStayUiMeta(stay.id);
-        const statusLabel = stay.fnrh_last_status || "pendente";
-        const statusVariant = stay.fnrh_last_status === "success"
-          ? "success"
-          : stay.fnrh_last_status === "error"
-            ? "error"
-            : "pending";
+        const fnrhStatus = getFnrhStatusMeta(stay);
         card.innerHTML = `
           <div class="card-title">Reserva ${stay.reservation_id || "-"}</div>
           <div class="status-inline" style="margin-bottom:8px;">
-            <span class="status-badge ${statusVariant}">${statusLabel}</span>
+            <span class="status-badge ${fnrhStatus.tone}">${escapeHtml(fnrhStatus.label)}</span>
           </div>
           <div class="card-meta">
             <div><strong>Nome:</strong> ${escapeHtml(stayMeta.internal_name || "-")}</div>
             <div><strong>Origem:</strong> ${stayMeta.origem_reserva_id}</div>
             <div><strong>Datas:</strong> ${formatDateRange(stay)}</div>
-            <div>${stay.fnrh_last_message || "Aguardando envio para FNRH."}</div>
+            <div>${escapeHtml(fnrhStatus.message || "Aguardando envio para FNRH.")}</div>
           </div>
         `;
         card.addEventListener("click", () => {
@@ -1374,6 +1664,7 @@
       document.getElementById("originInput").value = stayMeta.origem_reserva_id || "MEIOHOSPEDAGEM";
       document.getElementById("otaCodeInput").value = stayMeta.ota_code || "";
       document.getElementById("internalNameInput").value = stayMeta.internal_name || "";
+      document.getElementById("reservationWhatsappInput").value = formatPhone(getStoredReservationPhone(stay?.id));
       document.getElementById("reservationIdInput").value = stay?.reservation_id || "";
       document.getElementById("dataEntradaInput").value = normalizeDateValue(stay?.data_entrada);
       document.getElementById("dataSaidaInput").value = normalizeDateValue(stay?.data_saida);
@@ -1389,6 +1680,7 @@
       document.getElementById("originInput").value = "MEIOHOSPEDAGEM";
       document.getElementById("otaCodeInput").value = "";
       document.getElementById("internalNameInput").value = "";
+      document.getElementById("reservationWhatsappInput").value = "";
       document.getElementById("reservationIdInput").value = "";
       document.getElementById("dataEntradaInput").value = "";
       document.getElementById("dataSaidaInput").value = "";
@@ -1436,12 +1728,9 @@
       const hasStay = !!selectedStay?.id;
       const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
       const sendButton = document.getElementById("sendFnrhBtn");
-      const statusLabel = selectedStay?.fnrh_last_status || "pendente";
-      const statusVariant = selectedStay?.fnrh_last_status === "success"
-        ? "success"
-        : selectedStay?.fnrh_last_status === "error"
-          ? "error"
-          : "pending";
+      const whatsappButton = document.getElementById("copyWhatsappMessageBtn");
+      const hasReservationWhatsapp = getWhatsappPhoneValue().length >= 10;
+      const fnrhStatus = getFnrhStatusMeta(selectedStay);
       sendButton.disabled = !hasStay || isSendingFnrh;
       sendButton.textContent = isSendingFnrh
         ? "Enviando..."
@@ -1449,7 +1738,8 @@
           ? "Reenviar para FNRH"
           : "Enviar para FNRH";
       document.getElementById("copyFnrhLinkBtn").disabled = !officialLink;
-      document.getElementById("copyWhatsappMessageBtn").disabled = !officialLink;
+      whatsappButton.disabled = !officialLink;
+      whatsappButton.textContent = hasReservationWhatsapp ? "Enviar WhatsApp" : "Copiar mensagem WhatsApp";
       document.getElementById("openFnrhLinkBtn").disabled = !officialLink;
       document.getElementById("showQrBtn").disabled = !officialLink;
       const linkBox = document.getElementById("fnrhLinkBox");
@@ -1459,8 +1749,8 @@
       if (selectedStay?.fnrh_last_status || selectedStay?.fnrh_last_message) {
         document.getElementById("fnrhStatusLine").innerHTML = `
           <div class="status-inline">
-            <span class="status-badge ${statusVariant}">${statusLabel}</span>
-            <span>${selectedStay?.fnrh_last_message || "-"}</span>
+            <span class="status-badge ${fnrhStatus.tone}">${escapeHtml(fnrhStatus.label)}</span>
+            <span>${escapeHtml(fnrhStatus.message || "-")}</span>
           </div>
         `;
       } else {
@@ -1482,6 +1772,7 @@
       if (!selectedStay && !isCreatingStay) {
         empty.style.display = "block";
         content.style.display = "none";
+        loadInternalGuestChecklist();
         return;
       }
 
@@ -1496,6 +1787,7 @@
       updateActionButtons();
       updateGuestFnrhCheckinControls();
       updateFnrhSectionsVisibility();
+      loadInternalGuestChecklist();
     }
 
     function enterCreateMode() {
@@ -1671,6 +1963,7 @@
         if (data?.stay?.id != null) {
           stayGuestCountsById[String(data.stay.id)] = { adultos: adultCount, menores: minorCount };
           saveStayUiMeta(data.stay.id, uiMeta);
+          saveStoredReservationPhone(data.stay.id, getWhatsappPhoneValue());
         }
         isCreatingStay = false;
         await loadStays(data?.stay?.id || null);
@@ -1711,6 +2004,7 @@
 
         stayGuestCountsById[String(selectedStay.id)] = { adultos: adultCount, menores: minorCount };
         saveStayUiMeta(selectedStay.id, uiMeta);
+        saveStoredReservationPhone(selectedStay.id, getWhatsappPhoneValue());
         setStatus("createStatus", data.message || "Reserva salva com sucesso.", "success");
         await loadStays(selectedStay.id);
       } catch (error) {
@@ -1811,7 +2105,15 @@
         stayGuestCountsById[String(selectedStay.id)] = { adultos: adultCount, menores: minorCount };
         setStatus("actionStatus", data.message || "Envio realizado com sucesso", "success");
       } catch (error) {
-        setStatus("actionStatus", error.message || "Erro ao enviar para FNRH", "error");
+        const friendlyMessage = getFriendlyFnrhMessage(error?.apiMessage || error.message);
+        if (selectedStay) {
+          selectedStay.fnrh_last_status = "error";
+          selectedStay.fnrh_last_message = friendlyMessage;
+          renderReservationStateLine();
+          updateActionButtons();
+          renderStayList();
+        }
+        setStatus("actionStatus", friendlyMessage || "Erro ao enviar para FNRH", "error");
       } finally {
         isSendingFnrh = false;
         await loadStays(selectedStay.id);
@@ -1848,6 +2150,18 @@ Obrigado!`;
       const link = getOfficialFnrhPrecheckinLink(selectedStay);
       if (!link) {
         setStatus("actionStatus", "O link oficial da FNRH ainda não foi gerado para esta reserva.", "warning");
+        return;
+      }
+
+      const reservationWhatsapp = getWhatsappPhoneValue();
+      if (reservationWhatsapp) {
+        if (reservationWhatsapp.length < 10) {
+          setStatus("actionStatus", "Informe um WhatsApp válido da reserva.", "warning");
+          return;
+        }
+
+        const whatsappUrl = `https://wa.me/${normalizeWhatsappPhone(reservationWhatsapp)}?text=${encodeURIComponent(buildWhatsappPrecheckinMessage(link))}`;
+        window.open(whatsappUrl, "_blank");
         return;
       }
 
@@ -1898,6 +2212,8 @@ Obrigado!`;
     }
 
     function initializeReservationsPage() {
+      document.getElementById("filterDate").value = getTodayDateValue();
+      updateDateFilterButtons();
       document.getElementById("newStayBtn").addEventListener("click", enterCreateMode);
       document.getElementById("reloadListBtn").addEventListener("click", () => loadStays(selectedStayId));
       document.getElementById("saveStayBtn").addEventListener("click", saveStay);
@@ -1931,9 +2247,35 @@ Obrigado!`;
       document.getElementById("guestCepInput").addEventListener("blur", () => {
         resolveGuestLocationFromCep(true);
       });
+      document.getElementById("reservationWhatsappInput").addEventListener("input", (event) => {
+        event.target.value = formatPhone(event.target.value);
+        if (selectedStay?.id) {
+          saveStoredReservationPhone(selectedStay.id, event.target.value);
+        }
+        updateActionButtons();
+      });
       document.getElementById("staySearchInput").addEventListener("input", (event) => {
         staySearchTerm = normalizeMatchText(event.target.value);
         renderStayList();
+      });
+      document.getElementById("filterDate").addEventListener("change", () => {
+        renderStayList();
+      });
+      document.querySelectorAll("#dateFilterButtons [data-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          currentDateFilter = button.dataset.filter || "all";
+          updateDateFilterButtons();
+          renderStayList();
+        });
+      });
+      document.getElementById("saveInternalGuestChecklistBtn").addEventListener("click", saveInternalGuestChecklistFromTextarea);
+      document.getElementById("internalGuestChecklistItems").addEventListener("change", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") {
+          return;
+        }
+
+        updateInternalGuestChecklistItem(Number(target.dataset.checklistIndex), target.checked);
       });
       document.getElementById("qrModal").addEventListener("click", (event) => {
         if (event.target.id === "qrModal") {

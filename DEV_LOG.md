@@ -1,3 +1,61 @@
+## [2026-04-26] – Estabilização, UX e Operação
+
+### UI / UX
+- Reorganização da tela `reservas.html`.
+- Separação em:
+  - `ANTES DA FNRH`
+  - `DEPOIS DA FNRH`
+- Remoção de formulário de hóspede principal da tela.
+- Simplificação do fluxo de reserva.
+
+### FNRH
+- Fluxo sem hóspede validado.
+- Geração de link e QR funcionando.
+- Uso do mesmo link para múltiplos hóspedes confirmado.
+- Correção de erro de logradouro via preenchimento por CEP.
+
+### Check-in / Check-out
+- Mantidos no sistema.
+- Dependem de `fnrh_hospede_id`.
+- Limitação da API documentada (sem retorno de status de preenchimento).
+
+### Busca
+- Busca dinâmica por:
+  - número da reserva
+  - nome/referência
+  - código OTA
+- Normalização:
+  - case insensitive
+  - ignore acentos
+
+### Filtros por data
+- Entradas.
+- Hospedados.
+- Saídas.
+- Todas.
+
+### Funcionalidades internas
+- Checklist manual de hóspedes (`localStorage`).
+- Campo de telefone (WhatsApp) por reserva (`localStorage`).
+- Abertura direta do WhatsApp com link + mensagem.
+- Máscara de telefone no input.
+
+### Operação
+- Mensagem padrão de WhatsApp criada.
+- Fluxo de uso validado com recepção.
+- Uso de roomlist como apoio operacional.
+
+### Infra
+- Frontend servido pelo backend (`express.static`).
+- `start-local.bat` criado.
+- Execução sem Live Server.
+
+### Backup
+- Script `backup-sqlite.bat` existente.
+- Backup automatizado via Agendador do Windows (configuração manual).
+
+---
+
 ## [2026-04-25] Beta local operacional + fluxo duplo FNRH validado
 
 ### Contexto
