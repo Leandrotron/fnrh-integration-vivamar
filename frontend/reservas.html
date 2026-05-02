@@ -1806,6 +1806,11 @@ João Silva"></textarea>
     async function loadStays(preferredStayId = null) {
       try {
         stays = await fetchJson(`${API_BASE}/stays`);
+        if (isCreatingStay) {
+          renderStayList();
+          return;
+        }
+
         const persistedStayId = sessionStorage.getItem(ACTIVE_STAY_STORAGE_KEY);
         const stayIdToOpen = preferredStayId ?? selectedStayId ?? persistedStayId;
 
@@ -2211,6 +2216,55 @@ Obrigado!`;
       showQrCode(link);
     }
 
+    function loadPrefillFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const prefill = {
+        codigo: params.get("codigo") || "",
+        nome: params.get("nome") || "",
+        entrada: params.get("entrada") || "",
+        saida: params.get("saida") || "",
+        telefone: params.get("telefone") || ""
+      };
+
+      if (!Object.values(prefill).some((value) => value.trim())) {
+        return;
+      }
+
+      enterCreateMode();
+
+      const setIfEmpty = (elementId, value) => {
+        const element = document.getElementById(elementId);
+        if (!element || element.value.trim() || !value.trim()) {
+          return;
+        }
+        element.value = value.trim();
+      };
+
+      const normalizePrefillDate = (value) => {
+        const trimmed = value.trim();
+        const brazilianDateMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (brazilianDateMatch) {
+          const [, day, month, year] = brazilianDateMatch;
+          return `${year}-${month}-${day}`;
+        }
+        return normalizeDateValue(trimmed);
+      };
+
+      const normalizePrefillPhone = (value) => {
+        let digits = onlyDigits(value);
+        if (digits.length > 11 && digits.startsWith("55")) {
+          digits = digits.slice(2);
+        }
+        return formatPhone(digits);
+      };
+
+      setIfEmpty("reservationIdInput", prefill.codigo);
+      setIfEmpty("internalNameInput", prefill.nome);
+      setIfEmpty("dataEntradaInput", normalizePrefillDate(prefill.entrada));
+      setIfEmpty("dataSaidaInput", normalizePrefillDate(prefill.saida));
+      setIfEmpty("reservationWhatsappInput", normalizePrefillPhone(prefill.telefone));
+    }
+
     function initializeReservationsPage() {
       document.getElementById("filterDate").value = getTodayDateValue();
       updateDateFilterButtons();
@@ -2284,6 +2338,7 @@ Obrigado!`;
       });
 
       updateOriginVisibility();
+      loadPrefillFromQuery();
       loadStays();
     }
 
