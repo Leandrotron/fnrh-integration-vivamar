@@ -571,6 +571,81 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim) {
   };
 }
 
+async function fetchFnrhReservationGuests(fnrhReservaId) {
+  const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
+  const user = String(process.env.FNRH_USER || "").trim();
+  const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+  const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
+  const finalUrl = `${baseUrl}/reservas/${encodeURIComponent(fnrhReservaId)}/hospedes`;
+
+  const missingVars = [
+    !baseUrl && "FNRH_BASE_URL",
+    !user && "FNRH_USER",
+    !apiKey && "FNRH_API_KEY",
+    !cpfSolicitante && "FNRH_CPF_SOLICITANTE"
+  ].filter(Boolean);
+
+  if (missingVars.length) {
+    const configurationError = new Error(
+      `Diagnostico FNRH indisponivel. Faltam as variaveis obrigatorias: ${missingVars.join(", ")}`
+    );
+    configurationError.fnrhStatus = null;
+    configurationError.fnrhBody = { error: configurationError.message };
+    throw configurationError;
+  }
+
+  const authorization = buildBasicAuthorization(user, apiKey);
+  const requestHeaders = {
+    "Content-Type": "application/json",
+    Authorization: authorization,
+    cpf_solicitante: cpfSolicitante
+  };
+  const startedAt = Date.now();
+
+  console.log("[FNRH][debug] reservation guests request url:", finalUrl);
+
+  let response;
+
+  try {
+    response = await fetch(finalUrl, {
+      method: "GET",
+      headers: requestHeaders
+    });
+  } catch (networkError) {
+    const durationMs = Date.now() - startedAt;
+    console.error("[FNRH][debug] reservation guests network error:", {
+      message: networkError.message,
+      duration_ms: durationMs
+    });
+    networkError.fnrhStatus = null;
+    networkError.fnrhBody = {
+      error: networkError.message || "Erro de rede ao consultar hospedes da reserva na FNRH"
+    };
+    throw networkError;
+  }
+
+  const durationMs = Date.now() - startedAt;
+  const text = await response.text();
+  let body;
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+
+  console.log("[FNRH][debug] reservation guests response:", {
+    status: response.status,
+    duration_ms: durationMs
+  });
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
 async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
   const mode = process.env.FNRH_MODE || "mock";
   console.log("[FNRH] guest check-in mode:", mode);
@@ -965,6 +1040,50 @@ app.get("/fnrh/precheckins", async (req, res) => {
       response_body: error.fnrhBody || null
     });
   }
+});
+
+app.get("/api/fnrh/debug/reserva/:id/hospedes", (req, res) => {
+  const stayId = req.params.id;
+
+  db.get(
+    `SELECT id, property_id, reservation_id, fnrh_reserva_id, fnrh_link_precheckin_oficial
+     FROM stays
+     WHERE id = ? AND property_id = ?`,
+    [stayId, PROPERTY_ID],
+    async (err, stay) => {
+      if (err) {
+        console.error("[FNRH][debug] erro ao buscar stay:", err);
+        return res.status(500).json({ error: "Erro no banco ao buscar stay" });
+      }
+
+      if (!stay) {
+        return res.status(404).json({ error: "Stay nao encontrada" });
+      }
+
+      const fnrhReservaId = String(stay.fnrh_reserva_id || "").trim();
+      if (!fnrhReservaId) {
+        return res.status(400).json({
+          error: "Stay sem fnrh_reserva_id para consulta de hospedes na FNRH",
+          stay_id: stay.id
+        });
+      }
+
+      try {
+        const result = await fetchFnrhReservationGuests(fnrhReservaId);
+        return res.status(result.status).json(result.body);
+      } catch (debugErr) {
+        console.error("[FNRH][debug] erro ao consultar hospedes da reserva:", debugErr);
+
+        return res.status(500).json({
+          error: debugErr.message || "Erro interno ao consultar hospedes da reserva na FNRH",
+          stay_id: stay.id,
+          fnrh_reserva_id: fnrhReservaId,
+          response_status: debugErr.fnrhStatus ?? null,
+          response_body: debugErr.fnrhBody || null
+        });
+      }
+    }
+  );
 });
 
 app.get("/checkins", (req, res) => {
