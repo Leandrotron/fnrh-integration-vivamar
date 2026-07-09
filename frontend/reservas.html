@@ -859,9 +859,11 @@
                   <button id="openFnrhLinkBtn" type="button" class="secondary">Abrir link</button>
                   <button id="copyWhatsappMessageBtn" type="button" class="secondary">WhatsApp</button>
                   <button id="showQrBtn" type="button" class="secondary">QR Code</button>
+                  <button id="checkFnrhGuestsStatusBtn" type="button" class="secondary">Consultar status FNRH</button>
                   <span id="copyLinkFeedback" class="copy-feedback" aria-live="polite"></span>
                 </div>
                 <div id="fnrhStatusLine" class="status-line" style="margin-top:12px;">Nenhum envio realizado ainda.</div>
+                <div id="fnrhGuestsStatusLine" class="status-line" style="margin-top:8px;"></div>
               </div>
 
               <div class="after-status">
@@ -935,6 +937,8 @@ João Silva"></textarea>
     let currentDateFilter = "all";
     let stayGuestCountsById = {};
     let isSendingFnrh = false;
+    let isCheckingFnrhReservationGuests = false;
+    let lastAutoFnrhGuestsStatusStayId = null;
     let isCheckingInGuestFnrh = false;
     let guestFnrhCheckinStatusById = {};
     let isCheckingOutGuestFnrh = false;
@@ -1727,6 +1731,7 @@ João Silva"></textarea>
     function updateActionButtons() {
       const hasStay = !!selectedStay?.id;
       const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
+      const hasFnrhReference = !!officialLink || !!String(selectedStay?.fnrh_reserva_id || "").trim();
       const sendButton = document.getElementById("sendFnrhBtn");
       const whatsappButton = document.getElementById("copyWhatsappMessageBtn");
       const hasReservationWhatsapp = getWhatsappPhoneValue().length >= 10;
@@ -1742,6 +1747,9 @@ João Silva"></textarea>
       whatsappButton.textContent = hasReservationWhatsapp ? "Enviar WhatsApp" : "Copiar mensagem WhatsApp";
       document.getElementById("openFnrhLinkBtn").disabled = !officialLink;
       document.getElementById("showQrBtn").disabled = !officialLink;
+      const checkFnrhGuestsStatusButton = document.getElementById("checkFnrhGuestsStatusBtn");
+      checkFnrhGuestsStatusButton.disabled = !hasFnrhReference || isCheckingFnrhReservationGuests;
+      checkFnrhGuestsStatusButton.textContent = isCheckingFnrhReservationGuests ? "Consultando..." : "Consultar status FNRH";
       const linkBox = document.getElementById("fnrhLinkBox");
       linkBox.textContent = officialLink || "Link oficial da FNRH ainda não gerado.";
       linkBox.classList.toggle("available", !!officialLink);
@@ -1799,6 +1807,8 @@ João Silva"></textarea>
       setStatus("guestStatus", "");
       setStatus("guestFormStatus", "");
       setStatus("actionStatus", "");
+      setStatus("fnrhGuestsStatusLine", "");
+      lastAutoFnrhGuestsStatusStayId = null;
       renderStayList();
       renderDetails();
     }
@@ -1819,6 +1829,8 @@ João Silva"></textarea>
           selectedGuests = [];
           isCreatingStay = false;
           setSelectedStayId(null);
+          lastAutoFnrhGuestsStatusStayId = null;
+          setStatus("fnrhGuestsStatusLine", "");
           renderDetails();
           return;
         }
@@ -1854,7 +1866,9 @@ João Silva"></textarea>
         setStatus("createStatus", "");
         setStatus("guestStatus", "");
         setStatus("guestFormStatus", "");
+        setStatus("fnrhGuestsStatusLine", "");
         showCopyLinkFeedback("");
+        maybeAutoCheckFnrhReservationGuestsStatus();
       } catch (error) {
         setStatus("actionStatus", error.message || "Erro ao carregar reserva.", "error");
       }
@@ -2125,6 +2139,71 @@ João Silva"></textarea>
       }
     }
 
+    function maybeAutoCheckFnrhReservationGuestsStatus() {
+      const stayId = selectedStay?.id;
+      const hasFnrhReference = !!String(selectedStay?.fnrh_reserva_id || "").trim() || !!getOfficialFnrhPrecheckinLink(selectedStay);
+
+      if (!stayId || !hasFnrhReference) {
+        setStatus("fnrhGuestsStatusLine", "");
+        return;
+      }
+
+      if (String(lastAutoFnrhGuestsStatusStayId) === String(stayId)) {
+        return;
+      }
+
+      lastAutoFnrhGuestsStatusStayId = stayId;
+      checkFnrhReservationGuestsStatus();
+    }
+
+    async function checkFnrhReservationGuestsStatus() {
+      if (!selectedStay?.id) {
+        setStatus("fnrhGuestsStatusLine", "Selecione uma reserva antes de consultar.", "warning");
+        return;
+      }
+
+      if (isCheckingFnrhReservationGuests) {
+        return;
+      }
+
+      const requestedStayId = selectedStay.id;
+      isCheckingFnrhReservationGuests = true;
+      updateActionButtons();
+      setStatus("fnrhGuestsStatusLine", "Consultando status da FNRH...", "warning");
+
+      try {
+        const data = await fetchJson(`${API_BASE}/api/fnrh/debug/reserva/${requestedStayId}/hospedes`);
+        if (String(selectedStay?.id) !== String(requestedStayId)) {
+          return;
+        }
+
+        const guests = Array.isArray(data?.dados) ? data.dados : [];
+        const completedGuests = guests.filter((guest) => {
+          return String(guest?.hospede?.situacao_hospede_id || "").trim() === "PRECHECKIN_REALIZADO";
+        }).length;
+        const guestCounts = getStayGuestCounts(selectedStay);
+        const totalExpected = guestCounts.adultos + guestCounts.menores;
+        const totalGuests = totalExpected || guests.length;
+
+        if (!guests.length && !completedGuests) {
+          setStatus("fnrhGuestsStatusLine", "Nenhum hóspede retornado pela FNRH", "warning");
+          return;
+        }
+
+        const label = completedGuests === 1 ? "pré-check-in realizado" : "pré-check-ins realizados";
+        setStatus("fnrhGuestsStatusLine", `${completedGuests}/${totalGuests} ${label}`, "success");
+      } catch (error) {
+        if (String(selectedStay?.id) !== String(requestedStayId)) {
+          return;
+        }
+
+        setStatus("fnrhGuestsStatusLine", "Não foi possível consultar a FNRH agora.", "error");
+      } finally {
+        isCheckingFnrhReservationGuests = false;
+        updateActionButtons();
+      }
+    }
+
     async function copyOfficialLink() {
       const link = getOfficialFnrhPrecheckinLink(selectedStay);
       if (!link) {
@@ -2279,6 +2358,7 @@ Obrigado!`;
       document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copyWhatsappMessage);
       document.getElementById("openFnrhLinkBtn").addEventListener("click", openOfficialLink);
       document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
+      document.getElementById("checkFnrhGuestsStatusBtn").addEventListener("click", checkFnrhReservationGuestsStatus);
       document.getElementById("openGuestDetailsBtn").addEventListener("click", () => {
         setGuestOptionalOpen(true);
         document.getElementById("guestOptionalDetails").scrollIntoView({ behavior: "smooth", block: "nearest" });
