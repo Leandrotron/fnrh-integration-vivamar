@@ -478,7 +478,7 @@ async function sendToFNRH(payload) {
   };
 }
 
-async function fetchFnrhPreCheckins(dataInicio, dataFim) {
+async function fetchFnrhPreCheckins(dataInicio, dataFim, exibirVinculado) {
   const mode = process.env.FNRH_MODE || "mock";
   console.log("[FNRH] pre-checkins mode:", mode);
 
@@ -502,6 +502,11 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim) {
     data_inicio: dataInicio,
     data_fim: dataFim
   });
+
+  if (exibirVinculado !== undefined) {
+    query.set("exibir_vinculado", exibirVinculado);
+  }
+
   const finalUrl = `${baseUrl}/hospedes/pre-checkins?${query.toString()}`;
 
   const missingVars = [
@@ -1004,6 +1009,10 @@ app.get("/", (req, res) => {
 app.get("/fnrh/precheckins", async (req, res) => {
   const dataInicio = String(req.query.data_inicio || "").trim();
   const dataFim = String(req.query.data_fim || "").trim();
+  const hasExibirVinculado = Object.prototype.hasOwnProperty.call(req.query, "exibir_vinculado");
+  const exibirVinculado = hasExibirVinculado
+    ? String(req.query.exibir_vinculado)
+    : undefined;
 
   if (!dataInicio || !dataFim) {
     return res.status(400).json({
@@ -1011,8 +1020,14 @@ app.get("/fnrh/precheckins", async (req, res) => {
     });
   }
 
+  if (hasExibirVinculado && exibirVinculado !== "true" && exibirVinculado !== "false") {
+    return res.status(400).json({
+      error: 'exibir_vinculado deve ser "true" ou "false"'
+    });
+  }
+
   try {
-    const result = await fetchFnrhPreCheckins(dataInicio, dataFim);
+    const result = await fetchFnrhPreCheckins(dataInicio, dataFim, exibirVinculado);
 
     if (!result.ok) {
       const errorMessage = String(
