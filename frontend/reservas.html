@@ -651,6 +651,59 @@
       line-height: 1.45;
     }
 
+    .fnrh-guests-section {
+      width: 100%;
+    }
+
+    .fnrh-guests-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .fnrh-guests-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .fnrh-guest-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid #d8e3f8;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .fnrh-guest-name {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .fnrh-guest-meta,
+    .fnrh-guest-dates {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .fnrh-guest-dates {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .fnrh-guest-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
     #qrModal canvas {
       max-width: 100%;
       height: auto;
@@ -686,6 +739,24 @@
       .flow-note,
       .after-checkin-copy {
         max-width: none;
+      }
+
+      .fnrh-guest-row {
+        grid-template-columns: 1fr;
+      }
+
+      .fnrh-guests-header {
+        flex-direction: column;
+      }
+
+      .fnrh-guest-actions {
+        justify-content: flex-start;
+        width: 100%;
+      }
+
+      .fnrh-guest-actions button {
+        flex: 1 1 150px;
+        max-width: 100%;
       }
     }
   </style>
@@ -879,16 +950,16 @@
             </div>
 
             <div class="after-checkin-row">
-              <div class="after-checkin-copy">
-                <h4>Check-in / Check-out</h4>
-                <p>As ações ficam disponíveis quando houver hóspede com <code>fnrh_hospede_id</code>.</p>
-                <button id="openGuestDetailsBtn" type="button" class="text-button" style="display:none;">Abrir dados do hóspede</button>
-                <div id="guestFnrhCheckinStatus" class="guest-fnrh-status"></div>
+              <div class="fnrh-guests-section">
+                <div class="fnrh-guests-header">
+                  <div class="after-checkin-copy">
+                    <h4>Hóspedes na FNRH</h4>
+                    <p>Check-in e check-out são realizados individualmente por hóspede.</p>
+                  </div>
+                  <button id="openGuestDetailsBtn" type="button" class="text-button" style="display:none;">Abrir dados do hóspede</button>
+                </div>
+                <div id="fnrhGuestOperationsList" class="fnrh-guests-list"></div>
                 <div id="guestStatus" class="status-line"></div>
-              </div>
-              <div class="button-row">
-                <button id="guestFnrhCheckinBtn" type="button" class="secondary">Check-in FNRH</button>
-                <button id="guestFnrhCheckoutBtn" type="button" class="secondary">Check-out FNRH</button>
               </div>
             </div>
 
@@ -939,10 +1010,8 @@ João Silva"></textarea>
     let isSendingFnrh = false;
     let isCheckingFnrhReservationGuests = false;
     let lastAutoFnrhGuestsStatusStayId = null;
-    let isCheckingInGuestFnrh = false;
-    let guestFnrhCheckinStatusById = {};
-    let isCheckingOutGuestFnrh = false;
-    let guestFnrhCheckoutStatusById = {};
+    let checkingInGuestFnrhById = {};
+    let checkingOutGuestFnrhById = {};
     let guestCepLookupPromise = null;
     let guestCepResolvedCityId = "";
     let guestCepResolvedStateId = "";
@@ -1077,6 +1146,7 @@ João Silva"></textarea>
         const error = new Error(getFriendlyFnrhMessage(apiMessage));
         error.apiMessage = apiMessage;
         error.isFnrhDuplicate = isFnrhDuplicateMessage(apiMessage);
+        error.status = response.status;
         throw error;
       }
 
@@ -1698,43 +1768,88 @@ João Silva"></textarea>
       renderReservationStateLine();
     }
 
-    function updateGuestFnrhCheckinControls() {
-      const guest = getMainGuest();
-      const button = document.getElementById("guestFnrhCheckinBtn");
-      const checkoutButton = document.getElementById("guestFnrhCheckoutBtn");
-      const statusElement = document.getElementById("guestFnrhCheckinStatus");
+    function formatFnrhOperationDate(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleString("pt-BR");
+    }
+
+    function renderFnrhGuestOperations() {
+      const container = document.getElementById("fnrhGuestOperationsList");
       const openGuestDetailsButton = document.getElementById("openGuestDetailsBtn");
-      const checkinStatusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
-      const checkoutStatusValue = guest?.id ? guestFnrhCheckoutStatusById[guest.id] : "";
-      const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
-      const hasCheckinDone = !!String(guest?.fnrh_checkin_at || "").trim();
-      const hasCheckoutDone = !!String(guest?.fnrh_checkout_at || "").trim();
-      const statusValue = hasCheckoutDone
-        ? "CHECKOUT_REALIZADO"
-        : hasCheckinDone
-          ? "CHECKIN_REALIZADO"
-          : checkoutStatusValue || checkinStatusValue || "";
+      if (!container) return;
 
-      button.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckinDone || hasCheckoutDone;
-      button.textContent = isCheckingInGuestFnrh ? "Fazendo check-in..." : "Check-in FNRH";
-      button.style.display = "inline-block";
-      button.title = hasCheckinDone || hasCheckoutDone ? "Check-in já realizado" : !hasFnrhHospedeId && guest?.id ? "Disponível após a FNRH retornar fnrh_hospede_id" : "";
-      checkoutButton.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || !hasCheckinDone || hasCheckoutDone;
-      checkoutButton.textContent = isCheckingOutGuestFnrh ? "Fazendo check-out..." : "Check-out FNRH";
-      checkoutButton.style.display = "inline-block";
-      checkoutButton.title = hasCheckoutDone
-        ? "Check-out já realizado"
-        : !hasFnrhHospedeId && guest?.id
-          ? "Disponível após a FNRH retornar fnrh_hospede_id"
-          : !hasCheckinDone && guest?.id
-            ? "Disponível após o check-in FNRH"
-            : "";
-
-      statusElement.textContent = statusValue || (!guest?.id ? "Check-in disponível após vincular hóspede." : !hasFnrhHospedeId ? "Check-in e check-out ficam disponíveis quando a FNRH retornar fnrh_hospede_id para este hóspede." : "");
-      statusElement.className = `guest-fnrh-status${statusValue ? " success" : ""}`;
       if (openGuestDetailsButton) {
-        openGuestDetailsButton.style.display = !guest?.id ? "inline-block" : "none";
+        openGuestDetailsButton.style.display = selectedStay?.id && !selectedGuests.length ? "inline-block" : "none";
       }
+
+      if (!selectedGuests.length) {
+        container.innerHTML = `<div class="empty-state">Nenhum hóspede cadastrado nesta reserva.</div>`;
+        renderAfterStatusList();
+        return;
+      }
+
+      const hasAnyFnrhGuest = selectedGuests.some((guest) => String(guest?.fnrh_hospede_id || "").trim());
+      const orientation = hasAnyFnrhGuest
+        ? ""
+        : `<div class="muted">Os hóspedes ainda não possuem vínculo confirmado com a FNRH.</div>`;
+
+      container.innerHTML = orientation + selectedGuests.map((guest) => {
+        const guestId = String(guest?.id || "");
+        const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
+        const hasCheckinDone = !!String(guest?.fnrh_checkin_at || "").trim();
+        const hasCheckoutDone = !!String(guest?.fnrh_checkout_at || "").trim();
+        const isCheckingIn = !!checkingInGuestFnrhById[guestId];
+        const isCheckingOut = !!checkingOutGuestFnrhById[guestId];
+        const isBusy = isCheckingIn || isCheckingOut;
+        const checkinDate = formatFnrhOperationDate(guest?.fnrh_checkin_at);
+        const checkoutDate = formatFnrhOperationDate(guest?.fnrh_checkout_at);
+        const role = Number(guest?.is_main_guest) === 1 ? "Titular" : "Acompanhante";
+        const state = !hasFnrhHospedeId
+          ? "Aguardando vínculo FNRH"
+          : hasCheckoutDone
+            ? "Check-out realizado"
+            : hasCheckinDone
+              ? "Hospedado"
+              : "Pronto para check-in";
+        const stateTone = hasCheckoutDone || hasCheckinDone ? "success" : "pending";
+        const dates = [
+          checkinDate ? `<span>Check-in: ${escapeHtml(checkinDate)}</span>` : "",
+          checkoutDate ? `<span>Check-out: ${escapeHtml(checkoutDate)}</span>` : ""
+        ].filter(Boolean).join("");
+        const checkinDisabled = !guestId || !hasFnrhHospedeId || hasCheckinDone || hasCheckoutDone || isBusy;
+        const checkoutDisabled = !guestId || !hasFnrhHospedeId || !hasCheckinDone || hasCheckoutDone || isBusy;
+
+        return `
+          <div class="fnrh-guest-row">
+            <div>
+              <div class="fnrh-guest-name">${escapeHtml(guest?.full_name || "Hóspede")}</div>
+              <div class="fnrh-guest-meta">
+                <span class="status-badge">${role}</span>
+                <span class="status-badge ${stateTone}">${state}</span>
+              </div>
+              ${dates ? `<div class="fnrh-guest-dates">${dates}</div>` : ""}
+            </div>
+            <div class="fnrh-guest-actions">
+              <button type="button" class="secondary" data-fnrh-checkin-id="${escapeHtml(guestId)}" ${checkinDisabled ? "disabled" : ""}>
+                ${isCheckingIn ? "Registrando..." : "Check-in FNRH"}
+              </button>
+              <button type="button" class="secondary" data-fnrh-checkout-id="${escapeHtml(guestId)}" ${checkoutDisabled ? "disabled" : ""}>
+                ${isCheckingOut ? "Finalizando..." : "Check-out FNRH"}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      container.querySelectorAll("[data-fnrh-checkin-id]").forEach((button) => {
+        button.addEventListener("click", () => checkInGuestFnrh(button.dataset.fnrhCheckinId));
+      });
+      container.querySelectorAll("[data-fnrh-checkout-id]").forEach((button) => {
+        button.addEventListener("click", () => checkOutGuestFnrh(button.dataset.fnrhCheckoutId));
+      });
+
       renderAfterStatusList();
     }
 
@@ -1803,7 +1918,7 @@ João Silva"></textarea>
         populateOptionalGuestForm(getMainGuest());
       }
       updateActionButtons();
-      updateGuestFnrhCheckinControls();
+      renderFnrhGuestOperations();
       updateFnrhSectionsVisibility();
       loadInternalGuestChecklist();
     }
@@ -2041,69 +2156,81 @@ João Silva"></textarea>
       }
     }
 
-    async function checkInMainGuestFnrh() {
-      const guest = getMainGuest();
+    async function checkInGuestFnrh(guestId) {
+      const guest = selectedGuests.find((item) => String(item.id) === String(guestId));
       if (!guest?.id) {
-        setStatus("guestStatus", "Check-in indisponível para esta reserva.", "warning");
+        setStatus("guestStatus", "Hóspede não encontrado para check-in.", "warning");
         return;
       }
 
-      if (isCheckingInGuestFnrh) {
+      const guestKey = String(guest.id);
+      if (checkingInGuestFnrhById[guestKey] || checkingOutGuestFnrhById[guestKey]) {
         return;
       }
 
-      isCheckingInGuestFnrh = true;
-      updateGuestFnrhCheckinControls();
-      setStatus("guestStatus", "Fazendo check-in FNRH...", "warning");
+      const guestName = String(guest.full_name || "Hóspede").trim();
+      if (!window.confirm(`Confirmar check-in FNRH de ${guestName}?`)) {
+        return;
+      }
+
+      const stayId = selectedStay?.id;
+      checkingInGuestFnrhById[guestKey] = true;
+      renderFnrhGuestOperations();
+      setStatus("guestStatus", `Registrando check-in de ${guestName}...`, "warning");
 
       try {
         const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkin`, {
           method: "POST"
         });
-        const situacaoId = data?.response_body?.dados?.situacao_id || "CHECKIN_REALIZADO";
-        guestFnrhCheckinStatusById[guest.id] = situacaoId;
-        await loadStayDetails(selectedStay.id);
-        setStatus("guestStatus", data.message || "Check-in FNRH realizado com sucesso", "success");
+        await loadStayDetails(stayId);
+        setStatus("guestStatus", `${guestName}: ${data?.message || "Check-in FNRH realizado com sucesso"}`, "success");
       } catch (error) {
-        setStatus("guestStatus", error.message || "Não foi possível realizar check-in FNRH.", "error");
+        if (error?.status === 409 && stayId) {
+          await loadStayDetails(stayId);
+        }
+        setStatus("guestStatus", `${guestName}: ${error.message || "Não foi possível realizar check-in FNRH."}`, "error");
       } finally {
-        isCheckingInGuestFnrh = false;
-        updateGuestFnrhCheckinControls();
+        delete checkingInGuestFnrhById[guestKey];
+        renderFnrhGuestOperations();
       }
     }
 
-    async function checkOutMainGuestFnrh() {
-      const guest = getMainGuest();
+    async function checkOutGuestFnrh(guestId) {
+      const guest = selectedGuests.find((item) => String(item.id) === String(guestId));
       if (!guest?.id) {
-        setStatus("guestStatus", "Check-out indisponível para esta reserva.", "warning");
+        setStatus("guestStatus", "Hóspede não encontrado para check-out.", "warning");
         return;
       }
 
-      if (isCheckingOutGuestFnrh || isCheckingInGuestFnrh) {
+      const guestKey = String(guest.id);
+      if (checkingOutGuestFnrhById[guestKey] || checkingInGuestFnrhById[guestKey]) {
         return;
       }
 
-      if (!window.confirm("Confirmar check-out FNRH deste hóspede?")) {
+      const guestName = String(guest.full_name || "Hóspede").trim();
+      if (!window.confirm(`Confirmar check-out FNRH de ${guestName}?`)) {
         return;
       }
 
-      isCheckingOutGuestFnrh = true;
-      updateGuestFnrhCheckinControls();
-      setStatus("guestStatus", "Fazendo check-out FNRH...", "warning");
+      const stayId = selectedStay?.id;
+      checkingOutGuestFnrhById[guestKey] = true;
+      renderFnrhGuestOperations();
+      setStatus("guestStatus", `Finalizando check-out de ${guestName}...`, "warning");
 
       try {
         const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkout`, {
           method: "POST"
         });
-        const situacaoId = data?.response_body?.dados?.situacao_id || "CHECKOUT_REALIZADO";
-        guestFnrhCheckoutStatusById[guest.id] = situacaoId;
-        await loadStayDetails(selectedStay.id);
-        setStatus("guestStatus", data.message || "Check-out FNRH realizado com sucesso", "success");
+        await loadStayDetails(stayId);
+        setStatus("guestStatus", `${guestName}: ${data?.message || "Check-out FNRH realizado com sucesso"}`, "success");
       } catch (error) {
-        setStatus("guestStatus", error.message || "Não foi possível realizar check-out FNRH.", "error");
+        if (error?.status === 409 && stayId) {
+          await loadStayDetails(stayId);
+        }
+        setStatus("guestStatus", `${guestName}: ${error.message || "Não foi possível realizar check-out FNRH."}`, "error");
       } finally {
-        isCheckingOutGuestFnrh = false;
-        updateGuestFnrhCheckinControls();
+        delete checkingOutGuestFnrhById[guestKey];
+        renderFnrhGuestOperations();
       }
     }
 
@@ -2363,8 +2490,6 @@ Obrigado!`;
       document.getElementById("reloadListBtn").addEventListener("click", () => loadStays(selectedStayId));
       document.getElementById("saveStayBtn").addEventListener("click", saveStay);
       document.getElementById("saveGuestBtn").addEventListener("click", saveOptionalGuest);
-      document.getElementById("guestFnrhCheckinBtn").addEventListener("click", checkInMainGuestFnrh);
-      document.getElementById("guestFnrhCheckoutBtn").addEventListener("click", checkOutMainGuestFnrh);
       document.getElementById("sendFnrhBtn").addEventListener("click", sendSelectedStayToFNRH);
       document.getElementById("copyFnrhLinkBtn").addEventListener("click", copyOfficialLink);
       document.getElementById("copyWhatsappMessageBtn").addEventListener("click", copyWhatsappMessage);
