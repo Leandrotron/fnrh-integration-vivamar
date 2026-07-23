@@ -1716,7 +1716,7 @@ app.post("/guests/:id/fnrh-checkin", (req, res) => {
   const guestId = req.params.id;
 
   db.get(
-    `SELECT guests.id, guests.full_name, guests.fnrh_hospede_id, guests.stay_id
+    `SELECT guests.id, guests.full_name, guests.fnrh_hospede_id, guests.fnrh_checkin_at, guests.fnrh_checkout_at, guests.stay_id
      FROM guests
      INNER JOIN stays ON stays.id = guests.stay_id
      WHERE guests.id = ? AND stays.property_id = ?`,
@@ -1735,6 +1735,13 @@ app.post("/guests/:id/fnrh-checkin", (req, res) => {
       if (!fnrhHospedeId) {
         return res.status(400).json({
           error: "HÃ³spede sem fnrh_hospede_id para check-in na FNRH",
+          guest_id: guest.id
+        });
+      }
+
+      if (String(guest.fnrh_checkin_at || "").trim()) {
+        return res.status(409).json({
+          error: "Check-in FNRH jÃ¡ registrado localmente para este hÃ³spede",
           guest_id: guest.id
         });
       }
@@ -1762,14 +1769,34 @@ app.post("/guests/:id/fnrh-checkin", (req, res) => {
           });
         }
 
-        return res.json({
-          message: "Check-in FNRH realizado com sucesso",
-          guest_id: guest.id,
-          fnrh_hospede_id: fnrhHospedeId,
-          checkin_at: checkinAtIso,
-          response_status: result.status,
-          response_body: result.body
-        });
+        return db.run(
+          `UPDATE guests
+           SET fnrh_checkin_at = ?
+           WHERE id = ?`,
+          [checkinAtIso, guest.id],
+          (persistErr) => {
+            if (persistErr) {
+              console.error("Erro ao persistir check-in FNRH do hÃ³spede:", persistErr);
+              return res.status(500).json({
+                error: "Check-in FNRH realizado, mas falhou ao persistir o resultado local",
+                guest_id: guest.id,
+                fnrh_hospede_id: fnrhHospedeId,
+                checkin_at: checkinAtIso,
+                response_status: result.status,
+                response_body: result.body
+              });
+            }
+
+            return res.json({
+              message: "Check-in FNRH realizado com sucesso",
+              guest_id: guest.id,
+              fnrh_hospede_id: fnrhHospedeId,
+              checkin_at: checkinAtIso,
+              response_status: result.status,
+              response_body: result.body
+            });
+          }
+        );
       } catch (checkinErr) {
         console.error("Erro ao realizar check-in FNRH:", checkinErr);
 
@@ -1791,7 +1818,7 @@ app.post("/guests/:id/fnrh-checkout", (req, res) => {
   const guestId = req.params.id;
 
   db.get(
-    `SELECT guests.id, guests.full_name, guests.fnrh_hospede_id, guests.stay_id
+    `SELECT guests.id, guests.full_name, guests.fnrh_hospede_id, guests.fnrh_checkin_at, guests.fnrh_checkout_at, guests.stay_id
      FROM guests
      INNER JOIN stays ON stays.id = guests.stay_id
      WHERE guests.id = ? AND stays.property_id = ?`,
@@ -1810,6 +1837,20 @@ app.post("/guests/:id/fnrh-checkout", (req, res) => {
       if (!fnrhHospedeId) {
         return res.status(400).json({
           error: "HÃƒÂ³spede sem fnrh_hospede_id para check-out na FNRH",
+          guest_id: guest.id
+        });
+      }
+
+      if (!String(guest.fnrh_checkin_at || "").trim()) {
+        return res.status(409).json({
+          error: "Check-out FNRH bloqueado: check-in ainda nÃ£o registrado localmente",
+          guest_id: guest.id
+        });
+      }
+
+      if (String(guest.fnrh_checkout_at || "").trim()) {
+        return res.status(409).json({
+          error: "Check-out FNRH jÃ¡ registrado localmente para este hÃ³spede",
           guest_id: guest.id
         });
       }
@@ -1837,14 +1878,34 @@ app.post("/guests/:id/fnrh-checkout", (req, res) => {
           });
         }
 
-        return res.json({
-          message: "Check-out FNRH realizado com sucesso",
-          guest_id: guest.id,
-          fnrh_hospede_id: fnrhHospedeId,
-          checkout_at: checkoutAtIso,
-          response_status: result.status,
-          response_body: result.body
-        });
+        return db.run(
+          `UPDATE guests
+           SET fnrh_checkout_at = ?
+           WHERE id = ?`,
+          [checkoutAtIso, guest.id],
+          (persistErr) => {
+            if (persistErr) {
+              console.error("Erro ao persistir check-out FNRH do hÃƒÂ³spede:", persistErr);
+              return res.status(500).json({
+                error: "Check-out FNRH realizado, mas falhou ao persistir o resultado local",
+                guest_id: guest.id,
+                fnrh_hospede_id: fnrhHospedeId,
+                checkout_at: checkoutAtIso,
+                response_status: result.status,
+                response_body: result.body
+              });
+            }
+
+            return res.json({
+              message: "Check-out FNRH realizado com sucesso",
+              guest_id: guest.id,
+              fnrh_hospede_id: fnrhHospedeId,
+              checkout_at: checkoutAtIso,
+              response_status: result.status,
+              response_body: result.body
+            });
+          }
+        );
       } catch (checkoutErr) {
         console.error("Erro ao realizar check-out FNRH:", checkoutErr);
 

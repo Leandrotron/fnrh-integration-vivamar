@@ -1541,18 +1541,18 @@ João Silva"></textarea>
       const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
       const guest = getMainGuest();
       const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
-      const checkinStatusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
-      const checkoutStatusValue = guest?.id ? guestFnrhCheckoutStatusById[guest.id] : "";
+      const hasCheckinDone = !!String(guest?.fnrh_checkin_at || "").trim();
+      const hasCheckoutDone = !!String(guest?.fnrh_checkout_at || "").trim();
       const items = [];
 
       if (officialLink) {
         items.push({ text: "Link gerado", tone: "success" });
       }
 
-      if (checkoutStatusValue === "CHECKOUT_REALIZADO") {
+      if (hasCheckoutDone) {
         items.push({ text: "Check-in realizado", tone: "success" });
         items.push({ text: "Check-out realizado", tone: "success" });
-      } else if (checkinStatusValue === "CHECKIN_REALIZADO") {
+      } else if (hasCheckinDone) {
         items.push({ text: "Check-in realizado", tone: "success" });
       } else if (hasFnrhHospedeId) {
         items.push({ text: "Check-in disponível", tone: "pending" });
@@ -1707,18 +1707,28 @@ João Silva"></textarea>
       const checkinStatusValue = guest?.id ? guestFnrhCheckinStatusById[guest.id] : "";
       const checkoutStatusValue = guest?.id ? guestFnrhCheckoutStatusById[guest.id] : "";
       const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
-      const statusValue = checkoutStatusValue || checkinStatusValue || "";
-      const hasCheckinDone = checkinStatusValue === "CHECKIN_REALIZADO";
-      const hasCheckoutDone = checkoutStatusValue === "CHECKOUT_REALIZADO";
+      const hasCheckinDone = !!String(guest?.fnrh_checkin_at || "").trim();
+      const hasCheckoutDone = !!String(guest?.fnrh_checkout_at || "").trim();
+      const statusValue = hasCheckoutDone
+        ? "CHECKOUT_REALIZADO"
+        : hasCheckinDone
+          ? "CHECKIN_REALIZADO"
+          : checkoutStatusValue || checkinStatusValue || "";
 
-      button.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckinDone;
+      button.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckinDone || hasCheckoutDone;
       button.textContent = isCheckingInGuestFnrh ? "Fazendo check-in..." : "Check-in FNRH";
       button.style.display = "inline-block";
-      button.title = hasCheckinDone ? "Check-in já realizado" : !hasFnrhHospedeId && guest?.id ? "Disponível após a FNRH retornar fnrh_hospede_id" : "";
-      checkoutButton.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || hasCheckoutDone;
+      button.title = hasCheckinDone || hasCheckoutDone ? "Check-in já realizado" : !hasFnrhHospedeId && guest?.id ? "Disponível após a FNRH retornar fnrh_hospede_id" : "";
+      checkoutButton.disabled = !guest?.id || !hasFnrhHospedeId || isCheckingInGuestFnrh || isCheckingOutGuestFnrh || !hasCheckinDone || hasCheckoutDone;
       checkoutButton.textContent = isCheckingOutGuestFnrh ? "Fazendo check-out..." : "Check-out FNRH";
       checkoutButton.style.display = "inline-block";
-      checkoutButton.title = hasCheckoutDone ? "Check-out já realizado" : !hasFnrhHospedeId && guest?.id ? "Disponível após a FNRH retornar fnrh_hospede_id" : "";
+      checkoutButton.title = hasCheckoutDone
+        ? "Check-out já realizado"
+        : !hasFnrhHospedeId && guest?.id
+          ? "Disponível após a FNRH retornar fnrh_hospede_id"
+          : !hasCheckinDone && guest?.id
+            ? "Disponível após o check-in FNRH"
+            : "";
 
       statusElement.textContent = statusValue || (!guest?.id ? "Check-in disponível após vincular hóspede." : !hasFnrhHospedeId ? "Check-in e check-out ficam disponíveis quando a FNRH retornar fnrh_hospede_id para este hóspede." : "");
       statusElement.className = `guest-fnrh-status${statusValue ? " success" : ""}`;
@@ -2052,6 +2062,7 @@ João Silva"></textarea>
         });
         const situacaoId = data?.response_body?.dados?.situacao_id || "CHECKIN_REALIZADO";
         guestFnrhCheckinStatusById[guest.id] = situacaoId;
+        await loadStayDetails(selectedStay.id);
         setStatus("guestStatus", data.message || "Check-in FNRH realizado com sucesso", "success");
       } catch (error) {
         setStatus("guestStatus", error.message || "Não foi possível realizar check-in FNRH.", "error");
@@ -2086,6 +2097,7 @@ João Silva"></textarea>
         });
         const situacaoId = data?.response_body?.dados?.situacao_id || "CHECKOUT_REALIZADO";
         guestFnrhCheckoutStatusById[guest.id] = situacaoId;
+        await loadStayDetails(selectedStay.id);
         setStatus("guestStatus", data.message || "Check-out FNRH realizado com sucesso", "success");
       } catch (error) {
         setStatus("guestStatus", error.message || "Não foi possível realizar check-out FNRH.", "error");

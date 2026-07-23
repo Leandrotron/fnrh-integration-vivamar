@@ -176,6 +176,8 @@ db.serialize(() => {
       fnrh_status TEXT DEFAULT 'pending',
       fnrh_hospede_id TEXT,
       fnrh_pessoa_id TEXT,
+      fnrh_checkin_at TEXT,
+      fnrh_checkout_at TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (stay_id) REFERENCES stays(id)
     )
@@ -197,6 +199,8 @@ db.serialize(() => {
   ensureColumn("guests", "deficiencia_id", "TEXT");
   ensureColumn("guests", "fnrh_hospede_id", "TEXT");
   ensureColumn("guests", "fnrh_pessoa_id", "TEXT");
+  ensureColumn("guests", "fnrh_checkin_at", "TEXT");
+  ensureColumn("guests", "fnrh_checkout_at", "TEXT");
 
   // índice para otimizar busca de hóspedes por stay_id e cpf
   db.run(`CREATE INDEX IF NOT EXISTS idx_guests_stay_cpf ON guests (stay_id, cpf)`, (err) => {
