@@ -2272,7 +2272,7 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
 
           try {
             const result = await sendToFNRH(payload);
-            const guestCountConfirmed = Array.isArray(result.body?.dados_hospedes) ? result.body.dados_hospedes.length : 0;
+            const guestCountConfirmed = Array.isArray(result.body?.dados?.dados_hospedes) ? result.body.dados.dados_hospedes.length : 0;
             const returnedLink = String(result.body?.dados?.reserva?.link_precheckin || "").trim();
 
             console.log("[FNRH] send-fnrh link_precheckin retornado:", returnedLink || "(vazio)");
