@@ -704,6 +704,78 @@
       gap: 8px;
     }
 
+    .fnrh-precheckin-search {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #d7e3fa;
+    }
+
+    .fnrh-precheckin-search h5,
+    .fnrh-precheckin-others h6 {
+      margin: 0 0 8px;
+      color: #2456c7;
+      font-size: 16px;
+    }
+
+    .fnrh-precheckin-period {
+      display: grid;
+      grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+      margin-top: 12px;
+    }
+
+    .fnrh-precheckin-period .field {
+      margin: 0;
+      min-width: 0;
+    }
+
+    .fnrh-precheckin-results {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+      min-width: 0;
+    }
+
+    .fnrh-precheckin-match {
+      padding: 12px;
+      border: 1px solid #d8e3f8;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.82);
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .fnrh-precheckin-match-details {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .fnrh-precheckin-summary,
+    .fnrh-precheckin-warning {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #eef4ff;
+      color: #334155;
+      font-size: 14px;
+    }
+
+    .fnrh-precheckin-warning {
+      background: #fff8e6;
+      color: #7a5200;
+    }
+
+    .fnrh-precheckin-others {
+      display: grid;
+      gap: 8px;
+      margin-top: 4px;
+      padding-top: 12px;
+      border-top: 1px dashed #cfd8e3;
+    }
+
     #qrModal canvas {
       max-width: 100%;
       height: auto;
@@ -757,6 +829,14 @@
       .fnrh-guest-actions button {
         flex: 1 1 150px;
         max-width: 100%;
+      }
+
+      .fnrh-precheckin-period {
+        grid-template-columns: 1fr;
+      }
+
+      .fnrh-precheckin-period button {
+        width: 100%;
       }
     }
   </style>
@@ -960,6 +1040,23 @@
                 </div>
                 <div id="fnrhGuestOperationsList" class="fnrh-guests-list"></div>
                 <div id="guestStatus" class="status-line"></div>
+                <div class="fnrh-precheckin-search">
+                  <h5>Pré-check-ins sem vínculo</h5>
+                  <div class="muted">Consulte candidatos da FNRH para conferência, sem realizar vínculo.</div>
+                  <form id="fnrhPrecheckinSearchForm" class="fnrh-precheckin-period">
+                    <div class="field">
+                      <label for="fnrhPrecheckinStartDate">Data inicial</label>
+                      <input id="fnrhPrecheckinStartDate" type="date" required>
+                    </div>
+                    <div class="field">
+                      <label for="fnrhPrecheckinEndDate">Data final</label>
+                      <input id="fnrhPrecheckinEndDate" type="date" required>
+                    </div>
+                    <button id="searchFnrhPrecheckinsBtn" type="submit">Buscar pré-check-ins</button>
+                  </form>
+                  <div id="fnrhPrecheckinSearchStatus" class="status-line" aria-live="polite"></div>
+                  <div id="fnrhPrecheckinResults" class="fnrh-precheckin-results"></div>
+                </div>
               </div>
             </div>
 
@@ -1017,9 +1114,9 @@ João Silva"></textarea>
     let guestCepResolvedStateId = "";
     let copyFeedbackTimer = null;
     let fnrhPrecheckins = null;
-    let fnrhPrecheckinsError = "";
-    let fnrhPrecheckinsPromise = null;
-    let fnrhPrecheckinsRangeKey = "";
+    let fnrhPrecheckinsIgnoredCount = 0;
+    let isSearchingFnrhPrecheckins = false;
+    let fnrhPrecheckinsRequestId = 0;
 
     function getStoredStayUiMetaMap() {
       try {
@@ -1289,6 +1386,380 @@ João Silva"></textarea>
       return normalize(value)
         .trim()
         .replace(/\s+/g, " ");
+    }
+
+    function normalizeFnrhDocumentType(value) {
+      return normalize(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    function getFnrhDocumentKind(value) {
+      const normalizedType = normalizeFnrhDocumentType(value);
+      if (normalizedType === "CPF") return "cpf";
+      if (normalizedType === "PASSAPORTE" || normalizedType === "PASSPORT") return "passport";
+      return "unknown";
+    }
+
+    function normalizeForeignDocument(value) {
+      return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    function normalizeExactCpf(value) {
+      const digits = onlyDigits(value);
+      return digits.length === 11 ? digits : "";
+    }
+
+    function maskFnrhDocument(value, type) {
+      const kind = getFnrhDocumentKind(type);
+      if (kind === "cpf") {
+        const cpf = normalizeExactCpf(value);
+        return cpf ? `***.***.***-${cpf.slice(-2)}` : "Não informado";
+      }
+
+      const normalized = normalizeForeignDocument(value);
+      if (!normalized) return "Não informado";
+      const visibleLength = Math.min(4, normalized.length);
+      return `${"*".repeat(Math.max(4, normalized.length - visibleLength))}${normalized.slice(-visibleLength)}`;
+    }
+
+    function getFnrhDocumentTypeLabel(candidate) {
+      const kind = candidate.documentKind;
+      if (kind === "cpf") return "CPF";
+      if (kind === "passport") return "Passaporte";
+      return candidate.documentType ? "Documento não reconhecido" : "Tipo não informado";
+    }
+
+    function normalizeFnrhPrecheckin(item) {
+      const documentType = String(item?.tipo_documento || "").trim();
+      return {
+        hospedeId: String(item?.hospede_id || "").trim(),
+        name: String(item?.nome || "").trim(),
+        normalizedName: normalizeMatchText(item?.nome),
+        birthDate: normalizeDateValue(item?.data_nascimento),
+        documentType,
+        documentKind: getFnrhDocumentKind(documentType),
+        documentValue: String(item?.numero_documento || "").trim(),
+        situation: String(item?.situacao_hospede_id || "").trim()
+      };
+    }
+
+    function matchFnrhPrecheckinsToGuests(candidates, localGuests) {
+      const matchesByGuestIndex = localGuests.map(() => []);
+      const matchedCandidateIndexes = new Set();
+
+      candidates.forEach((candidate, candidateIndex) => {
+        const identifiedGuestIndexes = localGuests.reduce((indexes, guest, guestIndex) => {
+          const localFnrhId = String(guest?.fnrh_hospede_id || "").trim();
+          if (localFnrhId && candidate.hospedeId && localFnrhId === candidate.hospedeId) {
+            indexes.push(guestIndex);
+          }
+          return indexes;
+        }, []);
+
+        let guestIndexes = identifiedGuestIndexes;
+        let kind = identifiedGuestIndexes.length === 1 ? "identified" : "ambiguous";
+
+        if (!guestIndexes.length && candidate.documentKind === "cpf") {
+          const candidateCpf = normalizeExactCpf(candidate.documentValue);
+          if (candidateCpf) {
+            guestIndexes = localGuests.reduce((indexes, guest, guestIndex) => {
+              if (normalizeExactCpf(guest?.cpf) === candidateCpf) {
+                indexes.push(guestIndex);
+              }
+              return indexes;
+            }, []);
+            kind = guestIndexes.length === 1 ? "exact" : "ambiguous";
+          }
+        }
+
+        if (!guestIndexes.length && candidate.normalizedName && candidate.birthDate) {
+          guestIndexes = localGuests.reduce((indexes, guest, guestIndex) => {
+            const sameName = normalizeMatchText(guest?.full_name) === candidate.normalizedName;
+            const sameBirthDate = normalizeDateValue(guest?.birth_date) === candidate.birthDate;
+            if (sameName && sameBirthDate) {
+              indexes.push(guestIndex);
+            }
+            return indexes;
+          }, []);
+          kind = guestIndexes.length === 1 ? "possible" : "ambiguous";
+        }
+
+        if (!guestIndexes.length) {
+          return;
+        }
+
+        matchedCandidateIndexes.add(candidateIndex);
+        guestIndexes.forEach((guestIndex) => {
+          matchesByGuestIndex[guestIndex].push({ candidateIndex, kind });
+        });
+      });
+
+      return {
+        matchesByGuestIndex,
+        unmatchedCandidateIndexes: candidates
+          .map((candidate, index) => index)
+          .filter((index) => !matchedCandidateIndexes.has(index))
+      };
+    }
+
+    function getFnrhMatchLabel(kind) {
+      if (kind === "identified") return "Já identificado no sistema";
+      if (kind === "exact") return "Correspondência exata";
+      if (kind === "possible") return "Possível correspondência";
+      if (kind === "ambiguous") return "Correspondência ambígua";
+      if (kind === "multiple") return "Múltiplos pré-check-ins encontrados";
+      return "Sem correspondência";
+    }
+
+    function getFnrhMatchTone(kind) {
+      if (kind === "identified" || kind === "exact") return "success";
+      if (kind === "possible" || kind === "ambiguous" || kind === "multiple") return "pending";
+      return "";
+    }
+
+    function renderFnrhPrecheckinCandidateDetails(candidate, kind) {
+      return `
+        <div class="fnrh-precheckin-match-details">
+          <div><strong>Tipo da correspondência:</strong> ${escapeHtml(getFnrhMatchLabel(kind))}</div>
+          <div><strong>Situação:</strong> ${escapeHtml(candidate.situation || "Não informada")}</div>
+          <div><strong>Documento:</strong> ${escapeHtml(getFnrhDocumentTypeLabel(candidate))} · ${escapeHtml(maskFnrhDocument(candidate.documentValue, candidate.documentType))}</div>
+          <div><strong>Nome retornado pela FNRH:</strong> ${escapeHtml(candidate.name || "Não informado")}</div>
+          <div><strong>Nascimento:</strong> ${escapeHtml(formatDate(candidate.birthDate))}</div>
+        </div>
+      `;
+    }
+
+    function renderFnrhPrecheckinResults() {
+      const container = document.getElementById("fnrhPrecheckinResults");
+      if (!container) return;
+      container.innerHTML = "";
+
+      if (!Array.isArray(fnrhPrecheckins)) {
+        return;
+      }
+
+      if (!fnrhPrecheckins.length) {
+        container.innerHTML = `
+          ${fnrhPrecheckinsIgnoredCount
+            ? `<div class="fnrh-precheckin-warning">${fnrhPrecheckinsIgnoredCount} resultado(s) com outra situação foram ignorados.</div>`
+            : ""}
+          <div class="empty-state">Nenhum pré-check-in sem vínculo foi encontrado no período informado.</div>
+        `;
+        return;
+      }
+
+      const matching = matchFnrhPrecheckinsToGuests(fnrhPrecheckins, selectedGuests);
+      let exactCount = 0;
+      let possibleCount = 0;
+      let noMatchCount = 0;
+      let ambiguousCount = 0;
+      let multipleCount = 0;
+
+      const guestRows = selectedGuests.map((guest, guestIndex) => {
+        const associations = matching.matchesByGuestIndex[guestIndex];
+        const role = Number(guest?.is_main_guest) === 1 ? "Titular" : "Acompanhante";
+        let overallKind = "none";
+
+        if (!associations.length) {
+          noMatchCount += 1;
+        } else if (associations.length > 1) {
+          overallKind = "multiple";
+          multipleCount += 1;
+        } else {
+          overallKind = associations[0].kind;
+          if (overallKind === "exact") exactCount += 1;
+          if (overallKind === "possible") possibleCount += 1;
+          if (overallKind === "ambiguous") ambiguousCount += 1;
+        }
+
+        const details = associations.length
+          ? associations.map(({ candidateIndex, kind }) => {
+              return renderFnrhPrecheckinCandidateDetails(fnrhPrecheckins[candidateIndex], kind);
+            }).join("")
+          : `<div class="fnrh-precheckin-match-details">Nenhum pré-check-in correspondente encontrado no período.</div>`;
+
+        return `
+          <div class="fnrh-precheckin-match">
+            <div class="fnrh-guest-name">${escapeHtml(guest?.full_name || "Hóspede")}</div>
+            <div class="fnrh-guest-meta">
+              <span class="status-badge">${role}</span>
+              <span class="status-badge ${getFnrhMatchTone(overallKind)}">${escapeHtml(getFnrhMatchLabel(overallKind))}</span>
+            </div>
+            ${details}
+          </div>
+        `;
+      }).join("");
+
+      const unmatchedRows = matching.unmatchedCandidateIndexes.map((candidateIndex) => {
+        const candidate = fnrhPrecheckins[candidateIndex];
+        return `
+          <div class="fnrh-precheckin-match">
+            <div class="fnrh-guest-name">${escapeHtml(candidate.name || "Nome não informado")}</div>
+            <div class="fnrh-precheckin-match-details">
+              <div><strong>Documento:</strong> ${escapeHtml(maskFnrhDocument(candidate.documentValue, candidate.documentType))}</div>
+              <div><strong>Nascimento:</strong> ${escapeHtml(formatDate(candidate.birthDate))}</div>
+              <div><strong>Situação:</strong> ${escapeHtml(candidate.situation || "Não informada")}</div>
+              <div>Não corresponde aos hóspedes desta reserva</div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const exceptionParts = [
+        ambiguousCount ? `${ambiguousCount} correspondência(s) ambígua(s)` : "",
+        multipleCount ? `${multipleCount} hóspede(s) com múltiplos pré-check-ins` : ""
+      ].filter(Boolean);
+
+      container.innerHTML = `
+        <div class="fnrh-precheckin-summary">
+          ${exactCount} correspondências exatas<br>
+          ${possibleCount} possíveis correspondências<br>
+          ${noMatchCount} sem correspondência
+          ${exceptionParts.length ? `<br>${escapeHtml(exceptionParts.join(" · "))}` : ""}
+        </div>
+        ${fnrhPrecheckinsIgnoredCount
+          ? `<div class="fnrh-precheckin-warning">${fnrhPrecheckinsIgnoredCount} resultado(s) com outra situação foram ignorados.</div>`
+          : ""}
+        ${guestRows || `<div class="empty-state">Esta reserva não possui hóspedes locais para comparação.</div>`}
+        ${unmatchedRows
+          ? `<div class="fnrh-precheckin-others"><h6>Outros pré-check-ins encontrados</h6>${unmatchedRows}</div>`
+          : ""}
+      `;
+    }
+
+    function updateFnrhPrecheckinSearchButton() {
+      const button = document.getElementById("searchFnrhPrecheckinsBtn");
+      if (!button) return;
+      button.disabled = isSearchingFnrhPrecheckins || !selectedStay?.id;
+      button.textContent = isSearchingFnrhPrecheckins ? "Buscando..." : "Buscar pré-check-ins";
+    }
+
+    function clearFnrhPrecheckinResults(clearStatus = true) {
+      fnrhPrecheckinsRequestId += 1;
+      fnrhPrecheckins = null;
+      fnrhPrecheckinsIgnoredCount = 0;
+      isSearchingFnrhPrecheckins = false;
+      if (clearStatus) {
+        setStatus("fnrhPrecheckinSearchStatus", "");
+      }
+      renderFnrhPrecheckinResults();
+      updateFnrhPrecheckinSearchButton();
+    }
+
+    function getFnrhPrecheckinPeriodLength(startDate, endDate) {
+      const start = Date.parse(`${startDate}T00:00:00Z`);
+      const end = Date.parse(`${endDate}T00:00:00Z`);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+      return Math.floor((end - start) / 86400000) + 1;
+    }
+
+    async function searchFnrhPrecheckins(event) {
+      event?.preventDefault();
+      if (isSearchingFnrhPrecheckins) return;
+
+      const startDate = normalizeDateValue(document.getElementById("fnrhPrecheckinStartDate")?.value);
+      const endDate = normalizeDateValue(document.getElementById("fnrhPrecheckinEndDate")?.value);
+
+      if (!selectedStay?.id) {
+        setStatus("fnrhPrecheckinSearchStatus", "Selecione uma reserva antes de buscar.", "warning");
+        return;
+      }
+      if (!startDate) {
+        setStatus("fnrhPrecheckinSearchStatus", "Informe a data inicial.", "warning");
+        return;
+      }
+      if (!endDate) {
+        setStatus("fnrhPrecheckinSearchStatus", "Informe a data final.", "warning");
+        return;
+      }
+
+      const periodLength = getFnrhPrecheckinPeriodLength(startDate, endDate);
+      if (periodLength == null || periodLength < 1) {
+        setStatus("fnrhPrecheckinSearchStatus", "A data inicial deve ser menor ou igual à data final.", "warning");
+        return;
+      }
+      if (periodLength > 7) {
+        setStatus("fnrhPrecheckinSearchStatus", "O período máximo permitido é de sete dias.", "warning");
+        return;
+      }
+
+      clearFnrhPrecheckinResults();
+      const requestId = ++fnrhPrecheckinsRequestId;
+      const requestedStayId = selectedStay.id;
+      isSearchingFnrhPrecheckins = true;
+      updateFnrhPrecheckinSearchButton();
+      setStatus("fnrhPrecheckinSearchStatus", "Buscando...", "warning");
+
+      const params = new URLSearchParams({
+        data_inicio: startDate,
+        data_fim: endDate,
+        exibir_vinculado: "false"
+      });
+
+      try {
+        const response = await fetch(`${API_BASE}/fnrh/precheckins?${params.toString()}`);
+        let body = null;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+
+        if (requestId !== fnrhPrecheckinsRequestId || String(selectedStay?.id) !== String(requestedStayId)) {
+          return;
+        }
+
+        if (response.ok !== true) {
+          if (response.status === 400) {
+            const backendMessage = body?.error?.message || body?.error || body?.message;
+            throw Object.assign(new Error("FNRH_BAD_REQUEST"), {
+              userMessage: String(backendMessage || "Não foi possível realizar a consulta."),
+              status: response.status
+            });
+          }
+          throw Object.assign(new Error("FNRH_REQUEST_FAILED"), { status: response.status });
+        }
+
+        if (!body || typeof body !== "object" || Array.isArray(body) || !Array.isArray(body.dados)) {
+          throw Object.assign(new Error("FNRH_UNEXPECTED_RESPONSE"), {
+            userMessage: "Resposta inesperada da FNRH",
+            status: response.status
+          });
+        }
+
+        const eligibleItems = body.dados.filter((item) => {
+          return item && typeof item === "object" &&
+            String(item.situacao_hospede_id || "").trim() === "PRECHECKIN_NAOVINCULADO";
+        });
+        fnrhPrecheckinsIgnoredCount = body.dados.length - eligibleItems.length;
+        fnrhPrecheckins = eligibleItems.map(normalizeFnrhPrecheckin);
+        setStatus(
+          "fnrhPrecheckinSearchStatus",
+          `${fnrhPrecheckins.length} pré-check-in(s) sem vínculo encontrado(s).`,
+          "success"
+        );
+        renderFnrhPrecheckinResults();
+      } catch (error) {
+        if (requestId !== fnrhPrecheckinsRequestId || String(selectedStay?.id) !== String(requestedStayId)) {
+          return;
+        }
+        fnrhPrecheckins = null;
+        fnrhPrecheckinsIgnoredCount = 0;
+        renderFnrhPrecheckinResults();
+        setStatus(
+          "fnrhPrecheckinSearchStatus",
+          error?.userMessage || "Não foi possível consultar a FNRH. Verifique a conexão segura do backend.",
+          "error"
+        );
+        console.error("Falha na consulta de pré-check-ins FNRH.", {
+          status: Number(error?.status) || null,
+          type: String(error?.message || "network_error")
+        });
+      } finally {
+        if (requestId === fnrhPrecheckinsRequestId) {
+          isSearchingFnrhPrecheckins = false;
+          updateFnrhPrecheckinSearchButton();
+        }
+      }
     }
 
     function escapeHtml(value) {
@@ -1919,11 +2390,13 @@ João Silva"></textarea>
       }
       updateActionButtons();
       renderFnrhGuestOperations();
+      updateFnrhPrecheckinSearchButton();
       updateFnrhSectionsVisibility();
       loadInternalGuestChecklist();
     }
 
     function enterCreateMode() {
+      clearFnrhPrecheckinResults();
       isCreatingStay = true;
       selectedStay = null;
       selectedGuests = [];
@@ -1950,6 +2423,7 @@ João Silva"></textarea>
         const stayIdToOpen = preferredStayId ?? selectedStayId ?? persistedStayId;
 
         if (!stays.length) {
+          clearFnrhPrecheckinResults();
           selectedStay = null;
           selectedGuests = [];
           isCreatingStay = false;
@@ -1969,6 +2443,9 @@ João Silva"></textarea>
     }
 
     async function loadStayDetails(stayId) {
+      if (String(stayId) !== String(selectedStay?.id)) {
+        clearFnrhPrecheckinResults();
+      }
       try {
         const [stay, guests] = await Promise.all([
           fetchJson(`${API_BASE}/stays/${stayId}`),
@@ -2484,7 +2961,10 @@ Obrigado!`;
     }
 
     function initializeReservationsPage() {
-      document.getElementById("filterDate").value = getTodayDateValue();
+      const today = getTodayDateValue();
+      document.getElementById("filterDate").value = today;
+      document.getElementById("fnrhPrecheckinStartDate").value = today;
+      document.getElementById("fnrhPrecheckinEndDate").value = today;
       updateDateFilterButtons();
       document.getElementById("newStayBtn").addEventListener("click", enterCreateMode);
       document.getElementById("reloadListBtn").addEventListener("click", () => loadStays(selectedStayId));
@@ -2496,6 +2976,7 @@ Obrigado!`;
       document.getElementById("openFnrhLinkBtn").addEventListener("click", openOfficialLink);
       document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
       document.getElementById("checkFnrhGuestsStatusBtn").addEventListener("click", checkFnrhReservationGuestsStatus);
+      document.getElementById("fnrhPrecheckinSearchForm").addEventListener("submit", searchFnrhPrecheckins);
       document.getElementById("openGuestDetailsBtn").addEventListener("click", () => {
         setGuestOptionalOpen(true);
         document.getElementById("guestOptionalDetails").scrollIntoView({ behavior: "smooth", block: "nearest" });
