@@ -776,6 +776,23 @@
       border-top: 1px dashed #cfd8e3;
     }
 
+    .fnrh-precheckin-link-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .fnrh-precheckin-link-actions button {
+      max-width: 100%;
+    }
+
+    .fnrh-precheckin-guidance {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
     #qrModal canvas {
       max-width: 100%;
       height: auto;
@@ -836,6 +853,10 @@
       }
 
       .fnrh-precheckin-period button {
+        width: 100%;
+      }
+
+      .fnrh-precheckin-link-actions button {
         width: 100%;
       }
     }
@@ -1055,6 +1076,7 @@
                     <button id="searchFnrhPrecheckinsBtn" type="submit">Buscar pré-check-ins</button>
                   </form>
                   <div id="fnrhPrecheckinSearchStatus" class="status-line" aria-live="polite"></div>
+                  <div id="fnrhPrecheckinLinkStatus" class="status-line" aria-live="polite"></div>
                   <div id="fnrhPrecheckinResults" class="fnrh-precheckin-results"></div>
                 </div>
               </div>
@@ -1117,6 +1139,10 @@ João Silva"></textarea>
     let fnrhPrecheckinsIgnoredCount = 0;
     let isSearchingFnrhPrecheckins = false;
     let fnrhPrecheckinsRequestId = 0;
+    let linkingFnrhPrecheckinByGuestId = {};
+    let linkingFnrhPrecheckinByHospedeId = {};
+    let stayDetailsRequestId = 0;
+    let pendingStayDetailsId = null;
 
     function getStoredStayUiMetaMap() {
       try {
@@ -1501,6 +1527,73 @@ João Silva"></textarea>
       };
     }
 
+    function getFnrhPrecheckinLinkEligibility(guestId) {
+      const stayId = Number(selectedStay?.id);
+      const guestIndex = selectedGuests.findIndex((guest) => String(guest?.id) === String(guestId));
+      const guest = guestIndex >= 0 ? selectedGuests[guestIndex] : null;
+      const localGuestId = Number(guest?.id);
+
+      if (!Number.isSafeInteger(stayId) || stayId <= 0) return null;
+      if (!Number.isSafeInteger(localGuestId) || localGuestId <= 0) return null;
+      if (String(guest.stay_id) !== String(selectedStay.id)) return null;
+      if (String(guest.fnrh_hospede_id || "").trim()) return null;
+      if (!Array.isArray(fnrhPrecheckins)) return null;
+
+      const matching = matchFnrhPrecheckinsToGuests(fnrhPrecheckins, selectedGuests);
+      const associations = matching.matchesByGuestIndex[guestIndex] || [];
+      if (associations.length !== 1 || associations[0].kind !== "exact") return null;
+
+      const candidate = fnrhPrecheckins[associations[0].candidateIndex];
+      if (!candidate?.hospedeId) return null;
+      if (candidate.situation !== "PRECHECKIN_NAOVINCULADO") return null;
+      if (candidate.documentKind !== "cpf") return null;
+
+      const localCpf = normalizeExactCpf(guest.cpf);
+      const candidateCpf = normalizeExactCpf(candidate.documentValue);
+      if (!localCpf || localCpf !== candidateCpf) return null;
+
+      return { guest, candidate };
+    }
+
+    function getFnrhPrecheckinGuidance(kind) {
+      if (kind === "possible") {
+        return "Conferência manual necessária. O vínculo automático exige documento idêntico.";
+      }
+      if (kind === "ambiguous") {
+        return "Não é possível vincular automaticamente porque há mais de uma correspondência.";
+      }
+      if (kind === "multiple") {
+        return "Há mais de um pré-check-in compatível. Faça a conferência antes de vincular.";
+      }
+      return "";
+    }
+
+    function isFnrhLinkStayActive(stayId) {
+      const sameSelectedStay = String(selectedStay?.id) === String(stayId);
+      const samePendingStay = pendingStayDetailsId == null ||
+        String(pendingStayDetailsId) === String(stayId);
+      return sameSelectedStay && samePendingStay;
+    }
+
+    function bindFnrhPrecheckinLinkActions() {
+      document.querySelectorAll("[data-link-fnrh-guest-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const eligibility = getFnrhPrecheckinLinkEligibility(button.dataset.linkFnrhGuestId);
+          if (!eligibility) {
+            setStatus(
+              "fnrhPrecheckinLinkStatus",
+              "Os dados mudaram. Faça uma nova busca antes de vincular.",
+              "warning"
+            );
+            renderFnrhPrecheckinResults();
+            return;
+          }
+
+          linkFnrhPrecheckinToGuest(eligibility.guest.id, eligibility.candidate.hospedeId);
+        });
+      });
+    }
+
     function getFnrhMatchLabel(kind) {
       if (kind === "identified") return "Já identificado no sistema";
       if (kind === "exact") return "Correspondência exata";
@@ -1576,6 +1669,21 @@ João Silva"></textarea>
               return renderFnrhPrecheckinCandidateDetails(fnrhPrecheckins[candidateIndex], kind);
             }).join("")
           : `<div class="fnrh-precheckin-match-details">Nenhum pré-check-in correspondente encontrado no período.</div>`;
+        const eligibility = getFnrhPrecheckinLinkEligibility(guest?.id);
+        const guestKey = String(guest?.id || "");
+        const candidateKey = String(eligibility?.candidate?.hospedeId || "");
+        const isLinking = !!linkingFnrhPrecheckinByGuestId[guestKey] ||
+          !!(candidateKey && linkingFnrhPrecheckinByHospedeId[candidateKey]);
+        const linkAction = eligibility
+          ? `
+            <div class="fnrh-precheckin-link-actions">
+              <button type="button" class="secondary" data-link-fnrh-guest-id="${escapeHtml(guestKey)}" ${isLinking ? "disabled" : ""}>
+                ${isLinking ? "Vinculando..." : "Vincular à reserva"}
+              </button>
+            </div>
+          `
+          : "";
+        const guidance = getFnrhPrecheckinGuidance(overallKind);
 
         return `
           <div class="fnrh-precheckin-match">
@@ -1585,6 +1693,8 @@ João Silva"></textarea>
               <span class="status-badge ${getFnrhMatchTone(overallKind)}">${escapeHtml(getFnrhMatchLabel(overallKind))}</span>
             </div>
             ${details}
+            ${guidance ? `<div class="fnrh-precheckin-guidance">${escapeHtml(guidance)}</div>` : ""}
+            ${linkAction}
           </div>
         `;
       }).join("");
@@ -1624,6 +1734,7 @@ João Silva"></textarea>
           ? `<div class="fnrh-precheckin-others"><h6>Outros pré-check-ins encontrados</h6>${unmatchedRows}</div>`
           : ""}
       `;
+      bindFnrhPrecheckinLinkActions();
     }
 
     function updateFnrhPrecheckinSearchButton() {
@@ -1654,32 +1765,35 @@ João Silva"></textarea>
 
     async function searchFnrhPrecheckins(event) {
       event?.preventDefault();
-      if (isSearchingFnrhPrecheckins) return;
+      if (isSearchingFnrhPrecheckins) return false;
+      if (event) {
+        setStatus("fnrhPrecheckinLinkStatus", "");
+      }
 
       const startDate = normalizeDateValue(document.getElementById("fnrhPrecheckinStartDate")?.value);
       const endDate = normalizeDateValue(document.getElementById("fnrhPrecheckinEndDate")?.value);
 
       if (!selectedStay?.id) {
         setStatus("fnrhPrecheckinSearchStatus", "Selecione uma reserva antes de buscar.", "warning");
-        return;
+        return false;
       }
       if (!startDate) {
         setStatus("fnrhPrecheckinSearchStatus", "Informe a data inicial.", "warning");
-        return;
+        return false;
       }
       if (!endDate) {
         setStatus("fnrhPrecheckinSearchStatus", "Informe a data final.", "warning");
-        return;
+        return false;
       }
 
       const periodLength = getFnrhPrecheckinPeriodLength(startDate, endDate);
       if (periodLength == null || periodLength < 1) {
         setStatus("fnrhPrecheckinSearchStatus", "A data inicial deve ser menor ou igual à data final.", "warning");
-        return;
+        return false;
       }
       if (periodLength > 7) {
         setStatus("fnrhPrecheckinSearchStatus", "O período máximo permitido é de sete dias.", "warning");
-        return;
+        return false;
       }
 
       clearFnrhPrecheckinResults();
@@ -1705,7 +1819,7 @@ João Silva"></textarea>
         }
 
         if (requestId !== fnrhPrecheckinsRequestId || String(selectedStay?.id) !== String(requestedStayId)) {
-          return;
+          return false;
         }
 
         if (response.ok !== true) {
@@ -1738,9 +1852,10 @@ João Silva"></textarea>
           "success"
         );
         renderFnrhPrecheckinResults();
+        return true;
       } catch (error) {
         if (requestId !== fnrhPrecheckinsRequestId || String(selectedStay?.id) !== String(requestedStayId)) {
-          return;
+          return false;
         }
         fnrhPrecheckins = null;
         fnrhPrecheckinsIgnoredCount = 0;
@@ -1754,10 +1869,195 @@ João Silva"></textarea>
           status: Number(error?.status) || null,
           type: String(error?.message || "network_error")
         });
+        return false;
       } finally {
         if (requestId === fnrhPrecheckinsRequestId) {
           isSearchingFnrhPrecheckins = false;
           updateFnrhPrecheckinSearchButton();
+        }
+      }
+    }
+
+    async function linkFnrhPrecheckinToGuest(guestId, fnrhHospedeId) {
+      const normalizedFnrhHospedeId = String(fnrhHospedeId || "").trim();
+      const candidateInMemory = Array.isArray(fnrhPrecheckins)
+        ? fnrhPrecheckins.find((candidate) => candidate.hospedeId === normalizedFnrhHospedeId)
+        : null;
+      const eligibility = getFnrhPrecheckinLinkEligibility(guestId);
+
+      if (!candidateInMemory || !eligibility || eligibility.candidate !== candidateInMemory) {
+        setStatus(
+          "fnrhPrecheckinLinkStatus",
+          "Os dados mudaram. Faça uma nova busca antes de vincular.",
+          "warning"
+        );
+        renderFnrhPrecheckinResults();
+        return;
+      }
+
+      const guestKey = String(eligibility.guest.id);
+      if (
+        linkingFnrhPrecheckinByGuestId[guestKey] ||
+        linkingFnrhPrecheckinByHospedeId[normalizedFnrhHospedeId]
+      ) {
+        return;
+      }
+
+      const requestedStayId = selectedStay.id;
+      const guestName = String(eligibility.guest.full_name || "Hóspede").trim();
+      const documentLabel = getFnrhDocumentTypeLabel(eligibility.candidate);
+      const maskedDocument = maskFnrhDocument(
+        eligibility.candidate.documentValue,
+        eligibility.candidate.documentType
+      );
+      const confirmationMessage = [
+        `Vincular o pré-check-in encontrado ao hóspede “${guestName}”?`,
+        `${documentLabel}: ${maskedDocument}`
+      ].join("\n\n");
+
+      if (!window.confirm(confirmationMessage)) {
+        return;
+      }
+
+      const revalidatedEligibility = getFnrhPrecheckinLinkEligibility(guestId);
+      const revalidatedCandidate = Array.isArray(fnrhPrecheckins)
+        ? fnrhPrecheckins.find((candidate) => candidate.hospedeId === normalizedFnrhHospedeId)
+        : null;
+      if (
+        !revalidatedCandidate ||
+        !revalidatedEligibility ||
+        revalidatedEligibility.candidate !== revalidatedCandidate ||
+        !isFnrhLinkStayActive(requestedStayId)
+      ) {
+        setStatus(
+          "fnrhPrecheckinLinkStatus",
+          "Os dados mudaram. Faça uma nova busca antes de vincular.",
+          "warning"
+        );
+        renderFnrhPrecheckinResults();
+        return;
+      }
+
+      linkingFnrhPrecheckinByGuestId[guestKey] = true;
+      linkingFnrhPrecheckinByHospedeId[normalizedFnrhHospedeId] = true;
+      setStatus("fnrhPrecheckinLinkStatus", "");
+      renderFnrhPrecheckinResults();
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/stays/${encodeURIComponent(requestedStayId)}/fnrh/vincular-precheckin`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              guest_id: revalidatedEligibility.guest.id,
+              fnrh_hospede_id: normalizedFnrhHospedeId
+            })
+          }
+        );
+        let body = null;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+
+        if (!isFnrhLinkStayActive(requestedStayId)) {
+          return;
+        }
+
+        const backendMessage = String(body?.error?.message || body?.error || body?.message || "").trim();
+
+        if (response.ok === true) {
+          setStatus(
+            "fnrhPrecheckinLinkStatus",
+            `Pré-check-in vinculado com sucesso ao hóspede “${guestName}”.`,
+            "success"
+          );
+          const reloaded = await loadStayDetails(requestedStayId, requestedStayId);
+          if (!isFnrhLinkStayActive(requestedStayId)) {
+            return;
+          }
+
+          const refreshed = await searchFnrhPrecheckins();
+          if ((!reloaded || !refreshed) && isFnrhLinkStayActive(requestedStayId)) {
+            setStatus(
+              "fnrhPrecheckinSearchStatus",
+              "O vínculo foi realizado, mas a lista de pré-check-ins não pôde ser atualizada.",
+              "warning"
+            );
+          }
+          return;
+        }
+
+        if (response.status === 409) {
+          setStatus(
+            "fnrhPrecheckinLinkStatus",
+            backendMessage || "O vínculo não pôde ser realizado porque os dados locais mudaram.",
+            "warning"
+          );
+          await loadStayDetails(requestedStayId, requestedStayId);
+          if (isFnrhLinkStayActive(requestedStayId)) {
+            await searchFnrhPrecheckins();
+          }
+          return;
+        }
+
+        if (response.status === 400) {
+          setStatus(
+            "fnrhPrecheckinLinkStatus",
+            backendMessage || "Os dados enviados para o vínculo são inválidos.",
+            "error"
+          );
+          return;
+        }
+
+        if (response.status === 404) {
+          fnrhPrecheckins = Array.isArray(fnrhPrecheckins)
+            ? fnrhPrecheckins.filter((candidate) => candidate.hospedeId !== normalizedFnrhHospedeId)
+            : fnrhPrecheckins;
+          renderFnrhPrecheckinResults();
+          setStatus(
+            "fnrhPrecheckinLinkStatus",
+            "O hóspede ou a reserva não foi encontrado. Faça uma nova busca antes de vincular.",
+            "warning"
+          );
+          return;
+        }
+
+        if (response.status === 502) {
+          const operationalMessage = "A FNRH não concluiu o vínculo. Nenhuma alteração local foi aplicada.";
+          setStatus(
+            "fnrhPrecheckinLinkStatus",
+            backendMessage && backendMessage !== operationalMessage
+              ? `${operationalMessage} ${backendMessage}`
+              : operationalMessage,
+            "error"
+          );
+          return;
+        }
+
+        setStatus(
+          "fnrhPrecheckinLinkStatus",
+          "Não foi possível concluir o vínculo. Verifique a conexão segura do backend.",
+          "error"
+        );
+      } catch (error) {
+        if (isFnrhLinkStayActive(requestedStayId)) {
+          setStatus(
+            "fnrhPrecheckinLinkStatus",
+            "Não foi possível concluir o vínculo. Verifique a conexão segura do backend.",
+            "error"
+          );
+        }
+        console.error("Falha ao solicitar vínculo de pré-check-in.", {
+          type: String(error?.name || "network_error")
+        });
+      } finally {
+        delete linkingFnrhPrecheckinByGuestId[guestKey];
+        delete linkingFnrhPrecheckinByHospedeId[normalizedFnrhHospedeId];
+        if (isFnrhLinkStayActive(requestedStayId)) {
+          renderFnrhPrecheckinResults();
         }
       }
     }
@@ -2397,6 +2697,7 @@ João Silva"></textarea>
 
     function enterCreateMode() {
       clearFnrhPrecheckinResults();
+      setStatus("fnrhPrecheckinLinkStatus", "");
       isCreatingStay = true;
       selectedStay = null;
       selectedGuests = [];
@@ -2442,15 +2743,29 @@ João Silva"></textarea>
       }
     }
 
-    async function loadStayDetails(stayId) {
+    async function loadStayDetails(stayId, expectedSelectedStayId = null) {
+      const requestId = ++stayDetailsRequestId;
+      pendingStayDetailsId = stayId;
       if (String(stayId) !== String(selectedStay?.id)) {
         clearFnrhPrecheckinResults();
+        setStatus("fnrhPrecheckinLinkStatus", "");
       }
       try {
         const [stay, guests] = await Promise.all([
           fetchJson(`${API_BASE}/stays/${stayId}`),
           fetchJson(`${API_BASE}/stays/${stayId}/guests`)
         ]);
+
+        if (requestId !== stayDetailsRequestId) {
+          return false;
+        }
+
+        if (
+          expectedSelectedStayId != null &&
+          String(selectedStay?.id) !== String(expectedSelectedStayId)
+        ) {
+          return false;
+        }
 
         selectedStay = stay;
         selectedGuests = guests;
@@ -2471,8 +2786,23 @@ João Silva"></textarea>
         setStatus("fnrhGuestsStatusLine", "");
         showCopyLinkFeedback("");
         maybeAutoCheckFnrhReservationGuestsStatus();
+        return true;
       } catch (error) {
+        if (requestId !== stayDetailsRequestId) {
+          return false;
+        }
+        if (
+          expectedSelectedStayId != null &&
+          String(selectedStay?.id) !== String(expectedSelectedStayId)
+        ) {
+          return false;
+        }
         setStatus("actionStatus", error.message || "Erro ao carregar reserva.", "error");
+        return false;
+      } finally {
+        if (requestId === stayDetailsRequestId) {
+          pendingStayDetailsId = null;
+        }
       }
     }
 
