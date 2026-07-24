@@ -81,6 +81,17 @@ function isValidBirthDate(dateString) {
   return /^\d{4}-\d{2}-\d{2}$/.test(dateString);
 }
 
+function parsePositiveInteger(value) {
+  const normalized = String(value ?? "").trim();
+  if (!/^\d+$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isValidUuid(value) {
+  return /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(String(value || "").trim());
+}
+
 const VALID_GENERO_IDS = ["HOMEM", "MULHER", "OUTRO"];
 const VALID_RACA_IDS = ["AMARELA", "BRANCA", "INDIGENA", "PARDA", "PRETA", "NAOINFORMAR"];
 const VALID_DEFICIENCIA_IDS = ["NAO", "SIM"];
@@ -649,6 +660,99 @@ async function fetchFnrhReservationGuests(fnrhReservaId) {
     status: response.status,
     body
   };
+}
+
+async function linkFnrhPreCheckin(fnrhReservaId, fnrhHospedeId) {
+  const mode = process.env.FNRH_MODE || "mock";
+
+  if (mode === "mock") {
+    return {
+      ok: true,
+      status: 200,
+      body: { mode: "mock" }
+    };
+  }
+
+  const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
+  const user = String(process.env.FNRH_USER || "").trim();
+  const apiKey = String(process.env.FNRH_API_KEY || "").trim();
+  const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
+  const finalUrl = `${baseUrl}/reservas/${encodeURIComponent(fnrhReservaId)}/vincular-hospede/${encodeURIComponent(fnrhHospedeId)}`;
+  const missingVars = [
+    !baseUrl && "FNRH_BASE_URL",
+    !user && "FNRH_USER",
+    !apiKey && "FNRH_API_KEY",
+    !cpfSolicitante && "FNRH_CPF_SOLICITANTE"
+  ].filter(Boolean);
+
+  if (missingVars.length) {
+    const configurationError = new Error(
+      `FNRH_MODE=real, mas faltam as variáveis obrigatórias: ${missingVars.join(", ")}`
+    );
+    configurationError.fnrhStatus = null;
+    configurationError.fnrhBody = { error: "Configuração da FNRH incompleta" };
+    throw configurationError;
+  }
+
+  const startedAt = Date.now();
+  let response;
+
+  try {
+    response = await fetch(finalUrl, {
+      method: "POST",
+      headers: {
+        Authorization: buildBasicAuthorization(user, apiKey),
+        cpf_solicitante: cpfSolicitante
+      }
+    });
+  } catch (networkError) {
+    console.error("[FNRH] pre-checkin link network failure:", {
+      type: networkError?.name || "Error",
+      duration_ms: Date.now() - startedAt
+    });
+    networkError.fnrhStatus = null;
+    networkError.fnrhBody = { error: "Erro de rede ao vincular pré-check-in na FNRH" };
+    throw networkError;
+  }
+
+  const text = await response.text();
+  let body;
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
+
+  console.log("[FNRH] pre-checkin link response:", {
+    status: response.status,
+    duration_ms: Date.now() - startedAt
+  });
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
+function sanitizeFnrhLinkResponseBody(body, depth = 0) {
+  if (depth > 5) return "[conteúdo omitido]";
+  if (Array.isArray(body)) {
+    return body.slice(0, 50).map((item) => sanitizeFnrhLinkResponseBody(item, depth + 1));
+  }
+  if (!body || typeof body !== "object") {
+    return body;
+  }
+
+  return Object.fromEntries(
+    Object.entries(body).map(([key, value]) => {
+      if (/authorization|credential|password|token|cpf|documento|nome|email|telefone|phone|raw/i.test(key)) {
+        return [key, "[conteúdo omitido]"];
+      }
+      return [key, sanitizeFnrhLinkResponseBody(value, depth + 1)];
+    })
+  );
 }
 
 async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
@@ -1723,6 +1827,239 @@ app.get("/stays/:id/guests", (req, res) => {
       }
 
       res.json(rows);
+    }
+  );
+});
+
+app.post("/stays/:stayId/fnrh/vincular-precheckin", (req, res) => {
+  const stayId = parsePositiveInteger(req.params.stayId);
+  const requestBody = req.body;
+  const allowedBodyFields = ["guest_id", "fnrh_hospede_id"];
+
+  if (!stayId) {
+    return res.status(400).json({ error: "stayId deve ser um inteiro positivo" });
+  }
+
+  if (!requestBody || typeof requestBody !== "object" || Array.isArray(requestBody)) {
+    return res.status(400).json({ error: "Corpo da requisição inválido" });
+  }
+
+  const unexpectedFields = Object.keys(requestBody).filter((field) => !allowedBodyFields.includes(field));
+  if (unexpectedFields.length) {
+    return res.status(400).json({
+      error: "O corpo aceita somente guest_id e fnrh_hospede_id"
+    });
+  }
+
+  const guestId = parsePositiveInteger(requestBody.guest_id);
+  const fnrhHospedeId = String(requestBody.fnrh_hospede_id || "").trim();
+
+  if (!guestId) {
+    return res.status(400).json({ error: "guest_id deve ser um inteiro positivo" });
+  }
+
+  if (!fnrhHospedeId) {
+    return res.status(400).json({ error: "fnrh_hospede_id é obrigatório" });
+  }
+
+  if (!isValidUuid(fnrhHospedeId)) {
+    return res.status(400).json({ error: "fnrh_hospede_id deve ser um UUID válido" });
+  }
+
+  db.get(
+    `SELECT id, fnrh_reserva_id
+     FROM stays
+     WHERE id = ? AND property_id = ?`,
+    [stayId, PROPERTY_ID],
+    (stayErr, stay) => {
+      if (stayErr) {
+        console.error("[FNRH] erro ao buscar stay para vínculo:", { stay_id: stayId });
+        return res.status(500).json({ error: "Erro no banco ao buscar stay" });
+      }
+
+      if (!stay) {
+        return res.status(404).json({ error: "Stay não encontrada" });
+      }
+
+      const fnrhReservaId = String(stay.fnrh_reserva_id || "").trim();
+      if (!fnrhReservaId) {
+        return res.status(409).json({
+          error: "Stay sem fnrh_reserva_id para vincular pré-check-in",
+          stay_id: stayId
+        });
+      }
+
+      db.get(
+        `SELECT guests.id, guests.stay_id, guests.fnrh_hospede_id
+         FROM guests
+         INNER JOIN stays ON stays.id = guests.stay_id
+         WHERE guests.id = ? AND guests.stay_id = ? AND stays.property_id = ?`,
+        [guestId, stayId, PROPERTY_ID],
+        (guestErr, guest) => {
+          if (guestErr) {
+            console.error("[FNRH] erro ao buscar hóspede para vínculo:", {
+              stay_id: stayId,
+              guest_id: guestId
+            });
+            return res.status(500).json({ error: "Erro no banco ao buscar hóspede" });
+          }
+
+          if (!guest) {
+            return res.status(404).json({
+              error: "Hóspede não encontrado para a stay informada"
+            });
+          }
+
+          const currentFnrhHospedeId = String(guest.fnrh_hospede_id || "").trim();
+          if (currentFnrhHospedeId === fnrhHospedeId) {
+            return res.status(409).json({
+              error: "Hóspede já identificado com este registro da FNRH",
+              stay_id: stayId,
+              guest_id: guestId
+            });
+          }
+
+          if (currentFnrhHospedeId) {
+            return res.status(409).json({
+              error: "Hóspede já possui outro vínculo oficial com a FNRH",
+              stay_id: stayId,
+              guest_id: guestId
+            });
+          }
+
+          db.get(
+            `SELECT guests.id
+             FROM guests
+             INNER JOIN stays ON stays.id = guests.stay_id
+             WHERE guests.fnrh_hospede_id = ?
+               AND guests.id <> ?
+               AND stays.property_id = ?
+             LIMIT 1`,
+            [fnrhHospedeId, guestId, PROPERTY_ID],
+            async (duplicateErr, duplicateGuest) => {
+              if (duplicateErr) {
+                console.error("[FNRH] erro ao verificar duplicidade de vínculo:", {
+                  stay_id: stayId,
+                  guest_id: guestId
+                });
+                return res.status(500).json({ error: "Erro no banco ao validar vínculo FNRH" });
+              }
+
+              if (duplicateGuest) {
+                return res.status(409).json({
+                  error: "Este registro da FNRH já está vinculado a outro hóspede local"
+                });
+              }
+
+              const startedAt = Date.now();
+
+              try {
+                const result = await linkFnrhPreCheckin(fnrhReservaId, fnrhHospedeId);
+                const responseBody = sanitizeFnrhLinkResponseBody(result.body);
+
+                console.log("[FNRH] resultado do vínculo de pré-check-in:", {
+                  stay_id: stayId,
+                  guest_id: guestId,
+                  status: result.status,
+                  duration_ms: Date.now() - startedAt,
+                  success: !!result.ok
+                });
+
+                if (!result.ok) {
+                  return res.status(502).json({
+                    error: "Não foi possível vincular o pré-check-in na FNRH",
+                    stay_id: stayId,
+                    guest_id: guestId,
+                    response_status: result.status,
+                    response_body: responseBody
+                  });
+                }
+
+                return db.run(
+                  `UPDATE guests
+                   SET fnrh_hospede_id = ?
+                   WHERE id = ?
+                     AND stay_id = ?
+                     AND (fnrh_hospede_id IS NULL OR TRIM(fnrh_hospede_id) = '')`,
+                  [fnrhHospedeId, guestId, stayId],
+                  function (persistErr) {
+                    if (persistErr) {
+                      console.error("[FNRH] erro ao persistir vínculo de pré-check-in:", {
+                        stay_id: stayId,
+                        guest_id: guestId
+                      });
+                      return res.status(500).json({
+                        error: "Vínculo realizado na FNRH, mas não foi possível persistir o resultado local",
+                        stay_id: stayId,
+                        guest_id: guestId,
+                        response_status: result.status,
+                        response_body: responseBody
+                      });
+                    }
+
+                    if (this.changes !== 1) {
+                      return res.status(409).json({
+                        error: "O hóspede recebeu outro vínculo local durante a operação",
+                        stay_id: stayId,
+                        guest_id: guestId,
+                        response_status: result.status,
+                        response_body: responseBody
+                      });
+                    }
+
+                    db.get(
+                      `SELECT guests.id, guests.stay_id, guests.fnrh_hospede_id
+                       FROM guests
+                       INNER JOIN stays ON stays.id = guests.stay_id
+                       WHERE guests.id = ? AND guests.stay_id = ? AND stays.property_id = ?`,
+                      [guestId, stayId, PROPERTY_ID],
+                      (reloadErr, updatedGuest) => {
+                        if (reloadErr || !updatedGuest) {
+                          console.error("[FNRH] erro ao recarregar hóspede após vínculo:", {
+                            stay_id: stayId,
+                            guest_id: guestId
+                          });
+                          return res.status(500).json({
+                            error: "Vínculo persistido, mas não foi possível recarregar o hóspede",
+                            stay_id: stayId,
+                            guest_id: guestId,
+                            response_status: result.status,
+                            response_body: responseBody
+                          });
+                        }
+
+                        return res.json({
+                          message: "Pré-check-in vinculado com sucesso.",
+                          stay_id: updatedGuest.stay_id,
+                          guest_id: updatedGuest.id,
+                          fnrh_hospede_id: updatedGuest.fnrh_hospede_id,
+                          response_status: result.status,
+                          response_body: responseBody
+                        });
+                      }
+                    );
+                  }
+                );
+              } catch (linkErr) {
+                console.error("[FNRH] falha operacional ao vincular pré-check-in:", {
+                  stay_id: stayId,
+                  guest_id: guestId,
+                  duration_ms: Date.now() - startedAt,
+                  type: linkErr?.name || "Error"
+                });
+
+                return res.status(500).json({
+                  error: "Não foi possível acessar a FNRH para vincular o pré-check-in",
+                  stay_id: stayId,
+                  guest_id: guestId,
+                  response_status: linkErr.fnrhStatus ?? null,
+                  response_body: sanitizeFnrhLinkResponseBody(linkErr.fnrhBody || null)
+                });
+              }
+            }
+          );
+        }
+      );
     }
   );
 });
