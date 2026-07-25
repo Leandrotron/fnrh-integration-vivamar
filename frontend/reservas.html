@@ -738,6 +738,18 @@
       gap: 10px;
     }
 
+    .fnrh-reception-import {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed #cfd8e3;
+    }
+
+    .fnrh-reception-import strong {
+      color: #2456c7;
+    }
+
     .fnrh-precheckin-period {
       display: grid;
       grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) auto;
@@ -1178,6 +1190,7 @@ João Silva"></textarea>
     let fnrhReceptionCandidates = null;
     let isStartingFnrhReceptionSession = false;
     let isSearchingFnrhReceptionNew = false;
+    let importingFnrhReceptionCandidateByKey = {};
     let stayDetailsRequestId = 0;
     let pendingStayDetailsId = null;
 
@@ -1928,6 +1941,226 @@ João Silva"></textarea>
       });
     }
 
+    function isValidFnrhHospedeUuid(value) {
+      return /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(
+        normalizeFnrhHospedeId(value)
+      );
+    }
+
+    function hasFnrhReceptionMainGuest() {
+      return selectedGuests.some((guest) => {
+        return guest?.is_main_guest === true || Number(guest?.is_main_guest) === 1;
+      });
+    }
+
+    function getFnrhReceptionImportEligibility(candidateIndex) {
+      const index = Number(candidateIndex);
+      if (!Number.isInteger(index) || index < 0) return null;
+      if (!selectedStay?.id || !fnrhReceptionSession) return null;
+      if (String(fnrhReceptionSession.stayId) !== String(selectedStay.id)) return null;
+      if (!Array.isArray(fnrhReceptionCandidates)) return null;
+
+      const candidate = fnrhReceptionCandidates[index];
+      const fnrhHospedeId = normalizeFnrhHospedeId(candidate?.hospedeId);
+      if (!candidate || !isValidFnrhHospedeUuid(fnrhHospedeId)) return null;
+      if (candidate.situation !== "PRECHECKIN_NAOVINCULADO") return null;
+      if (selectedGuests.some((guest) => {
+        return normalizeFnrhHospedeId(guest?.fnrh_hospede_id) === fnrhHospedeId;
+      })) {
+        return null;
+      }
+
+      const matching = matchFnrhPrecheckinsToGuests(fnrhReceptionCandidates, selectedGuests);
+      const hasLocalAssociation = matching.matchesByGuestIndex.some((associations) => {
+        return associations.some((association) => association.candidateIndex === index);
+      });
+      if (hasLocalAssociation) return null;
+
+      return {
+        candidate,
+        candidateIndex: index,
+        fnrhHospedeId,
+        stayId: String(selectedStay.id),
+        session: fnrhReceptionSession
+      };
+    }
+
+    function getFnrhReceptionImportKey(stayId, fnrhHospedeId) {
+      return `${String(stayId)}:${normalizeFnrhHospedeId(fnrhHospedeId)}`;
+    }
+
+    function isFnrhReceptionImportContextActive(operation) {
+      return !!operation &&
+        importingFnrhReceptionCandidateByKey[operation.key] === operation &&
+        String(selectedStay?.id) === operation.stayId &&
+        String(fnrhReceptionSession?.stayId) === operation.stayId &&
+        String(fnrhReceptionSession?.startedAt) === operation.sessionStartedAt;
+    }
+
+    function bindFnrhReceptionImportActions(container) {
+      container.querySelectorAll("[data-import-fnrh-candidate-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const isMainGuest = button.dataset.importFnrhRole === "main";
+          importFnrhReceptionCandidate(button.dataset.importFnrhCandidateIndex, isMainGuest);
+        });
+      });
+    }
+
+    async function refreshFnrhReceptionImportContext(operation) {
+      if (!isFnrhReceptionImportContextActive(operation)) return false;
+      const reloaded = await loadStayDetails(operation.stayId, operation.stayId);
+      if (
+        !reloaded ||
+        String(selectedStay?.id) !== operation.stayId ||
+        String(fnrhReceptionSession?.stayId) !== operation.stayId
+      ) {
+        return false;
+      }
+      await searchFnrhReceptionNewCandidates();
+      return String(selectedStay?.id) === operation.stayId;
+    }
+
+    async function importFnrhReceptionCandidate(candidateIndex, isMainGuest) {
+      const eligibility = getFnrhReceptionImportEligibility(candidateIndex);
+      if (!eligibility) {
+        setStatus(
+          "fnrhReceptionSessionStatus",
+          "Os dados mudaram. Busque novamente antes de adicionar o hóspede.",
+          "warning"
+        );
+        renderFnrhReceptionResults();
+        return;
+      }
+      if (typeof isMainGuest !== "boolean") return;
+      if (isMainGuest && hasFnrhReceptionMainGuest()) {
+        setStatus(
+          "fnrhReceptionSessionStatus",
+          "Esta hospedagem já possui um hóspede principal.",
+          "warning"
+        );
+        renderFnrhReceptionResults();
+        return;
+      }
+
+      const roleLabel = isMainGuest ? "titular" : "acompanhante";
+      const candidateName = String(eligibility.candidate.name || "Hóspede").trim();
+      const confirmationMessage = [
+        `Adicionar “${candidateName}” à stay selecionada como ${roleLabel}?`,
+        "O vínculo será executado na FNRH.",
+        "Confirme somente após conferir pessoalmente que a pessoa pertence a esta reserva."
+      ].join("\n\n");
+      if (!window.confirm(confirmationMessage)) return;
+
+      const revalidated = getFnrhReceptionImportEligibility(candidateIndex);
+      if (
+        !revalidated ||
+        revalidated.fnrhHospedeId !== eligibility.fnrhHospedeId ||
+        revalidated.session !== eligibility.session ||
+        (isMainGuest && hasFnrhReceptionMainGuest())
+      ) {
+        setStatus(
+          "fnrhReceptionSessionStatus",
+          "Os dados mudaram. Busque novamente antes de adicionar o hóspede.",
+          "warning"
+        );
+        renderFnrhReceptionResults();
+        return;
+      }
+
+      const key = getFnrhReceptionImportKey(revalidated.stayId, revalidated.fnrhHospedeId);
+      if (importingFnrhReceptionCandidateByKey[key]) return;
+      const operation = Object.freeze({
+        key,
+        stayId: revalidated.stayId,
+        fnrhHospedeId: revalidated.fnrhHospedeId,
+        isMainGuest,
+        dataInicio: revalidated.session.dataInicio,
+        dataFim: revalidated.session.dataFim,
+        sessionStartedAt: revalidated.session.startedAt
+      });
+      importingFnrhReceptionCandidateByKey[key] = operation;
+      setStatus("fnrhReceptionSessionStatus", `Adicionando como ${roleLabel}...`, "warning");
+      renderFnrhReceptionResults();
+
+      try {
+        const data = await fetchJson(
+          `${API_BASE}/stays/${encodeURIComponent(operation.stayId)}/fnrh/importar-vincular-precheckin`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fnrh_hospede_id: operation.fnrhHospedeId,
+              is_main_guest: operation.isMainGuest,
+              data_inicio: operation.dataInicio,
+              data_fim: operation.dataFim
+            })
+          }
+        );
+        if (!isFnrhReceptionImportContextActive(operation)) return;
+
+        const idempotent = data?.already_imported === true;
+        await refreshFnrhReceptionImportContext(operation);
+        if (isFnrhReceptionImportContextActive(operation)) {
+          setStatus(
+            "fnrhReceptionSessionStatus",
+            idempotent
+              ? "Este hóspede já estava adicionado à reserva."
+              : "Hóspede adicionado e vinculado com sucesso.",
+            "success"
+          );
+        }
+      } catch (error) {
+        if (!isFnrhReceptionImportContextActive(operation)) return;
+        const backendMessage = String(error?.apiMessage || error?.message || "").trim();
+
+        if (error?.status === 409) {
+          await refreshFnrhReceptionImportContext(operation);
+          if (isFnrhReceptionImportContextActive(operation)) {
+            setStatus(
+              "fnrhReceptionSessionStatus",
+              backendMessage || "A importação não pôde ser realizada porque os dados mudaram.",
+              "warning"
+            );
+          }
+          return;
+        }
+
+        if (error?.status === 400 || error?.status === 422 || error?.status === 404) {
+          setStatus(
+            "fnrhReceptionSessionStatus",
+            backendMessage || "Os dados não puderam ser validados para importação.",
+            "error"
+          );
+          return;
+        }
+
+        if (error?.status === 502) {
+          setStatus(
+            "fnrhReceptionSessionStatus",
+            `${backendMessage ? `${backendMessage} ` : ""}` +
+              "Não foi possível confirmar o resultado na FNRH. Atualize a busca antes de tentar novamente.",
+            "warning"
+          );
+          return;
+        }
+
+        setStatus(
+          "fnrhReceptionSessionStatus",
+          `${backendMessage || "Não foi possível concluir a importação."} ` +
+            "O resultado pode estar pendente. Busque novamente antes de repetir.",
+          "error"
+        );
+      } finally {
+        delete importingFnrhReceptionCandidateByKey[key];
+        if (
+          String(selectedStay?.id) === operation.stayId &&
+          String(fnrhReceptionSession?.stayId) === operation.stayId
+        ) {
+          renderFnrhReceptionResults();
+        }
+      }
+    }
+
     function renderFnrhReceptionResults() {
       const container = document.getElementById("fnrhReceptionResults");
       if (!container) return;
@@ -1940,6 +2173,7 @@ João Silva"></textarea>
       }
 
       const matching = matchFnrhPrecheckinsToGuests(fnrhReceptionCandidates, selectedGuests);
+      const hasMainGuest = hasFnrhReceptionMainGuest();
       const rows = fnrhReceptionCandidates.map((candidate, candidateIndex) => {
         const associations = selectedGuests.reduce((items, guest, guestIndex) => {
           const association = (matching.matchesByGuestIndex[guestIndex] || [])
@@ -1970,6 +2204,41 @@ João Silva"></textarea>
             </div>
           `
           : "";
+        const importEligibility = getFnrhReceptionImportEligibility(candidateIndex);
+        const importKey = importEligibility
+          ? getFnrhReceptionImportKey(importEligibility.stayId, importEligibility.fnrhHospedeId)
+          : "";
+        const isImporting = !!(importKey && importingFnrhReceptionCandidateByKey[importKey]);
+        const importAction = importEligibility
+          ? `
+            <div class="fnrh-reception-import">
+              <strong>Adicionar à reserva</strong>
+              ${hasMainGuest
+                ? `<div class="fnrh-precheckin-guidance">A hospedagem já possui hóspede principal.</div>`
+                : ""}
+              <div class="fnrh-precheckin-link-actions">
+                <button
+                  type="button"
+                  class="secondary"
+                  data-import-fnrh-candidate-index="${candidateIndex}"
+                  data-import-fnrh-role="main"
+                  ${hasMainGuest || isImporting ? "disabled" : ""}
+                >
+                  ${isImporting ? "Adicionando..." : "Adicionar como titular"}
+                </button>
+                <button
+                  type="button"
+                  class="secondary"
+                  data-import-fnrh-candidate-index="${candidateIndex}"
+                  data-import-fnrh-role="companion"
+                  ${isImporting ? "disabled" : ""}
+                >
+                  ${isImporting ? "Adicionando..." : "Adicionar como acompanhante"}
+                </button>
+              </div>
+            </div>
+          `
+          : "";
 
         return `
           <div class="fnrh-precheckin-match">
@@ -1984,6 +2253,7 @@ João Silva"></textarea>
               <div>${escapeHtml(localMatch)}</div>
             </div>
             ${linkAction}
+            ${importAction}
           </div>
         `;
       }).join("");
@@ -1994,6 +2264,7 @@ João Silva"></textarea>
         ${rows}
       `;
       bindFnrhPrecheckinLinkActions(container);
+      bindFnrhReceptionImportActions(container);
     }
 
     function updateFnrhReceptionSessionUi() {
