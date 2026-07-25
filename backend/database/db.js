@@ -6,15 +6,19 @@ const dbPath = path.join(__dirname, "..", "database.sqlite");
 console.log("[DB] SQLite em uso:", path.resolve(dbPath));
 const db = new sqlite3.Database(dbPath);
 
-function ensureColumn(tableName, columnName, definition) {
+function ensureColumn(tableName, columnName, definition, callback = () => {}) {
   db.all(`PRAGMA table_info(${tableName})`, (err, columns) => {
     if (err) {
       console.error(`Erro ao inspecionar colunas de ${tableName}:`, err);
+      callback(err);
       return;
     }
 
     const hasColumn = columns.some((column) => column.name === columnName);
-    if (hasColumn) return;
+    if (hasColumn) {
+      callback(null);
+      return;
+    }
 
     db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`, (alterErr) => {
       if (alterErr) {
@@ -22,7 +26,71 @@ function ensureColumn(tableName, columnName, definition) {
       } else {
         console.log(`✓ Coluna ${columnName} adicionada em ${tableName}`);
       }
+      callback(alterErr || null);
     });
+  });
+}
+
+function stopInitializationWithoutFnrhHospedeIdProtection(message) {
+  console.error(message);
+  setImmediate(() => {
+    throw new Error("Inicializacao interrompida sem protecao unica de fnrh_hospede_id.");
+  });
+}
+
+function ensureFnrhHospedeIdUniqueIndex() {
+  ensureColumn("guests", "fnrh_hospede_id", "TEXT", (columnErr) => {
+    if (columnErr) {
+      stopInitializationWithoutFnrhHospedeIdProtection(
+        "[DB] Nao foi possivel garantir guests.fnrh_hospede_id; indice unico nao criado."
+      );
+      return;
+    }
+
+    db.get(
+      `SELECT COUNT(*) AS duplicate_count
+       FROM (
+         SELECT LOWER(TRIM(fnrh_hospede_id)) AS normalized_id
+         FROM guests
+         WHERE fnrh_hospede_id IS NOT NULL
+           AND TRIM(fnrh_hospede_id) <> ''
+         GROUP BY LOWER(TRIM(fnrh_hospede_id))
+         HAVING COUNT(*) > 1
+       )`,
+      (auditErr, auditRow) => {
+        if (auditErr) {
+          stopInitializationWithoutFnrhHospedeIdProtection(
+            "[DB] Falha ao auditar duplicidade de fnrh_hospede_id; indice unico nao criado."
+          );
+          return;
+        }
+
+        const duplicateCount = Number(auditRow?.duplicate_count || 0);
+        if (duplicateCount > 0) {
+          stopInitializationWithoutFnrhHospedeIdProtection(
+            `[DB] Protecao de fnrh_hospede_id nao aplicada: ${duplicateCount} valor(es) duplicado(s) encontrado(s).`
+          );
+          return;
+        }
+
+        db.run(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_guests_fnrh_hospede_id_unique
+           ON guests (LOWER(TRIM(fnrh_hospede_id)))
+           WHERE fnrh_hospede_id IS NOT NULL
+             AND TRIM(fnrh_hospede_id) <> ''`,
+          (indexErr) => {
+            if (indexErr) {
+              stopInitializationWithoutFnrhHospedeIdProtection(
+                "[DB] Erro ao criar indice unico de fnrh_hospede_id."
+              );
+              return;
+            }
+
+            console.log("Indice unico de fnrh_hospede_id pronto");
+          }
+        );
+      }
+    );
   });
 }
 
@@ -183,7 +251,10 @@ db.serialize(() => {
     )
   `, (err) => {
     if (err) console.error("Erro ao criar tabela guests:", err);
-    else console.log("✓ Tabela guests pronta");
+    else {
+      console.log("✓ Tabela guests pronta");
+      ensureFnrhHospedeIdUniqueIndex();
+    }
   });
 
   ensureColumn("guests", "cidade_id", "TEXT");
@@ -197,7 +268,6 @@ db.serialize(() => {
   ensureColumn("guests", "genero_id", "TEXT");
   ensureColumn("guests", "raca_id", "TEXT");
   ensureColumn("guests", "deficiencia_id", "TEXT");
-  ensureColumn("guests", "fnrh_hospede_id", "TEXT");
   ensureColumn("guests", "fnrh_pessoa_id", "TEXT");
   ensureColumn("guests", "fnrh_checkin_at", "TEXT");
   ensureColumn("guests", "fnrh_checkout_at", "TEXT");

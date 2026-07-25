@@ -92,6 +92,28 @@ function isValidUuid(value) {
   return /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(String(value || "").trim());
 }
 
+function normalizeFnrhUuid(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isFnrhHospedeIdUniqueConstraintError(error) {
+  const message = String(error?.message || "");
+  return error?.code === "SQLITE_CONSTRAINT" &&
+    message.includes("idx_guests_fnrh_hospede_id_unique");
+}
+
+function createFnrhHospedeIdConflictError() {
+  const error = new Error("Conflito local de identificador FNRH de hospede");
+  error.code = "FNRH_HOSPEDE_ID_CONFLICT";
+  return error;
+}
+
+function createInvalidFnrhHospedeIdError() {
+  const error = new Error("Identificador FNRH de hospede ausente ou invalido no retorno oficial");
+  error.code = "FNRH_INVALID_HOSPEDE_ID";
+  return error;
+}
+
 const VALID_GENERO_IDS = ["HOMEM", "MULHER", "OUTRO"];
 const VALID_RACA_IDS = ["AMARELA", "BRANCA", "INDIGENA", "PARDA", "PRETA", "NAOINFORMAR"];
 const VALID_DEFICIENCIA_IDS = ["NAO", "SIM"];
@@ -1019,8 +1041,14 @@ function persistFNRHReturnData(stayId, guests, resultBody, callback) {
               return;
             }
 
-            const fnrhHospedeId = String(returnedGuest?.hospede_id || "").trim();
+            const fnrhHospedeId = normalizeFnrhUuid(returnedGuest?.hospede_id);
             const fnrhPessoaId = String(returnedGuest?.hospede?.pessoa_id || "").trim();
+
+            if (!fnrhHospedeId || !isValidUuid(fnrhHospedeId)) {
+              finished = true;
+              db.run("ROLLBACK", () => callback(createInvalidFnrhHospedeIdError()));
+              return;
+            }
 
             // O payload e o retorno da FNRH seguem a ordem do array local de hÃ³spedes neste fluxo atual.
             db.run(
@@ -1034,7 +1062,13 @@ function persistFNRHReturnData(stayId, guests, resultBody, callback) {
 
                 if (guestErr) {
                   finished = true;
-                  db.run("ROLLBACK", () => callback(guestErr));
+                  const controlledError = isFnrhHospedeIdUniqueConstraintError(guestErr)
+                    ? createFnrhHospedeIdConflictError()
+                    : guestErr;
+                  if (isFnrhHospedeIdUniqueConstraintError(guestErr)) {
+                    console.error("[FNRH] Conflito local de fnrh_hospede_id ao persistir retorno oficial.");
+                  }
+                  db.run("ROLLBACK", () => callback(controlledError));
                   return;
                 }
 
@@ -1852,7 +1886,7 @@ app.post("/stays/:stayId/fnrh/vincular-precheckin", (req, res) => {
   }
 
   const guestId = parsePositiveInteger(requestBody.guest_id);
-  const fnrhHospedeId = String(requestBody.fnrh_hospede_id || "").trim();
+  const fnrhHospedeId = normalizeFnrhUuid(requestBody.fnrh_hospede_id);
 
   if (!guestId) {
     return res.status(400).json({ error: "guest_id deve ser um inteiro positivo" });
@@ -1984,6 +2018,18 @@ app.post("/stays/:stayId/fnrh/vincular-precheckin", (req, res) => {
                   [fnrhHospedeId, guestId, stayId],
                   function (persistErr) {
                     if (persistErr) {
+                      if (isFnrhHospedeIdUniqueConstraintError(persistErr)) {
+                        console.error("[FNRH] conflito de identificador oficial ao persistir vínculo:", {
+                          stay_id: stayId,
+                          guest_id: guestId
+                        });
+                        return res.status(409).json({
+                          error: "Este registro FNRH já está associado a outro hóspede local.",
+                          stay_id: stayId,
+                          guest_id: guestId
+                        });
+                      }
+
                       console.error("[FNRH] erro ao persistir vínculo de pré-check-in:", {
                         stay_id: stayId,
                         guest_id: guestId
