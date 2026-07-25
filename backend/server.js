@@ -2594,6 +2594,13 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
         return res.status(404).json({ error: "Stay nao encontrada" });
       }
 
+      const fnrhReservaId = String(stay.fnrh_reserva_id || "").trim();
+      if (fnrhReservaId) {
+        return res.status(409).json({
+          error: "Esta reserva já foi registrada na FNRH. Use os fluxos de pré-check-in, vínculo, check-in ou check-out."
+        });
+      }
+
       db.all(
         `SELECT * FROM guests
          WHERE stay_id = ?
@@ -2606,6 +2613,15 @@ app.post("/stays/:id/send-fnrh", (req, res) => {
           }
 
           const safeGuests = Array.isArray(guests) ? guests : [];
+          const hasIdentifiedFnrhGuest = safeGuests.some((guest) => {
+            return String(guest?.fnrh_hospede_id || "").trim() !== "";
+          });
+          if (hasIdentifiedFnrhGuest) {
+            return res.status(409).json({
+              error: "A reserva possui hóspede já identificado na FNRH e não pode ser registrada novamente pelo fluxo inicial."
+            });
+          }
+
           const hasGuests = safeGuests.length > 0;
           const missingMainGuest = hasGuests && !safeGuests.some((g) => g.is_main_guest);
           if (missingMainGuest) {

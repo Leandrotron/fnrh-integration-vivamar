@@ -2627,16 +2627,17 @@ João Silva"></textarea>
     function updateActionButtons() {
       const hasStay = !!selectedStay?.id;
       const officialLink = getOfficialFnrhPrecheckinLink(selectedStay);
+      const hasFnrhReservaId = !!String(selectedStay?.fnrh_reserva_id || "").trim();
       const hasFnrhReference = !!officialLink || !!String(selectedStay?.fnrh_reserva_id || "").trim();
       const sendButton = document.getElementById("sendFnrhBtn");
       const whatsappButton = document.getElementById("copyWhatsappMessageBtn");
       const hasReservationWhatsapp = getWhatsappPhoneValue().length >= 10;
       const fnrhStatus = getFnrhStatusMeta(selectedStay);
-      sendButton.disabled = !hasStay || isSendingFnrh;
+      sendButton.disabled = !hasStay || isSendingFnrh || hasFnrhReservaId;
       sendButton.textContent = isSendingFnrh
         ? "Enviando..."
-        : officialLink
-          ? "Reenviar para FNRH"
+        : hasFnrhReservaId
+          ? "Reserva já registrada na FNRH"
           : "Enviar para FNRH";
       document.getElementById("copyFnrhLinkBtn").disabled = !officialLink;
       whatsappButton.disabled = !officialLink;
@@ -3047,10 +3048,18 @@ João Silva"></textarea>
         return;
       }
 
+      if (String(selectedStay.fnrh_reserva_id || "").trim()) {
+        setStatus("actionStatus", "Reserva já registrada na FNRH", "warning");
+        updateActionButtons();
+        return;
+      }
+
       if (isSendingFnrh) {
         return;
       }
 
+      const requestedStayId = selectedStay.id;
+      let conflictMessage = "";
       isSendingFnrh = true;
       updateActionButtons();
       setStatus("actionStatus", "Enviando reserva para a FNRH...", "warning");
@@ -3070,6 +3079,11 @@ João Silva"></textarea>
         stayGuestCountsById[String(selectedStay.id)] = { adultos: adultCount, menores: minorCount };
         setStatus("actionStatus", data.message || "Envio realizado com sucesso", "success");
       } catch (error) {
+        if (error?.status === 409) {
+          conflictMessage = String(error?.apiMessage || error.message || "").trim();
+          return;
+        }
+
         const friendlyMessage = getFriendlyFnrhMessage(error?.apiMessage || error.message);
         if (selectedStay) {
           selectedStay.fnrh_last_status = "error";
@@ -3081,7 +3095,10 @@ João Silva"></textarea>
         setStatus("actionStatus", friendlyMessage || "Erro ao enviar para FNRH", "error");
       } finally {
         isSendingFnrh = false;
-        await loadStays(selectedStay.id);
+        await loadStays(requestedStayId);
+        if (conflictMessage) {
+          setStatus("actionStatus", conflictMessage, "warning");
+        }
       }
     }
 
