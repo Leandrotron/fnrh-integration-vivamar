@@ -655,6 +655,52 @@
       width: 100%;
     }
 
+    .fnrh-official-guests {
+      display: grid;
+      gap: 12px;
+      margin: 18px 0;
+      padding: 16px;
+      border: 1px solid #d7e3fa;
+      border-radius: 14px;
+      background: #f8fbff;
+    }
+
+    .fnrh-official-guests-header,
+    .fnrh-official-guests-summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .fnrh-official-guests-header h4 {
+      margin: 0 0 4px;
+      color: #2456c7;
+      font-size: 18px;
+    }
+
+    .fnrh-official-guests-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .fnrh-official-guest-card {
+      padding: 12px;
+      border: 1px solid #d8e3f8;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.88);
+      overflow-wrap: anywhere;
+    }
+
+    .fnrh-official-guest-meta,
+    .fnrh-official-guest-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
     .fnrh-guests-header {
       display: flex;
       align-items: flex-start;
@@ -1043,6 +1089,20 @@
             </div>
           </details>
 
+          <section id="fnrhOfficialGuestsSection" class="fnrh-official-guests" hidden>
+            <div class="fnrh-official-guests-header">
+              <div>
+                <h4>Hóspedes oficiais da reserva</h4>
+                <div class="muted">Consulta manual dos hóspedes já vinculados oficialmente.</div>
+              </div>
+              <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Atualizar hóspedes da FNRH</button>
+            </div>
+            <div id="fnrhOfficialGuestsSummary" class="fnrh-official-guests-summary"></div>
+            <div id="fnrhOfficialGuestsUpdatedAt" class="muted"></div>
+            <div id="fnrhOfficialGuestsStatus" class="status-line" aria-live="polite"></div>
+            <div id="fnrhOfficialGuestsList" class="fnrh-official-guests-list"></div>
+          </section>
+
           <div id="afterFnrhSection" class="flow-box after" style="display:none;">
             <div class="flow-header">
               <div class="flow-title">
@@ -1193,6 +1253,9 @@ João Silva"></textarea>
     let isSearchingFnrhReceptionNew = false;
     let importingFnrhReceptionCandidateByKey = {};
     let openFnrhManualRecoveryByCandidateIndex = {};
+    let fnrhOfficialGuestsState = createEmptyFnrhOfficialGuestsState();
+    let fnrhOfficialGuestsRequestId = 0;
+    let openFnrhOfficialImportByCandidateIndex = {};
     let stayDetailsRequestId = 0;
     let pendingStayDetailsId = null;
 
@@ -2110,6 +2173,409 @@ João Silva"></textarea>
       return `${String(stayId)}:${normalizeFnrhHospedeId(fnrhHospedeId)}`;
     }
 
+    function createEmptyFnrhOfficialGuestsState(stayId = null) {
+      return {
+        stayId: stayId == null ? null : String(stayId),
+        contextToken: null,
+        summary: null,
+        guests: null,
+        lastUpdatedAt: null,
+        isLoading: false,
+        error: "",
+        isStale: false,
+        feedback: "",
+        feedbackTone: ""
+      };
+    }
+
+    function clearFnrhOfficialGuests() {
+      fnrhOfficialGuestsRequestId += 1;
+      fnrhOfficialGuestsState = createEmptyFnrhOfficialGuestsState();
+      openFnrhOfficialImportByCandidateIndex = {};
+      renderFnrhOfficialGuests();
+    }
+
+    function isFnrhOfficialStayActive(stayId) {
+      return String(selectedStay?.id) === String(stayId) &&
+        fnrhOfficialGuestsState.stayId === String(stayId);
+    }
+
+    function getFnrhOfficialImportEligibility(candidateIndex) {
+      const index = Number(candidateIndex);
+      if (!Number.isInteger(index) || index < 0 || !selectedStay?.id) return null;
+      if (!Array.isArray(fnrhOfficialGuestsState.guests)) return null;
+      if (!fnrhOfficialGuestsState.contextToken) return null;
+      if (!isFnrhOfficialStayActive(selectedStay.id)) return null;
+
+      const candidate = fnrhOfficialGuestsState.guests[index];
+      const fnrhHospedeId = normalizeFnrhHospedeId(candidate?.fnrh_hospede_id);
+      if (!candidate || !isValidFnrhHospedeUuid(fnrhHospedeId)) return null;
+      if (candidate.is_local === true) return null;
+      if (String(candidate.situacao_hospede_id || "").trim().toUpperCase() !== "PRECHECKIN_REALIZADO") {
+        return null;
+      }
+      if (selectedGuests.some((guest) => {
+        return normalizeFnrhHospedeId(guest?.fnrh_hospede_id) === fnrhHospedeId;
+      })) {
+        return null;
+      }
+
+      return {
+        candidate,
+        candidateIndex: index,
+        fnrhHospedeId,
+        stayId: String(selectedStay.id),
+        contextToken: fnrhOfficialGuestsState.contextToken
+      };
+    }
+
+    function isFnrhOfficialImportContextActive(operation) {
+      if (!isFnrhImportStayActive(operation)) return false;
+      if (fnrhOfficialGuestsState.stayId !== operation.stayId) return false;
+      if (fnrhOfficialGuestsState.contextToken !== operation.contextToken) return false;
+      const candidate = fnrhOfficialGuestsState.guests?.[operation.candidateIndex];
+      return normalizeFnrhHospedeId(candidate?.fnrh_hospede_id) === operation.fnrhHospedeId;
+    }
+
+    function getFnrhOfficialGuestLocalState(candidate) {
+      if (candidate?.local_checkout_at) return "checkout concluído";
+      if (candidate?.local_checkin_at) return "hospedado";
+      return "aguardando check-in";
+    }
+
+    function getFnrhOfficialQueryErrorMessage(error) {
+      const backendMessage = String(error?.apiMessage || error?.message || "").trim();
+      if ([400, 404, 409].includes(error?.status) && backendMessage) return backendMessage;
+      if (error?.status === 502) {
+        return "Não foi possível confirmar os hóspedes oficiais na FNRH. Atualize a lista antes de tentar novamente.";
+      }
+      return "Não foi possível consultar os hóspedes oficiais agora.";
+    }
+
+    function renderFnrhOfficialGuests() {
+      const section = document.getElementById("fnrhOfficialGuestsSection");
+      const button = document.getElementById("refreshFnrhOfficialGuestsBtn");
+      const summary = document.getElementById("fnrhOfficialGuestsSummary");
+      const updatedAt = document.getElementById("fnrhOfficialGuestsUpdatedAt");
+      const status = document.getElementById("fnrhOfficialGuestsStatus");
+      const list = document.getElementById("fnrhOfficialGuestsList");
+      if (!section || !button || !summary || !updatedAt || !status || !list) return;
+
+      const hasSelectedStay = !!selectedStay?.id && !isCreatingStay;
+      section.hidden = !hasSelectedStay;
+      if (!hasSelectedStay) return;
+
+      const hasOfficialReservation = !!String(selectedStay.fnrh_reserva_id || "").trim();
+      const stateMatchesStay = fnrhOfficialGuestsState.stayId === String(selectedStay.id);
+      button.disabled = !hasOfficialReservation || (stateMatchesStay && fnrhOfficialGuestsState.isLoading);
+      button.textContent = stateMatchesStay && fnrhOfficialGuestsState.isLoading
+        ? "Atualizando hóspedes da FNRH..."
+        : "Atualizar hóspedes da FNRH";
+      summary.innerHTML = "";
+      updatedAt.textContent = "";
+      status.textContent = "";
+      status.style.color = "#64748b";
+      list.innerHTML = "";
+
+      if (!hasOfficialReservation) {
+        status.textContent = "Registre a reserva na FNRH antes de consultar os hóspedes oficiais.";
+        return;
+      }
+      if (!stateMatchesStay) return;
+
+      if (fnrhOfficialGuestsState.summary) {
+        const values = fnrhOfficialGuestsState.summary;
+        summary.innerHTML = [
+          `Oficiais: ${Number(values.official_total) || 0}`,
+          `No painel: ${Number(values.matched_total) || 0}`,
+          `Ainda não adicionados: ${Number(values.missing_local_total) || 0}`
+        ].map((text) => `<span class="status-badge pending">${escapeHtml(text)}</span>`).join("");
+        if ((Number(values.local_only_total) || 0) > 0) {
+          summary.innerHTML += `<div class="fnrh-precheckin-warning">Existem hóspedes locais com identificação FNRH que não apareceram na consulta oficial atual.</div>`;
+        }
+      }
+
+      if (fnrhOfficialGuestsState.lastUpdatedAt) {
+        updatedAt.textContent = `Última atualização: ${new Date(fnrhOfficialGuestsState.lastUpdatedAt).toLocaleString("pt-BR")}.`;
+      }
+      if (fnrhOfficialGuestsState.feedback) {
+        status.textContent = fnrhOfficialGuestsState.isStale
+          ? `${fnrhOfficialGuestsState.feedback} A lista exibida pode estar desatualizada.`
+          : fnrhOfficialGuestsState.feedback;
+        status.style.color = fnrhOfficialGuestsState.feedbackTone === "success" ? "#18794e" : "#9a6700";
+      } else if (fnrhOfficialGuestsState.error) {
+        status.textContent = fnrhOfficialGuestsState.isStale
+          ? `${fnrhOfficialGuestsState.error} A lista exibida pode estar desatualizada.`
+          : fnrhOfficialGuestsState.error;
+        status.style.color = "#b42318";
+      } else if (fnrhOfficialGuestsState.isLoading) {
+        status.textContent = "Consultando hóspedes oficiais...";
+      }
+
+      if (!Array.isArray(fnrhOfficialGuestsState.guests)) return;
+      if (!fnrhOfficialGuestsState.guests.length) {
+        list.innerHTML = `<div class="empty-state">Nenhum hóspede oficial encontrado nesta consulta.</div>`;
+        return;
+      }
+
+      const hasMainGuest = hasFnrhReceptionMainGuest();
+      list.innerHTML = fnrhOfficialGuestsState.guests.map((candidate, index) => {
+        const eligibility = getFnrhOfficialImportEligibility(index);
+        const key = eligibility
+          ? getFnrhReceptionImportKey(eligibility.stayId, eligibility.fnrhHospedeId)
+          : "";
+        const isImporting = !!(key && importingFnrhReceptionCandidateByKey[key]);
+        const isOpen = !!openFnrhOfficialImportByCandidateIndex[index];
+        const situation = String(
+          candidate?.situacao_hospede ||
+          candidate?.situacao_hospede_id ||
+          "Situação oficial não informada"
+        ).trim();
+        const documentLabel = [
+          String(candidate?.document_type || "Documento").trim(),
+          String(candidate?.document_masked || "não informado").trim()
+        ].join(" · ");
+        let controls = "";
+        if (candidate?.is_local === true) {
+          const role = candidate.local_is_main_guest === true || Number(candidate.local_is_main_guest) === 1
+            ? "Titular"
+            : "Acompanhante";
+          controls = `
+            <div class="fnrh-official-guest-meta">
+              <span class="status-badge success">Já está no painel</span>
+              <span class="status-badge pending">${role}</span>
+              <span class="status-badge success">${escapeHtml(getFnrhOfficialGuestLocalState(candidate))}</span>
+            </div>`;
+        } else if (eligibility) {
+          controls = isOpen ? `
+            <div class="fnrh-official-guest-actions">
+              <button type="button" data-official-import-index="${index}" data-official-import-role="main" ${hasMainGuest || isImporting ? "disabled" : ""}>Adicionar como titular</button>
+              <button type="button" class="secondary" data-official-import-index="${index}" data-official-import-role="companion" ${isImporting ? "disabled" : ""}>Adicionar como acompanhante</button>
+            </div>
+            ${hasMainGuest ? `<div class="fnrh-precheckin-warning">A hospedagem já possui hóspede principal.</div>` : ""}` : `
+            <div class="fnrh-official-guest-actions">
+              <button type="button" data-open-official-import-index="${index}" ${isImporting ? "disabled" : ""}>Adicionar ao painel</button>
+            </div>`;
+        } else {
+          controls = `<div class="fnrh-precheckin-warning">A situação oficial precisa ser sincronizada antes da importação.</div>`;
+        }
+        return `
+          <article class="fnrh-official-guest-card">
+            <div class="fnrh-guest-name">${escapeHtml(candidate?.full_name || "Hóspede")}</div>
+            <div class="fnrh-official-guest-meta">
+              <span>${escapeHtml(documentLabel)}</span>
+              <span>${escapeHtml(situation)}</span>
+              ${candidate?.is_local === true ? "" : `<span class="status-badge pending">Ainda não está no painel</span>`}
+            </div>
+            ${controls}
+          </article>`;
+      }).join("");
+      bindFnrhOfficialGuestsActions(list);
+    }
+
+    function bindFnrhOfficialGuestsActions(container) {
+      container.querySelectorAll("[data-open-official-import-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const index = Number(button.dataset.openOfficialImportIndex);
+          if (!getFnrhOfficialImportEligibility(index)) return;
+          openFnrhOfficialImportByCandidateIndex[index] = true;
+          renderFnrhOfficialGuests();
+        });
+      });
+      container.querySelectorAll("[data-official-import-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          importFnrhOfficialGuest(
+            button.dataset.officialImportIndex,
+            button.dataset.officialImportRole === "main"
+          );
+        });
+      });
+    }
+
+    async function loadFnrhOfficialGuests() {
+      const stayId = String(selectedStay?.id || "");
+      if (!stayId || !String(selectedStay?.fnrh_reserva_id || "").trim()) {
+        renderFnrhOfficialGuests();
+        return false;
+      }
+      const requestId = ++fnrhOfficialGuestsRequestId;
+      const previous = fnrhOfficialGuestsState.stayId === stayId
+        ? fnrhOfficialGuestsState
+        : createEmptyFnrhOfficialGuestsState(stayId);
+      fnrhOfficialGuestsState = {
+        ...previous,
+        stayId,
+        isLoading: true,
+        error: "",
+        isStale: false,
+        feedback: "",
+        feedbackTone: ""
+      };
+      renderFnrhOfficialGuests();
+
+      try {
+        const data = await fetchJson(
+          `${API_BASE}/stays/${encodeURIComponent(stayId)}/fnrh/hospedes-oficiais`
+        );
+        if (requestId !== fnrhOfficialGuestsRequestId || String(selectedStay?.id) !== stayId) {
+          return false;
+        }
+        if (String(data?.stay_id) !== stayId || !Array.isArray(data?.guests) || !data?.summary) {
+          throw new Error("A resposta da consulta oficial não corresponde à stay selecionada.");
+        }
+        fnrhOfficialGuestsState = {
+          ...createEmptyFnrhOfficialGuestsState(stayId),
+          contextToken: `${stayId}:${requestId}`,
+          summary: data.summary,
+          guests: data.guests,
+          lastUpdatedAt: Date.now()
+        };
+        openFnrhOfficialImportByCandidateIndex = {};
+        renderFnrhOfficialGuests();
+        return true;
+      } catch (error) {
+        if (requestId !== fnrhOfficialGuestsRequestId || String(selectedStay?.id) !== stayId) {
+          return false;
+        }
+        fnrhOfficialGuestsState = {
+          ...fnrhOfficialGuestsState,
+          isLoading: false,
+          error: getFnrhOfficialQueryErrorMessage(error),
+          isStale: Array.isArray(fnrhOfficialGuestsState.guests)
+        };
+        renderFnrhOfficialGuests();
+        return false;
+      }
+    }
+
+    async function refreshAfterFnrhOfficialImport(operation) {
+      if (!isFnrhImportStayActive(operation)) return false;
+      const reloaded = await loadStayDetails(operation.stayId, operation.stayId);
+      if (!reloaded || !isFnrhImportStayActive(operation)) return false;
+      await loadFnrhOfficialGuests();
+      return String(selectedStay?.id) === operation.stayId;
+    }
+
+    async function importFnrhOfficialGuest(candidateIndex, isMainGuest) {
+      const eligibility = getFnrhOfficialImportEligibility(candidateIndex);
+      if (!eligibility || typeof isMainGuest !== "boolean") {
+        fnrhOfficialGuestsState.feedback = "Os dados mudaram. Atualize os hóspedes da FNRH antes de adicionar.";
+        fnrhOfficialGuestsState.feedbackTone = "warning";
+        renderFnrhOfficialGuests();
+        return;
+      }
+      if (isMainGuest && hasFnrhReceptionMainGuest()) {
+        fnrhOfficialGuestsState.feedback = "A hospedagem já possui hóspede principal.";
+        fnrhOfficialGuestsState.feedbackTone = "warning";
+        renderFnrhOfficialGuests();
+        return;
+      }
+
+      const roleLabel = isMainGuest ? "titular" : "acompanhante";
+      const candidateName = String(eligibility.candidate.full_name || "Hóspede").trim();
+      const stayLabel = String(
+        selectedStay?.reservation_id ||
+        selectedStay?.sub_reservation_id ||
+        selectedStay?.id ||
+        ""
+      ).trim();
+      const confirmationMessage = [
+        `“${candidateName}” já está vinculado oficialmente à FNRH.`,
+        `Adicionar apenas ao painel local como ${roleLabel}?`,
+        `Stay selecionada: ${stayLabel}.`,
+        "Confirme que a stay e o quarto estão corretos antes de continuar."
+      ].join("\n\n");
+      if (!window.confirm(confirmationMessage)) return;
+
+      const revalidated = getFnrhOfficialImportEligibility(eligibility.candidateIndex);
+      if (
+        !revalidated ||
+        revalidated.fnrhHospedeId !== eligibility.fnrhHospedeId ||
+        revalidated.contextToken !== eligibility.contextToken ||
+        (isMainGuest && hasFnrhReceptionMainGuest())
+      ) {
+        fnrhOfficialGuestsState.feedback = "Os dados mudaram. Atualize os hóspedes da FNRH antes de adicionar.";
+        fnrhOfficialGuestsState.feedbackTone = "warning";
+        renderFnrhOfficialGuests();
+        return;
+      }
+
+      const key = getFnrhReceptionImportKey(revalidated.stayId, revalidated.fnrhHospedeId);
+      if (importingFnrhReceptionCandidateByKey[key]) return;
+      const operation = Object.freeze({
+        key,
+        source: "official",
+        stayId: revalidated.stayId,
+        fnrhHospedeId: revalidated.fnrhHospedeId,
+        isMainGuest,
+        candidateIndex: revalidated.candidateIndex,
+        contextToken: revalidated.contextToken
+      });
+      importingFnrhReceptionCandidateByKey[key] = operation;
+      fnrhOfficialGuestsState.feedback = `Adicionando como ${roleLabel}...`;
+      fnrhOfficialGuestsState.feedbackTone = "warning";
+      renderFnrhImportSources();
+
+      try {
+        const data = await fetchJson(
+          `${API_BASE}/stays/${encodeURIComponent(operation.stayId)}/fnrh/importar-hospede-vinculado`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fnrh_hospede_id: operation.fnrhHospedeId,
+              is_main_guest: operation.isMainGuest
+            })
+          }
+        );
+        if (!isFnrhOfficialImportContextActive(operation)) return;
+        const idempotent = data?.already_imported === true;
+        await refreshAfterFnrhOfficialImport(operation);
+        if (String(selectedStay?.id) === operation.stayId) {
+          fnrhOfficialGuestsState.feedback = idempotent
+            ? "Este hóspede já estava no painel."
+            : "Hóspede adicionado ao painel com sucesso.";
+          fnrhOfficialGuestsState.feedbackTone = "success";
+        }
+      } catch (error) {
+        if (!isFnrhOfficialImportContextActive(operation)) return;
+        const backendMessage = String(error?.apiMessage || error?.message || "").trim();
+
+        if (error?.status === 404) {
+          await loadFnrhOfficialGuests();
+          if (String(selectedStay?.id) === operation.stayId) {
+            fnrhOfficialGuestsState.feedback = backendMessage || "O hóspede oficial não foi encontrado na consulta atual.";
+            fnrhOfficialGuestsState.feedbackTone = "warning";
+          }
+        } else if (error?.status === 409) {
+          const incompatibleSituation = normalizeMatchText(backendMessage).includes("situacao");
+          await refreshAfterFnrhOfficialImport(operation);
+          if (String(selectedStay?.id) === operation.stayId) {
+            fnrhOfficialGuestsState.feedback = incompatibleSituation
+              ? "A situação oficial deste hóspede precisa ser sincronizada antes da importação."
+              : backendMessage || "A importação não pôde ser realizada porque os dados mudaram.";
+            fnrhOfficialGuestsState.feedbackTone = "warning";
+          }
+        } else if (error?.status === 400 || error?.status === 422) {
+          fnrhOfficialGuestsState.feedback = backendMessage || "Os dados não puderam ser validados para importação.";
+          fnrhOfficialGuestsState.feedbackTone = "warning";
+        } else if (error?.status === 502) {
+          fnrhOfficialGuestsState.feedback = "Não foi possível confirmar os hóspedes oficiais na FNRH. Atualize a lista antes de tentar novamente.";
+          fnrhOfficialGuestsState.feedbackTone = "warning";
+          fnrhOfficialGuestsState.isStale = true;
+        } else {
+          fnrhOfficialGuestsState.feedback = "O resultado pode estar pendente. Atualize os hóspedes da FNRH antes de repetir.";
+          fnrhOfficialGuestsState.feedbackTone = "warning";
+          fnrhOfficialGuestsState.isStale = true;
+        }
+      } finally {
+        delete importingFnrhReceptionCandidateByKey[key];
+        if (String(selectedStay?.id) === operation.stayId) {
+          renderFnrhImportSources();
+        }
+      }
+    }
+
     function getCurrentFnrhImportEligibility(source, candidateIndex) {
       return source === "manual"
         ? getFnrhManualRecoveryEligibility(candidateIndex)
@@ -2135,6 +2601,7 @@ João Silva"></textarea>
     function renderFnrhImportSources() {
       renderFnrhReceptionResults();
       renderFnrhPrecheckinResults();
+      renderFnrhOfficialGuests();
     }
 
     function bindFnrhReceptionImportActions(container) {
@@ -3514,6 +3981,7 @@ João Silva"></textarea>
       if (!selectedStay && !isCreatingStay) {
         empty.style.display = "block";
         content.style.display = "none";
+        renderFnrhOfficialGuests();
         updateFnrhReceptionSessionUi();
         loadInternalGuestChecklist();
         return;
@@ -3529,6 +3997,7 @@ João Silva"></textarea>
       }
       updateActionButtons();
       renderFnrhGuestOperations();
+      renderFnrhOfficialGuests();
       updateFnrhPrecheckinSearchButton();
       updateFnrhSectionsVisibility();
       updateFnrhReceptionSessionUi();
@@ -3537,6 +4006,7 @@ João Silva"></textarea>
 
     function enterCreateMode() {
       clearFnrhPrecheckinResults();
+      clearFnrhOfficialGuests();
       fnrhReceptionSession = null;
       fnrhReceptionCandidates = null;
       setStatus("fnrhPrecheckinLinkStatus", "");
@@ -3567,6 +4037,7 @@ João Silva"></textarea>
 
         if (!stays.length) {
           clearFnrhPrecheckinResults();
+          clearFnrhOfficialGuests();
           fnrhReceptionSession = null;
           fnrhReceptionCandidates = null;
           selectedStay = null;
@@ -3592,6 +4063,7 @@ João Silva"></textarea>
       pendingStayDetailsId = stayId;
       if (String(stayId) !== String(selectedStay?.id)) {
         clearFnrhPrecheckinResults();
+        clearFnrhOfficialGuests();
         fnrhReceptionSession = null;
         fnrhReceptionCandidates = null;
         setStatus("fnrhPrecheckinLinkStatus", "");
@@ -4170,6 +4642,7 @@ Obrigado!`;
       document.getElementById("openFnrhLinkBtn").addEventListener("click", openOfficialLink);
       document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
       document.getElementById("checkFnrhGuestsStatusBtn").addEventListener("click", checkFnrhReservationGuestsStatus);
+      document.getElementById("refreshFnrhOfficialGuestsBtn").addEventListener("click", loadFnrhOfficialGuests);
       document.getElementById("fnrhPrecheckinSearchForm").addEventListener("submit", searchFnrhPrecheckins);
       document.getElementById("startFnrhReceptionSessionBtn").addEventListener("click", startFnrhReceptionSession);
       document.getElementById("searchFnrhReceptionNewBtn").addEventListener("click", searchFnrhReceptionNewCandidates);
