@@ -3,6 +3,7 @@ require("dotenv").config();
 
 const crypto = require("crypto");
 const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
 const db = require("./database/db");
 const express = require("express");
 const cors = require("cors");
@@ -32,6 +33,14 @@ const EMPTY_STAY_SEED = {
   data_entrada: "2026-04-20",
   data_saida: "2026-04-22"
 };
+const KNOWN_FNRH_GUEST_SITUATIONS = new Set([
+  "PRECHECKIN_NAOVINCULADO",
+  "PRECHECKIN_PENDENTE",
+  "PRECHECKIN_REALIZADO",
+  "CHECKIN_REALIZADO",
+  "CHECKOUT_REALIZADO"
+]);
+const fnrhSituationSyncByStayId = new Map();
 
 // =========================
 // FunÃ§Ãµes auxiliares
@@ -1468,6 +1477,292 @@ function normalizeUniqueFnrhOfficialCandidates(items) {
     hasConflict: false
   };
 }
+
+function normalizeFnrhOfficialSituation(value) {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toUpperCase();
+  if (!code || code.length > 64 || !/^[A-Z][A-Z0-9_]*$/.test(code)) return null;
+  return {
+    code,
+    isKnown: KNOWN_FNRH_GUEST_SITUATIONS.has(code)
+  };
+}
+
+function createFnrhSituationSyncError(status, message, code, stage, fnrhStatus = null) {
+  const error = new Error(message);
+  error.status = status;
+  error.publicMessage = message;
+  error.code = code;
+  error.stage = stage;
+  error.fnrhStatus = fnrhStatus;
+  return error;
+}
+
+async function persistFnrhSituationSyncUpdates(stayId, updates, syncedAt) {
+  if (!updates.length) return;
+
+  const transactionDb = await new Promise((resolve, reject) => {
+    const connection = new sqlite3.Database(db.filename, (error) => {
+      if (error) reject(error);
+      else resolve(connection);
+    });
+  });
+  transactionDb.configure("busyTimeout", 5000);
+  const runTransactionStatement = (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+      transactionDb.run(sql, params, function (error) {
+        if (error) reject(error);
+        else resolve({ changes: this.changes });
+      });
+    });
+  };
+  let transactionStarted = false;
+
+  try {
+    await runTransactionStatement("BEGIN IMMEDIATE TRANSACTION");
+    transactionStarted = true;
+    for (const update of updates) {
+      const result = await runTransactionStatement(
+        `UPDATE guests
+         SET fnrh_situacao_hospede_id = ?,
+             fnrh_situacao_synced_at = ?
+         WHERE id = ?
+           AND stay_id = ?
+           AND LOWER(TRIM(fnrh_hospede_id)) = ?`,
+        [update.situationCode, syncedAt, update.guestId, stayId, update.fnrhHospedeId]
+      );
+      if (result.changes !== 1) {
+        throw new Error("Guest local mudou durante a sincronizacao");
+      }
+    }
+    await runTransactionStatement("COMMIT");
+    transactionStarted = false;
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await runTransactionStatement("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("[FNRH] situation sync error:", {
+          stay_id: stayId,
+          etapa: "rollback",
+          status: null,
+          code: "FNRH_SITUATION_SYNC_ROLLBACK_FAILED"
+        });
+      }
+    }
+    throw error;
+  } finally {
+    await new Promise((resolve) => transactionDb.close(() => resolve()));
+  }
+}
+
+async function synchronizeFnrhGuestSituations(stayId) {
+  const stay = await dbGetAsync(
+    `SELECT id, fnrh_reserva_id
+     FROM stays
+     WHERE id = ? AND property_id = ?`,
+    [stayId, PROPERTY_ID]
+  );
+  if (!stay) {
+    throw createFnrhSituationSyncError(
+      404,
+      "Stay não encontrada",
+      "FNRH_SITUATION_SYNC_STAY_NOT_FOUND",
+      "validacao_local"
+    );
+  }
+
+  const fnrhReservaId = String(stay.fnrh_reserva_id || "").trim();
+  if (!fnrhReservaId) {
+    throw createFnrhSituationSyncError(
+      409,
+      "Registre a reserva na FNRH antes de sincronizar as situações.",
+      "FNRH_SITUATION_SYNC_RESERVATION_REQUIRED",
+      "validacao_local"
+    );
+  }
+
+  const localGuests = await dbAllAsync(
+    `SELECT id, stay_id, fnrh_hospede_id, fnrh_situacao_hospede_id
+     FROM guests
+     WHERE stay_id = ?`,
+    [stayId]
+  );
+  const validLocalGuests = localGuests.filter((guest) => {
+    return isValidUuid(normalizeFnrhUuid(guest.fnrh_hospede_id));
+  });
+  const localGuestsByFnrhId = new Map();
+  for (const guest of validLocalGuests) {
+    const normalizedId = normalizeFnrhUuid(guest.fnrh_hospede_id);
+    if (localGuestsByFnrhId.has(normalizedId)) {
+      throw new Error("Identificador FNRH local duplicado");
+    }
+    localGuestsByFnrhId.set(normalizedId, guest);
+  }
+
+  let officialResult;
+  try {
+    officialResult = await fetchFnrhReservationGuests(fnrhReservaId);
+  } catch (error) {
+    throw createFnrhSituationSyncError(
+      502,
+      "Não foi possível sincronizar as situações dos hóspedes na FNRH.",
+      "FNRH_SITUATION_SYNC_REQUEST_FAILED",
+      "consulta_oficial",
+      error?.fnrhStatus ?? null
+    );
+  }
+  if (!officialResult.ok) {
+    throw createFnrhSituationSyncError(
+      502,
+      "Não foi possível sincronizar as situações dos hóspedes na FNRH.",
+      "FNRH_SITUATION_SYNC_HTTP_ERROR",
+      "resposta_oficial",
+      officialResult.status
+    );
+  }
+
+  const officialItems = getFnrhOfficialCandidateItems(officialResult.body);
+  if (!officialItems) {
+    throw createFnrhSituationSyncError(
+      502,
+      "Não foi possível sincronizar as situações dos hóspedes na FNRH.",
+      "FNRH_SITUATION_SYNC_INVALID_FORMAT",
+      "formato_resposta",
+      officialResult.status
+    );
+  }
+
+  const normalized = normalizeUniqueFnrhOfficialCandidates(officialItems);
+  if (normalized.hasConflict) {
+    throw createFnrhSituationSyncError(
+      502,
+      "Não foi possível sincronizar as situações dos hóspedes na FNRH.",
+      "FNRH_SITUATION_SYNC_OFFICIAL_CONFLICT",
+      "deduplicacao",
+      officialResult.status
+    );
+  }
+
+  const officialIds = new Set(normalized.candidates.map((candidate) => candidate.hospedeId));
+  const updates = [];
+  let matchedTotal = 0;
+  let updatedTotal = 0;
+  let unchangedTotal = 0;
+  let missingLocalTotal = 0;
+  let unknownStatusTotal = 0;
+
+  for (const candidate of normalized.candidates) {
+    const localGuest = localGuestsByFnrhId.get(candidate.hospedeId);
+    if (!localGuest) {
+      missingLocalTotal += 1;
+      continue;
+    }
+    matchedTotal += 1;
+
+    const situation = normalizeFnrhOfficialSituation(candidate.situation);
+    if (!situation) {
+      unknownStatusTotal += 1;
+      continue;
+    }
+    if (!situation.isKnown) {
+      unknownStatusTotal += 1;
+    }
+
+    const previousCode = String(localGuest.fnrh_situacao_hospede_id || "").trim().toUpperCase();
+    if (previousCode === situation.code) {
+      unchangedTotal += 1;
+    } else {
+      updatedTotal += 1;
+    }
+    updates.push({
+      guestId: localGuest.id,
+      fnrhHospedeId: candidate.hospedeId,
+      situationCode: situation.code
+    });
+  }
+
+  const localOnlyTotal = Array.from(localGuestsByFnrhId.keys()).filter((id) => {
+    return !officialIds.has(id);
+  }).length;
+  const syncedAt = new Date().toISOString();
+  await persistFnrhSituationSyncUpdates(stayId, updates, syncedAt);
+
+  const result = {
+    success: true,
+    stay_id: stayId,
+    official_total: normalized.candidates.length,
+    matched_total: matchedTotal,
+    updated_total: updatedTotal,
+    unchanged_total: unchangedTotal,
+    missing_local_total: missingLocalTotal,
+    local_only_total: localOnlyTotal,
+    unknown_status_total: unknownStatusTotal,
+    synced_at: syncedAt
+  };
+  console.log("[FNRH] situation sync response:", {
+    stay_id: stayId,
+    etapa: "concluido",
+    status: officialResult.status,
+    official_total: result.official_total,
+    matched_total: result.matched_total,
+    updated_total: result.updated_total,
+    unchanged_total: result.unchanged_total,
+    missing_local_total: result.missing_local_total,
+    local_only_total: result.local_only_total,
+    unknown_status_total: result.unknown_status_total,
+    ignored_invalid_official_ids: normalized.invalidIdCount
+  });
+  return result;
+}
+
+app.post("/stays/:stayId/fnrh/sincronizar-situacoes", async (req, res) => {
+  const stayId = parsePositiveInteger(req.params.stayId);
+  if (!stayId) {
+    return res.status(400).json({ error: "stayId deve ser um inteiro positivo" });
+  }
+
+  const requestBody = req.body;
+  if (
+    requestBody !== undefined &&
+    (
+      requestBody === null ||
+      typeof requestBody !== "object" ||
+      Array.isArray(requestBody) ||
+      Object.keys(requestBody).length > 0
+    )
+  ) {
+    return res.status(400).json({ error: "O corpo da sincronização deve ser vazio." });
+  }
+
+  const key = String(stayId);
+  let operation = fnrhSituationSyncByStayId.get(key);
+  if (!operation) {
+    operation = synchronizeFnrhGuestSituations(stayId);
+    fnrhSituationSyncByStayId.set(key, operation);
+    operation.finally(() => {
+      if (fnrhSituationSyncByStayId.get(key) === operation) {
+        fnrhSituationSyncByStayId.delete(key);
+      }
+    }).catch(() => {});
+  }
+
+  try {
+    const result = await operation;
+    return res.json(result);
+  } catch (error) {
+    const status = Number(error?.status) || 500;
+    const message = error?.publicMessage ||
+      "Não foi possível concluir a sincronização das situações dos hóspedes.";
+    console.error("[FNRH] situation sync error:", {
+      stay_id: stayId,
+      etapa: error?.stage || "persistencia_local",
+      status: error?.fnrhStatus ?? null,
+      code: String(error?.code || "FNRH_SITUATION_SYNC_INTERNAL_ERROR")
+    });
+    return res.status(status).json({ error: message });
+  }
+});
 
 app.get("/stays/:stayId/fnrh/hospedes-oficiais", async (req, res) => {
   const stayId = parsePositiveInteger(req.params.stayId);

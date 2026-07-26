@@ -31,6 +31,17 @@ function ensureColumn(tableName, columnName, definition, callback = () => {}) {
   });
 }
 
+function ensureGuestOfficialSituationColumns(callback = () => {}) {
+  ensureColumn("guests", "fnrh_situacao_hospede_id", "TEXT", (situationErr) => {
+    if (situationErr) {
+      callback(situationErr);
+      return;
+    }
+
+    ensureColumn("guests", "fnrh_situacao_synced_at", "TEXT", callback);
+  });
+}
+
 function stopInitializationWithoutFnrhHospedeIdProtection(message) {
   console.error(message);
   setImmediate(() => {
@@ -246,6 +257,8 @@ db.serialize(() => {
       fnrh_pessoa_id TEXT,
       fnrh_checkin_at TEXT,
       fnrh_checkout_at TEXT,
+      fnrh_situacao_hospede_id TEXT,
+      fnrh_situacao_synced_at TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (stay_id) REFERENCES stays(id)
     )
@@ -253,7 +266,13 @@ db.serialize(() => {
     if (err) console.error("Erro ao criar tabela guests:", err);
     else {
       console.log("✓ Tabela guests pronta");
-      ensureFnrhHospedeIdUniqueIndex();
+      ensureGuestOfficialSituationColumns((situationColumnsErr) => {
+        if (situationColumnsErr) {
+          console.error("[DB] Nao foi possivel garantir as colunas de situacao oficial dos hospedes.");
+          return;
+        }
+        ensureFnrhHospedeIdUniqueIndex();
+      });
     }
   });
 
