@@ -680,6 +680,35 @@
       font-size: 18px;
     }
 
+    .fnrh-official-guests-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .fnrh-official-actions-help,
+    .fnrh-guest-official-state {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .fnrh-guest-official-state {
+      display: grid;
+      gap: 3px;
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-left: 3px solid #9db7e8;
+      background: #f8fbff;
+    }
+
+    .fnrh-guest-official-state.warning {
+      border-left-color: #d99a18;
+      background: #fff9e8;
+      color: #7a4b00;
+    }
+
     .fnrh-official-guests-list {
       display: grid;
       gap: 10px;
@@ -1095,10 +1124,18 @@
                 <h4>Hóspedes oficiais da reserva</h4>
                 <div class="muted">Consulta manual dos hóspedes já vinculados oficialmente.</div>
               </div>
-              <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Atualizar hóspedes da FNRH</button>
+              <div class="fnrh-official-guests-actions">
+                <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Atualizar hóspedes da FNRH</button>
+                <button id="syncFnrhGuestSituationsBtn" type="button">Sincronizar situações no painel</button>
+              </div>
+            </div>
+            <div class="fnrh-official-actions-help">
+              Atualizar hóspedes da FNRH consulta a lista oficial.<br>
+              Sincronizar situações no painel salva o estado oficial nos hóspedes locais.
             </div>
             <div id="fnrhOfficialGuestsSummary" class="fnrh-official-guests-summary"></div>
             <div id="fnrhOfficialGuestsUpdatedAt" class="muted"></div>
+            <div id="fnrhSituationSyncStatus" class="status-line" aria-live="polite"></div>
             <div id="fnrhOfficialGuestsStatus" class="status-line" aria-live="polite"></div>
             <div id="fnrhOfficialGuestsList" class="fnrh-official-guests-list"></div>
           </section>
@@ -1256,6 +1293,7 @@ João Silva"></textarea>
     let fnrhOfficialGuestsState = createEmptyFnrhOfficialGuestsState();
     let fnrhOfficialGuestsRequestId = 0;
     let openFnrhOfficialImportByCandidateIndex = {};
+    let fnrhSituationSyncState = createEmptyFnrhSituationSyncState();
     let stayDetailsRequestId = 0;
     let pendingStayDetailsId = null;
 
@@ -2188,9 +2226,20 @@ João Silva"></textarea>
       };
     }
 
+    function createEmptyFnrhSituationSyncState(stayId = null) {
+      return {
+        stayId: stayId == null ? null : String(stayId),
+        requestId: 0,
+        isLoading: false,
+        message: "",
+        tone: ""
+      };
+    }
+
     function clearFnrhOfficialGuests() {
       fnrhOfficialGuestsRequestId += 1;
       fnrhOfficialGuestsState = createEmptyFnrhOfficialGuestsState();
+      fnrhSituationSyncState = createEmptyFnrhSituationSyncState();
       openFnrhOfficialImportByCandidateIndex = {};
       renderFnrhOfficialGuests();
     }
@@ -2255,11 +2304,15 @@ João Silva"></textarea>
     function renderFnrhOfficialGuests() {
       const section = document.getElementById("fnrhOfficialGuestsSection");
       const button = document.getElementById("refreshFnrhOfficialGuestsBtn");
+      const syncButton = document.getElementById("syncFnrhGuestSituationsBtn");
       const summary = document.getElementById("fnrhOfficialGuestsSummary");
       const updatedAt = document.getElementById("fnrhOfficialGuestsUpdatedAt");
+      const syncStatus = document.getElementById("fnrhSituationSyncStatus");
       const status = document.getElementById("fnrhOfficialGuestsStatus");
       const list = document.getElementById("fnrhOfficialGuestsList");
-      if (!section || !button || !summary || !updatedAt || !status || !list) return;
+      if (!section || !button || !syncButton || !summary || !updatedAt || !syncStatus || !status || !list) {
+        return;
+      }
 
       const hasSelectedStay = !!selectedStay?.id && !isCreatingStay;
       section.hidden = !hasSelectedStay;
@@ -2267,12 +2320,22 @@ João Silva"></textarea>
 
       const hasOfficialReservation = !!String(selectedStay.fnrh_reserva_id || "").trim();
       const stateMatchesStay = fnrhOfficialGuestsState.stayId === String(selectedStay.id);
-      button.disabled = !hasOfficialReservation || (stateMatchesStay && fnrhOfficialGuestsState.isLoading);
+      const syncStateMatchesStay = fnrhSituationSyncState.stayId === String(selectedStay.id);
+      const isSyncing = syncStateMatchesStay && fnrhSituationSyncState.isLoading;
+      button.disabled = !hasOfficialReservation ||
+        (stateMatchesStay && fnrhOfficialGuestsState.isLoading) ||
+        isSyncing;
       button.textContent = stateMatchesStay && fnrhOfficialGuestsState.isLoading
         ? "Atualizando hóspedes da FNRH..."
         : "Atualizar hóspedes da FNRH";
+      syncButton.disabled = !hasOfficialReservation || isSyncing;
+      syncButton.textContent = isSyncing
+        ? "Sincronizando situações..."
+        : "Sincronizar situações no painel";
       summary.innerHTML = "";
       updatedAt.textContent = "";
+      syncStatus.textContent = "";
+      syncStatus.style.color = "#64748b";
       status.textContent = "";
       status.style.color = "#64748b";
       list.innerHTML = "";
@@ -2281,6 +2344,18 @@ João Silva"></textarea>
         status.textContent = "Registre a reserva na FNRH antes de consultar os hóspedes oficiais.";
         return;
       }
+
+      if (syncStateMatchesStay && fnrhSituationSyncState.message) {
+        syncStatus.textContent = fnrhSituationSyncState.message;
+        syncStatus.style.color =
+          fnrhSituationSyncState.tone === "success" ? "#18794e" :
+          fnrhSituationSyncState.tone === "error" ? "#b42318" :
+          "#9a6700";
+      } else if (isSyncing) {
+        syncStatus.textContent = "Sincronizando situações oficiais no painel...";
+        syncStatus.style.color = "#9a6700";
+      }
+
       if (!stateMatchesStay) return;
 
       if (fnrhOfficialGuestsState.summary) {
@@ -2445,6 +2520,131 @@ João Silva"></textarea>
         };
         renderFnrhOfficialGuests();
         return false;
+      }
+    }
+
+    function buildFnrhSituationSyncSummary(data) {
+      const officialTotal = Number(data?.official_total) || 0;
+      const matchedTotal = Number(data?.matched_total) || 0;
+      const updatedTotal = Number(data?.updated_total) || 0;
+      const unchangedTotal = Number(data?.unchanged_total) || 0;
+      const missingLocalTotal = Number(data?.missing_local_total) || 0;
+      const localOnlyTotal = Number(data?.local_only_total) || 0;
+      const unknownStatusTotal = Number(data?.unknown_status_total) || 0;
+      const parts = [
+        "Situações sincronizadas.",
+        `${officialTotal} hóspedes encontrados, ${matchedTotal} correspondentes e ${updatedTotal} atualizados.`
+      ];
+      if (unchangedTotal > 0) {
+        parts.push(`${unchangedTotal} permaneceram sem alteração.`);
+      }
+      if (missingLocalTotal > 0) {
+        parts.push("Existem hóspedes oficiais que ainda não estão no painel.");
+      }
+      if (localOnlyTotal > 0) {
+        parts.push("Existem hóspedes locais que não apareceram na consulta oficial atual.");
+      }
+      if (unknownStatusTotal > 0) {
+        parts.push("Existem situações oficiais ainda não reconhecidas pelo painel. As ações desses hóspedes permanecerão bloqueadas.");
+      }
+      return parts.join(" ");
+    }
+
+    async function synchronizeFnrhGuestSituations() {
+      const stayId = String(selectedStay?.id || "");
+      const hasOfficialReservation = !!String(selectedStay?.fnrh_reserva_id || "").trim();
+      if (!stayId || !hasOfficialReservation) {
+        renderFnrhOfficialGuests();
+        return false;
+      }
+      if (
+        fnrhSituationSyncState.stayId === stayId &&
+        fnrhSituationSyncState.isLoading
+      ) {
+        return false;
+      }
+
+      const requestId = Number(fnrhSituationSyncState.requestId || 0) + 1;
+      const shouldRefreshOfficialGuests =
+        fnrhOfficialGuestsState.stayId === stayId &&
+        Array.isArray(fnrhOfficialGuestsState.guests);
+      fnrhSituationSyncState = {
+        stayId,
+        requestId,
+        isLoading: true,
+        message: "",
+        tone: ""
+      };
+      renderFnrhOfficialGuests();
+
+      try {
+        const data = await fetchJson(
+          `${API_BASE}/stays/${encodeURIComponent(stayId)}/fnrh/sincronizar-situacoes`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({})
+          }
+        );
+        if (
+          fnrhSituationSyncState.requestId !== requestId ||
+          fnrhSituationSyncState.stayId !== stayId ||
+          String(selectedStay?.id) !== stayId
+        ) {
+          return false;
+        }
+        if (String(data?.stay_id) !== stayId) {
+          throw new Error("A resposta da sincronização não corresponde à stay selecionada.");
+        }
+
+        const reloaded = await loadStayDetails(stayId, stayId);
+        if (
+          !reloaded ||
+          fnrhSituationSyncState.requestId !== requestId ||
+          fnrhSituationSyncState.stayId !== stayId ||
+          String(selectedStay?.id) !== stayId
+        ) {
+          return false;
+        }
+        if (shouldRefreshOfficialGuests) {
+          await loadFnrhOfficialGuests();
+        }
+        if (
+          fnrhSituationSyncState.requestId !== requestId ||
+          fnrhSituationSyncState.stayId !== stayId ||
+          String(selectedStay?.id) !== stayId
+        ) {
+          return false;
+        }
+
+        fnrhSituationSyncState.message = buildFnrhSituationSyncSummary(data);
+        fnrhSituationSyncState.tone =
+          (Number(data?.unknown_status_total) || 0) > 0 ? "warning" : "success";
+        return true;
+      } catch (error) {
+        if (
+          fnrhSituationSyncState.requestId !== requestId ||
+          fnrhSituationSyncState.stayId !== stayId ||
+          String(selectedStay?.id) !== stayId
+        ) {
+          return false;
+        }
+        const backendMessage = String(error?.apiMessage || error?.message || "").trim();
+        fnrhSituationSyncState.message = [400, 404, 409].includes(error?.status) && backendMessage
+          ? backendMessage
+          : "Não foi possível sincronizar as situações na FNRH. Os estados exibidos podem estar desatualizados.";
+        fnrhSituationSyncState.tone = error?.status === 502 || !error?.status
+          ? "error"
+          : "warning";
+        return false;
+      } finally {
+        if (
+          fnrhSituationSyncState.requestId === requestId &&
+          fnrhSituationSyncState.stayId === stayId
+        ) {
+          fnrhSituationSyncState.isLoading = false;
+          renderFnrhOfficialGuests();
+        }
       }
     }
 
@@ -3850,6 +4050,134 @@ João Silva"></textarea>
       return date.toLocaleString("pt-BR");
     }
 
+    function getFnrhOfficialSituationMeta(value) {
+      const code = String(value || "").trim().toUpperCase();
+      const labels = {
+        PRECHECKIN_NAOVINCULADO: "Pré-check-in não vinculado",
+        PRECHECKIN_PENDENTE: "Pré-check-in pendente",
+        PRECHECKIN_REALIZADO: "Pré-check-in realizado",
+        CHECKIN_REALIZADO: "Check-in confirmado na FNRH",
+        CHECKOUT_REALIZADO: "Checkout confirmado na FNRH"
+      };
+      if (!code) {
+        return {
+          code: "",
+          label: "Situação FNRH ainda não sincronizada",
+          isKnown: false,
+          isEmpty: true
+        };
+      }
+      if (!labels[code]) {
+        return {
+          code,
+          label: "Situação FNRH não reconhecida",
+          isKnown: false,
+          isEmpty: false
+        };
+      }
+      return {
+        code,
+        label: labels[code],
+        isKnown: true,
+        isEmpty: false
+      };
+    }
+
+    function getFnrhGuestControlState(guest) {
+      const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
+      const hasCheckin = !!String(guest?.fnrh_checkin_at || "").trim();
+      const hasCheckout = !!String(guest?.fnrh_checkout_at || "").trim();
+      const official = getFnrhOfficialSituationMeta(guest?.fnrh_situacao_hospede_id);
+      const checkinDate = formatFnrhOperationDate(guest?.fnrh_checkin_at);
+      const checkoutDate = formatFnrhOperationDate(guest?.fnrh_checkout_at);
+      const syncedDate = formatFnrhOperationDate(guest?.fnrh_situacao_synced_at);
+      const localDetails = [
+        checkinDate ? `Check-in solicitado pelo painel: ${checkinDate}` : "",
+        checkoutDate ? `Checkout solicitado pelo painel: ${checkoutDate}` : ""
+      ].filter(Boolean);
+      let allowCheckin = false;
+      let allowCheckout = false;
+      let stateLabel = "Aguardando vínculo FNRH";
+      let guidance = "O hóspede ainda não possui vínculo confirmado com a FNRH.";
+      let tone = "pending";
+      let divergence = false;
+
+      if (!hasFnrhHospedeId) {
+        return {
+          hasFnrhHospedeId,
+          official,
+          allowCheckin,
+          allowCheckout,
+          stateLabel,
+          guidance,
+          tone,
+          divergence,
+          syncedLabel: "Nunca sincronizado",
+          localDetails
+        };
+      }
+
+      if (!official.isKnown) {
+        divergence = hasCheckin || hasCheckout;
+        stateLabel = official.label;
+        guidance = divergence
+          ? "Há divergência entre o painel e a situação oficial. Sincronize e confira antes de continuar."
+          : "Sincronize a situação FNRH antes de continuar.";
+        tone = "warning";
+      } else if (official.code === "PRECHECKIN_REALIZADO") {
+        divergence = hasCheckin || hasCheckout;
+        stateLabel = divergence ? "Divergência de situação" : "Pronto para check-in";
+        guidance = divergence
+          ? "Há divergência entre o painel e a situação oficial. Sincronize e confira antes de continuar."
+          : "Pronto para check-in.";
+        allowCheckin = !divergence;
+        tone = divergence ? "warning" : "pending";
+      } else if (official.code === "CHECKIN_REALIZADO") {
+        divergence = hasCheckout;
+        stateLabel = divergence ? "Divergência de situação" : "Hospedado";
+        guidance = divergence
+          ? "Há divergência entre o painel e a situação oficial. Sincronize e confira antes de continuar."
+          : hasCheckin
+            ? "Check-in confirmado na FNRH."
+            : "Check-in confirmado na FNRH. Horário oficial não disponível.";
+        allowCheckout = !divergence && !hasCheckout;
+        tone = divergence ? "warning" : "success";
+      } else if (official.code === "CHECKOUT_REALIZADO") {
+        stateLabel = "Check-out confirmado";
+        guidance = hasCheckout
+          ? "Checkout confirmado na FNRH."
+          : "Checkout confirmado na FNRH. Horário oficial não disponível.";
+        tone = "success";
+      } else if (official.code === "PRECHECKIN_PENDENTE") {
+        divergence = hasCheckin || hasCheckout;
+        stateLabel = divergence ? "Divergência de situação" : "Pré-check-in pendente";
+        guidance = divergence
+          ? "Há divergência entre o painel e a situação oficial. Sincronize e confira antes de continuar."
+          : "O pré-check-in ainda não está pronto para check-in.";
+        tone = "warning";
+      } else if (official.code === "PRECHECKIN_NAOVINCULADO") {
+        divergence = hasCheckin || hasCheckout;
+        stateLabel = divergence ? "Divergência de situação" : "Pré-check-in não vinculado";
+        guidance = divergence
+          ? "Há divergência entre o painel e a situação oficial. Sincronize e confira antes de continuar."
+          : "O hóspede ainda não está vinculado à reserva oficial.";
+        tone = "warning";
+      }
+
+      return {
+        hasFnrhHospedeId,
+        official,
+        allowCheckin,
+        allowCheckout,
+        stateLabel,
+        guidance,
+        tone,
+        divergence,
+        syncedLabel: syncedDate || "Nunca sincronizado",
+        localDetails
+      };
+    }
+
     function renderFnrhGuestOperations() {
       const container = document.getElementById("fnrhGuestOperationsList");
       const openGuestDetailsButton = document.getElementById("openGuestDetailsBtn");
@@ -3872,29 +4200,27 @@ João Silva"></textarea>
 
       container.innerHTML = orientation + selectedGuests.map((guest) => {
         const guestId = String(guest?.id || "");
-        const hasFnrhHospedeId = !!String(guest?.fnrh_hospede_id || "").trim();
-        const hasCheckinDone = !!String(guest?.fnrh_checkin_at || "").trim();
-        const hasCheckoutDone = !!String(guest?.fnrh_checkout_at || "").trim();
+        const control = getFnrhGuestControlState(guest);
         const isCheckingIn = !!checkingInGuestFnrhById[guestId];
         const isCheckingOut = !!checkingOutGuestFnrhById[guestId];
         const isBusy = isCheckingIn || isCheckingOut;
-        const checkinDate = formatFnrhOperationDate(guest?.fnrh_checkin_at);
-        const checkoutDate = formatFnrhOperationDate(guest?.fnrh_checkout_at);
         const role = Number(guest?.is_main_guest) === 1 ? "Titular" : "Acompanhante";
-        const state = !hasFnrhHospedeId
-          ? "Aguardando vínculo FNRH"
-          : hasCheckoutDone
-            ? "Check-out realizado"
-            : hasCheckinDone
-              ? "Hospedado"
-              : "Pronto para check-in";
-        const stateTone = hasCheckoutDone || hasCheckinDone ? "success" : "pending";
-        const dates = [
-          checkinDate ? `<span>Check-in: ${escapeHtml(checkinDate)}</span>` : "",
-          checkoutDate ? `<span>Check-out: ${escapeHtml(checkoutDate)}</span>` : ""
-        ].filter(Boolean).join("");
-        const checkinDisabled = !guestId || !hasFnrhHospedeId || hasCheckinDone || hasCheckoutDone || isBusy;
-        const checkoutDisabled = !guestId || !hasFnrhHospedeId || !hasCheckinDone || hasCheckoutDone || isBusy;
+        const dates = control.localDetails
+          .map((detail) => `<span>${escapeHtml(detail)}</span>`)
+          .join("");
+        const checkinDisabled = !guestId || !control.allowCheckin || isBusy;
+        const checkoutDisabled = !guestId || !control.allowCheckout || isBusy;
+        const officialBlock = control.hasFnrhHospedeId ? `
+          <div class="fnrh-guest-official-state ${control.divergence ? "warning" : ""}">
+            <div><strong>Situação FNRH:</strong> ${escapeHtml(control.official.label)}</div>
+            ${!control.official.isKnown && !control.official.isEmpty
+              ? `<div>Código informado: <code>${escapeHtml(control.official.code)}</code></div>`
+              : ""}
+            <div><strong>Última consulta:</strong> ${escapeHtml(control.syncedLabel)}</div>
+            <div>Horário da consulta, não da ação.</div>
+            <div>${escapeHtml(control.guidance)}</div>
+          </div>`
+          : "";
 
         return `
           <div class="fnrh-guest-row">
@@ -3902,9 +4228,10 @@ João Silva"></textarea>
               <div class="fnrh-guest-name">${escapeHtml(guest?.full_name || "Hóspede")}</div>
               <div class="fnrh-guest-meta">
                 <span class="status-badge">${role}</span>
-                <span class="status-badge ${stateTone}">${state}</span>
+                <span class="status-badge ${control.tone}">${escapeHtml(control.stateLabel)}</span>
               </div>
               ${dates ? `<div class="fnrh-guest-dates">${dates}</div>` : ""}
+              ${officialBlock}
             </div>
             <div class="fnrh-guest-actions">
               <button type="button" class="secondary" data-fnrh-checkin-id="${escapeHtml(guestId)}" ${checkinDisabled ? "disabled" : ""}>
@@ -4283,6 +4610,38 @@ João Silva"></textarea>
       }
     }
 
+    function getFnrhGuestOperationSuccessMessage(data, operation) {
+      if (data?.recovered_after_uncertain_patch === true) {
+        return "A operação foi confirmada na FNRH após uma verificação de recuperação.";
+      }
+      if (data?.status_sync_pending === true) {
+        return "A operação foi aceita, mas a situação oficial ainda precisa ser sincronizada.";
+      }
+      if (data?.already_confirmed === true) {
+        return "A operação já estava confirmada na FNRH.";
+      }
+      return String(data?.message || "").trim() ||
+        (operation === "checkin"
+          ? "Check-in FNRH realizado com sucesso."
+          : "Checkout FNRH realizado com sucesso.");
+    }
+
+    function getFnrhGuestOperationErrorMessage(error) {
+      if (error?.status === 502) {
+        return "Não foi possível confirmar o resultado na FNRH. Sincronize a situação antes de tentar novamente.";
+      }
+      if (error?.status === 409) {
+        return String(error?.apiMessage || error?.message || "").trim() ||
+          "A situação oficial não permite esta operação.";
+      }
+      return "O resultado pode estar pendente. Sincronize a situação FNRH antes de repetir.";
+    }
+
+    function isFnrhGuestOperationContextActive(stayId, guestId) {
+      return String(selectedStay?.id) === String(stayId) &&
+        selectedGuests.some((guest) => String(guest?.id) === String(guestId));
+    }
+
     async function checkInGuestFnrh(guestId) {
       const guest = selectedGuests.find((item) => String(item.id) === String(guestId));
       if (!guest?.id) {
@@ -4292,6 +4651,13 @@ João Silva"></textarea>
 
       const guestKey = String(guest.id);
       if (checkingInGuestFnrhById[guestKey] || checkingOutGuestFnrhById[guestKey]) {
+        return;
+      }
+
+      const control = getFnrhGuestControlState(guest);
+      if (!control.allowCheckin) {
+        setStatus("guestStatus", control.guidance, "warning");
+        renderFnrhGuestOperations();
         return;
       }
 
@@ -4309,16 +4675,33 @@ João Silva"></textarea>
         const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkin`, {
           method: "POST"
         });
-        await loadStayDetails(stayId);
-        setStatus("guestStatus", `${guestName}: ${data?.message || "Check-in FNRH realizado com sucesso"}`, "success");
-      } catch (error) {
-        if (error?.status === 409 && stayId) {
-          await loadStayDetails(stayId);
+        if (!isFnrhGuestOperationContextActive(stayId, guest.id)) {
+          return;
         }
-        setStatus("guestStatus", `${guestName}: ${error.message || "Não foi possível realizar check-in FNRH."}`, "error");
+        await loadStayDetails(stayId, stayId);
+        if (isFnrhGuestOperationContextActive(stayId, guest.id)) {
+          setStatus(
+            "guestStatus",
+            `${guestName}: ${getFnrhGuestOperationSuccessMessage(data, "checkin")}`,
+            data?.status_sync_pending === true ? "warning" : "success"
+          );
+        }
+      } catch (error) {
+        if (error?.status === 409 && isFnrhGuestOperationContextActive(stayId, guest.id)) {
+          await loadStayDetails(stayId, stayId);
+        }
+        if (String(selectedStay?.id) === String(stayId)) {
+          setStatus(
+            "guestStatus",
+            `${guestName}: ${getFnrhGuestOperationErrorMessage(error)}`,
+            error?.status === 409 ? "warning" : "error"
+          );
+        }
       } finally {
         delete checkingInGuestFnrhById[guestKey];
-        renderFnrhGuestOperations();
+        if (String(selectedStay?.id) === String(stayId)) {
+          renderFnrhGuestOperations();
+        }
       }
     }
 
@@ -4331,6 +4714,13 @@ João Silva"></textarea>
 
       const guestKey = String(guest.id);
       if (checkingOutGuestFnrhById[guestKey] || checkingInGuestFnrhById[guestKey]) {
+        return;
+      }
+
+      const control = getFnrhGuestControlState(guest);
+      if (!control.allowCheckout) {
+        setStatus("guestStatus", control.guidance, "warning");
+        renderFnrhGuestOperations();
         return;
       }
 
@@ -4348,16 +4738,33 @@ João Silva"></textarea>
         const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkout`, {
           method: "POST"
         });
-        await loadStayDetails(stayId);
-        setStatus("guestStatus", `${guestName}: ${data?.message || "Check-out FNRH realizado com sucesso"}`, "success");
-      } catch (error) {
-        if (error?.status === 409 && stayId) {
-          await loadStayDetails(stayId);
+        if (!isFnrhGuestOperationContextActive(stayId, guest.id)) {
+          return;
         }
-        setStatus("guestStatus", `${guestName}: ${error.message || "Não foi possível realizar check-out FNRH."}`, "error");
+        await loadStayDetails(stayId, stayId);
+        if (isFnrhGuestOperationContextActive(stayId, guest.id)) {
+          setStatus(
+            "guestStatus",
+            `${guestName}: ${getFnrhGuestOperationSuccessMessage(data, "checkout")}`,
+            data?.status_sync_pending === true ? "warning" : "success"
+          );
+        }
+      } catch (error) {
+        if (error?.status === 409 && isFnrhGuestOperationContextActive(stayId, guest.id)) {
+          await loadStayDetails(stayId, stayId);
+        }
+        if (String(selectedStay?.id) === String(stayId)) {
+          setStatus(
+            "guestStatus",
+            `${guestName}: ${getFnrhGuestOperationErrorMessage(error)}`,
+            error?.status === 409 ? "warning" : "error"
+          );
+        }
       } finally {
         delete checkingOutGuestFnrhById[guestKey];
-        renderFnrhGuestOperations();
+        if (String(selectedStay?.id) === String(stayId)) {
+          renderFnrhGuestOperations();
+        }
       }
     }
 
@@ -4643,6 +5050,7 @@ Obrigado!`;
       document.getElementById("showQrBtn").addEventListener("click", showOfficialQrCode);
       document.getElementById("checkFnrhGuestsStatusBtn").addEventListener("click", checkFnrhReservationGuestsStatus);
       document.getElementById("refreshFnrhOfficialGuestsBtn").addEventListener("click", loadFnrhOfficialGuests);
+      document.getElementById("syncFnrhGuestSituationsBtn").addEventListener("click", synchronizeFnrhGuestSituations);
       document.getElementById("fnrhPrecheckinSearchForm").addEventListener("submit", searchFnrhPrecheckins);
       document.getElementById("startFnrhReceptionSessionBtn").addEventListener("click", startFnrhReceptionSession);
       document.getElementById("searchFnrhReceptionNewBtn").addEventListener("click", searchFnrhReceptionNewCandidates);
