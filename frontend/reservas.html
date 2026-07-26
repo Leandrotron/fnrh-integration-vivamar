@@ -1184,6 +1184,7 @@ João Silva"></textarea>
     let fnrhPrecheckinsIgnoredCount = 0;
     let isSearchingFnrhPrecheckins = false;
     let fnrhPrecheckinsRequestId = 0;
+    let fnrhPrecheckinSearchContext = null;
     let linkingFnrhPrecheckinByGuestId = {};
     let linkingFnrhPrecheckinByHospedeId = {};
     let fnrhReceptionSession = null;
@@ -1191,6 +1192,7 @@ João Silva"></textarea>
     let isStartingFnrhReceptionSession = false;
     let isSearchingFnrhReceptionNew = false;
     let importingFnrhReceptionCandidateByKey = {};
+    let openFnrhManualRecoveryByCandidateIndex = {};
     let stayDetailsRequestId = 0;
     let pendingStayDetailsId = null;
 
@@ -1675,6 +1677,79 @@ João Silva"></textarea>
       `;
     }
 
+    function renderFnrhManualRecoveryAction(candidateIndex) {
+      const eligibility = getFnrhManualRecoveryEligibility(candidateIndex);
+      if (!eligibility) return "";
+      const key = getFnrhReceptionImportKey(eligibility.stayId, eligibility.fnrhHospedeId);
+      const isImporting = !!importingFnrhReceptionCandidateByKey[key];
+      const isOpen = !!openFnrhManualRecoveryByCandidateIndex[candidateIndex] || isImporting;
+      const hasMainGuest = hasFnrhReceptionMainGuest();
+
+      return `
+        <div class="fnrh-reception-import">
+          <strong>Recuperação manual</strong>
+          <div class="fnrh-precheckin-guidance">
+            Use esta ação somente quando a recepção reconhecer pessoalmente que o hóspede pertence à reserva selecionada.
+          </div>
+          ${isOpen
+            ? `
+              ${hasMainGuest
+                ? `<div class="fnrh-precheckin-guidance">A hospedagem já possui hóspede principal.</div>`
+                : ""}
+              <div class="fnrh-precheckin-link-actions">
+                <button
+                  type="button"
+                  class="secondary"
+                  data-manual-import-candidate-index="${candidateIndex}"
+                  data-manual-import-role="main"
+                  ${hasMainGuest || isImporting ? "disabled" : ""}
+                >
+                  ${isImporting ? "Adicionando..." : "Adicionar como titular"}
+                </button>
+                <button
+                  type="button"
+                  class="secondary"
+                  data-manual-import-candidate-index="${candidateIndex}"
+                  data-manual-import-role="companion"
+                  ${isImporting ? "disabled" : ""}
+                >
+                  ${isImporting ? "Adicionando..." : "Adicionar como acompanhante"}
+                </button>
+              </div>
+            `
+            : `
+              <div class="fnrh-precheckin-link-actions">
+                <button
+                  type="button"
+                  class="secondary"
+                  data-open-manual-import-candidate-index="${candidateIndex}"
+                  ${isImporting ? "disabled" : ""}
+                >
+                  Adicionar manualmente a esta reserva
+                </button>
+              </div>
+            `}
+        </div>
+      `;
+    }
+
+    function bindFnrhManualRecoveryActions(container) {
+      container.querySelectorAll("[data-open-manual-import-candidate-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const index = Number(button.dataset.openManualImportCandidateIndex);
+          if (!getFnrhManualRecoveryEligibility(index)) return;
+          openFnrhManualRecoveryByCandidateIndex[index] = true;
+          renderFnrhPrecheckinResults();
+        });
+      });
+      container.querySelectorAll("[data-manual-import-candidate-index]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const isMainGuest = button.dataset.manualImportRole === "main";
+          importFnrhManualCandidate(button.dataset.manualImportCandidateIndex, isMainGuest);
+        });
+      });
+    }
+
     function renderFnrhPrecheckinResults() {
       const container = document.getElementById("fnrhPrecheckinResults");
       if (!container) return;
@@ -1755,6 +1830,7 @@ João Silva"></textarea>
 
       const unmatchedRows = matching.unmatchedCandidateIndexes.map((candidateIndex) => {
         const candidate = fnrhPrecheckins[candidateIndex];
+        const manualRecoveryAction = renderFnrhManualRecoveryAction(candidateIndex);
         return `
           <div class="fnrh-precheckin-match">
             <div class="fnrh-guest-name">${escapeHtml(candidate.name || "Nome não informado")}</div>
@@ -1764,6 +1840,7 @@ João Silva"></textarea>
               <div><strong>Situação:</strong> ${escapeHtml(candidate.situation || "Não informada")}</div>
               <div>Não corresponde aos hóspedes desta reserva</div>
             </div>
+            ${manualRecoveryAction}
           </div>
         `;
       }).join("");
@@ -1788,7 +1865,8 @@ João Silva"></textarea>
           ? `<div class="fnrh-precheckin-others"><h6>Outros pré-check-ins encontrados</h6>${unmatchedRows}</div>`
           : ""}
       `;
-      bindFnrhPrecheckinLinkActions();
+      bindFnrhPrecheckinLinkActions(container);
+      bindFnrhManualRecoveryActions(container);
     }
 
     function updateFnrhPrecheckinSearchButton() {
@@ -1802,6 +1880,8 @@ João Silva"></textarea>
       fnrhPrecheckinsRequestId += 1;
       fnrhPrecheckins = null;
       fnrhPrecheckinsIgnoredCount = 0;
+      fnrhPrecheckinSearchContext = null;
+      openFnrhManualRecoveryByCandidateIndex = {};
       isSearchingFnrhPrecheckins = false;
       if (clearStatus) {
         setStatus("fnrhPrecheckinSearchStatus", "");
@@ -1977,11 +2057,52 @@ João Silva"></textarea>
       if (hasLocalAssociation) return null;
 
       return {
+        source: "session",
         candidate,
         candidateIndex: index,
         fnrhHospedeId,
         stayId: String(selectedStay.id),
-        session: fnrhReceptionSession
+        dataInicio: fnrhReceptionSession.dataInicio,
+        dataFim: fnrhReceptionSession.dataFim,
+        contextToken: fnrhReceptionSession.startedAt,
+        statusElementId: "fnrhReceptionSessionStatus"
+      };
+    }
+
+    function getFnrhManualRecoveryEligibility(candidateIndex) {
+      const index = Number(candidateIndex);
+      if (!Number.isInteger(index) || index < 0) return null;
+      if (!selectedStay?.id || !String(selectedStay.fnrh_reserva_id || "").trim()) return null;
+      if (!fnrhPrecheckinSearchContext || !Array.isArray(fnrhPrecheckins)) return null;
+      if (String(fnrhPrecheckinSearchContext.stayId) !== String(selectedStay.id)) return null;
+      if (fnrhPrecheckinSearchContext.exibirVinculado !== false) return null;
+
+      const candidate = fnrhPrecheckins[index];
+      const fnrhHospedeId = normalizeFnrhHospedeId(candidate?.hospedeId);
+      if (!candidate || !isValidFnrhHospedeUuid(fnrhHospedeId)) return null;
+      if (candidate.situation !== "PRECHECKIN_NAOVINCULADO") return null;
+      if (selectedGuests.some((guest) => {
+        return normalizeFnrhHospedeId(guest?.fnrh_hospede_id) === fnrhHospedeId;
+      })) {
+        return null;
+      }
+
+      const matching = matchFnrhPrecheckinsToGuests(fnrhPrecheckins, selectedGuests);
+      const hasLocalAssociation = matching.matchesByGuestIndex.some((associations) => {
+        return associations.some((association) => association.candidateIndex === index);
+      });
+      if (hasLocalAssociation) return null;
+
+      return {
+        source: "manual",
+        candidate,
+        candidateIndex: index,
+        fnrhHospedeId,
+        stayId: String(selectedStay.id),
+        dataInicio: fnrhPrecheckinSearchContext.dataInicio,
+        dataFim: fnrhPrecheckinSearchContext.dataFim,
+        contextToken: `${fnrhPrecheckinSearchContext.dataInicio}:${fnrhPrecheckinSearchContext.dataFim}`,
+        statusElementId: "fnrhPrecheckinLinkStatus"
       };
     }
 
@@ -1989,12 +2110,31 @@ João Silva"></textarea>
       return `${String(stayId)}:${normalizeFnrhHospedeId(fnrhHospedeId)}`;
     }
 
-    function isFnrhReceptionImportContextActive(operation) {
+    function getCurrentFnrhImportEligibility(source, candidateIndex) {
+      return source === "manual"
+        ? getFnrhManualRecoveryEligibility(candidateIndex)
+        : getFnrhReceptionImportEligibility(candidateIndex);
+    }
+
+    function isFnrhImportStayActive(operation) {
       return !!operation &&
         importingFnrhReceptionCandidateByKey[operation.key] === operation &&
-        String(selectedStay?.id) === operation.stayId &&
-        String(fnrhReceptionSession?.stayId) === operation.stayId &&
-        String(fnrhReceptionSession?.startedAt) === operation.sessionStartedAt;
+        String(selectedStay?.id) === operation.stayId;
+    }
+
+    function isFnrhImportContextActive(operation) {
+      const sourceActive = operation?.source === "manual"
+        ? String(fnrhPrecheckinSearchContext?.stayId) === operation.stayId &&
+          fnrhPrecheckinSearchContext?.exibirVinculado === false &&
+          `${fnrhPrecheckinSearchContext?.dataInicio}:${fnrhPrecheckinSearchContext?.dataFim}` === operation.contextToken
+        : String(fnrhReceptionSession?.stayId) === operation?.stayId &&
+          String(fnrhReceptionSession?.startedAt) === operation?.contextToken;
+      return isFnrhImportStayActive(operation) && sourceActive;
+    }
+
+    function renderFnrhImportSources() {
+      renderFnrhReceptionResults();
+      renderFnrhPrecheckinResults();
     }
 
     function bindFnrhReceptionImportActions(container) {
@@ -2006,64 +2146,91 @@ João Silva"></textarea>
       });
     }
 
-    async function refreshFnrhReceptionImportContext(operation) {
-      if (!isFnrhReceptionImportContextActive(operation)) return false;
+    async function refreshFnrhImportContext(operation) {
+      if (!isFnrhImportContextActive(operation)) return false;
       const reloaded = await loadStayDetails(operation.stayId, operation.stayId);
-      if (
-        !reloaded ||
-        String(selectedStay?.id) !== operation.stayId ||
-        String(fnrhReceptionSession?.stayId) !== operation.stayId
-      ) {
-        return false;
+      if (!reloaded || String(selectedStay?.id) !== operation.stayId) return false;
+      if (operation.source === "manual") {
+        await searchFnrhPrecheckins(null, {
+          dataInicio: operation.dataInicio,
+          dataFim: operation.dataFim
+        });
+      } else {
+        await searchFnrhReceptionNewCandidates();
       }
-      await searchFnrhReceptionNewCandidates();
       return String(selectedStay?.id) === operation.stayId;
     }
 
     async function importFnrhReceptionCandidate(candidateIndex, isMainGuest) {
       const eligibility = getFnrhReceptionImportEligibility(candidateIndex);
+      return importFnrhCandidate(eligibility, isMainGuest);
+    }
+
+    async function importFnrhManualCandidate(candidateIndex, isMainGuest) {
+      const eligibility = getFnrhManualRecoveryEligibility(candidateIndex);
+      return importFnrhCandidate(eligibility, isMainGuest);
+    }
+
+    async function importFnrhCandidate(eligibility, isMainGuest) {
+      const statusElementId = eligibility?.statusElementId || "fnrhPrecheckinLinkStatus";
       if (!eligibility) {
         setStatus(
-          "fnrhReceptionSessionStatus",
+          statusElementId,
           "Os dados mudaram. Busque novamente antes de adicionar o hóspede.",
           "warning"
         );
-        renderFnrhReceptionResults();
+        renderFnrhImportSources();
         return;
       }
       if (typeof isMainGuest !== "boolean") return;
       if (isMainGuest && hasFnrhReceptionMainGuest()) {
         setStatus(
-          "fnrhReceptionSessionStatus",
+          statusElementId,
           "Esta hospedagem já possui um hóspede principal.",
           "warning"
         );
-        renderFnrhReceptionResults();
+        renderFnrhImportSources();
         return;
       }
 
       const roleLabel = isMainGuest ? "titular" : "acompanhante";
       const candidateName = String(eligibility.candidate.name || "Hóspede").trim();
-      const confirmationMessage = [
-        `Adicionar “${candidateName}” à stay selecionada como ${roleLabel}?`,
-        "O vínculo será executado na FNRH.",
-        "Confirme somente após conferir pessoalmente que a pessoa pertence a esta reserva."
-      ].join("\n\n");
+      const stayLabel = String(
+        selectedStay?.reservation_id ||
+        selectedStay?.sub_reservation_id ||
+        selectedStay?.id ||
+        ""
+      ).trim();
+      const confirmationMessage = eligibility.source === "manual"
+        ? [
+            "Esta é uma recuperação manual de pré-check-in antigo.",
+            `Adicionar “${candidateName}” à stay ${stayLabel} como ${roleLabel}?`,
+            "O vínculo será solicitado à FNRH.",
+            "Confirme somente após conferir pessoalmente que a pessoa pertence a esta reserva."
+          ].join("\n\n")
+        : [
+            `Adicionar “${candidateName}” à stay selecionada como ${roleLabel}?`,
+            "O vínculo será executado na FNRH.",
+            "Confirme somente após conferir pessoalmente que a pessoa pertence a esta reserva."
+          ].join("\n\n");
       if (!window.confirm(confirmationMessage)) return;
 
-      const revalidated = getFnrhReceptionImportEligibility(candidateIndex);
+      const revalidated = getCurrentFnrhImportEligibility(
+        eligibility.source,
+        eligibility.candidateIndex
+      );
       if (
         !revalidated ||
         revalidated.fnrhHospedeId !== eligibility.fnrhHospedeId ||
-        revalidated.session !== eligibility.session ||
+        revalidated.contextToken !== eligibility.contextToken ||
         (isMainGuest && hasFnrhReceptionMainGuest())
       ) {
         setStatus(
-          "fnrhReceptionSessionStatus",
+          statusElementId,
           "Os dados mudaram. Busque novamente antes de adicionar o hóspede.",
           "warning"
         );
-        renderFnrhReceptionResults();
+        renderFnrhImportSources();
         return;
       }
 
@@ -2071,16 +2238,18 @@ João Silva"></textarea>
       if (importingFnrhReceptionCandidateByKey[key]) return;
       const operation = Object.freeze({
         key,
+        source: revalidated.source,
         stayId: revalidated.stayId,
         fnrhHospedeId: revalidated.fnrhHospedeId,
         isMainGuest,
-        dataInicio: revalidated.session.dataInicio,
-        dataFim: revalidated.session.dataFim,
-        sessionStartedAt: revalidated.session.startedAt
+        dataInicio: revalidated.dataInicio,
+        dataFim: revalidated.dataFim,
+        contextToken: revalidated.contextToken,
+        statusElementId: revalidated.statusElementId
       });
       importingFnrhReceptionCandidateByKey[key] = operation;
-      setStatus("fnrhReceptionSessionStatus", `Adicionando como ${roleLabel}...`, "warning");
-      renderFnrhReceptionResults();
+      setStatus(operation.statusElementId, `Adicionando como ${roleLabel}...`, "warning");
+      renderFnrhImportSources();
 
       try {
         const data = await fetchJson(
@@ -2096,13 +2265,13 @@ João Silva"></textarea>
             })
           }
         );
-        if (!isFnrhReceptionImportContextActive(operation)) return;
+        if (!isFnrhImportContextActive(operation)) return;
 
         const idempotent = data?.already_imported === true;
-        await refreshFnrhReceptionImportContext(operation);
-        if (isFnrhReceptionImportContextActive(operation)) {
+        await refreshFnrhImportContext(operation);
+        if (isFnrhImportStayActive(operation)) {
           setStatus(
-            "fnrhReceptionSessionStatus",
+            operation.statusElementId,
             idempotent
               ? "Este hóspede já estava adicionado à reserva."
               : "Hóspede adicionado e vinculado com sucesso.",
@@ -2110,14 +2279,14 @@ João Silva"></textarea>
           );
         }
       } catch (error) {
-        if (!isFnrhReceptionImportContextActive(operation)) return;
+        if (!isFnrhImportContextActive(operation)) return;
         const backendMessage = String(error?.apiMessage || error?.message || "").trim();
 
         if (error?.status === 409) {
-          await refreshFnrhReceptionImportContext(operation);
-          if (isFnrhReceptionImportContextActive(operation)) {
+          await refreshFnrhImportContext(operation);
+          if (isFnrhImportStayActive(operation)) {
             setStatus(
-              "fnrhReceptionSessionStatus",
+              operation.statusElementId,
               backendMessage || "A importação não pôde ser realizada porque os dados mudaram.",
               "warning"
             );
@@ -2127,7 +2296,7 @@ João Silva"></textarea>
 
         if (error?.status === 400 || error?.status === 422 || error?.status === 404) {
           setStatus(
-            "fnrhReceptionSessionStatus",
+            operation.statusElementId,
             backendMessage || "Os dados não puderam ser validados para importação.",
             "error"
           );
@@ -2136,7 +2305,7 @@ João Silva"></textarea>
 
         if (error?.status === 502) {
           setStatus(
-            "fnrhReceptionSessionStatus",
+            operation.statusElementId,
             `${backendMessage ? `${backendMessage} ` : ""}` +
               "Não foi possível confirmar o resultado na FNRH. Atualize a busca antes de tentar novamente.",
             "warning"
@@ -2145,18 +2314,15 @@ João Silva"></textarea>
         }
 
         setStatus(
-          "fnrhReceptionSessionStatus",
+          operation.statusElementId,
           `${backendMessage || "Não foi possível concluir a importação."} ` +
-            "O resultado pode estar pendente. Busque novamente antes de repetir.",
+            `O resultado pode estar pendente. ${operation.source === "manual" ? "Atualize" : "Busque"} novamente antes de repetir.`,
           "error"
         );
       } finally {
         delete importingFnrhReceptionCandidateByKey[key];
-        if (
-          String(selectedStay?.id) === operation.stayId &&
-          String(fnrhReceptionSession?.stayId) === operation.stayId
-        ) {
-          renderFnrhReceptionResults();
+        if (String(selectedStay?.id) === operation.stayId) {
+          renderFnrhImportSources();
         }
       }
     }
@@ -2376,6 +2542,8 @@ João Silva"></textarea>
           });
         }
         fnrhReceptionSession = session;
+        fnrhPrecheckinSearchContext = null;
+        openFnrhManualRecoveryByCandidateIndex = {};
         fnrhPrecheckins = result.candidates;
         fnrhPrecheckinsIgnoredCount = result.ignoredCount;
         renderFnrhPrecheckinResults();
@@ -2418,6 +2586,8 @@ João Silva"></textarea>
           result.candidates,
           session.baselineHospedeIds
         );
+        fnrhPrecheckinSearchContext = null;
+        openFnrhManualRecoveryByCandidateIndex = {};
         fnrhPrecheckins = result.candidates;
         fnrhPrecheckinsIgnoredCount = result.ignoredCount;
         renderFnrhPrecheckinResults();
@@ -2454,15 +2624,19 @@ João Silva"></textarea>
       updateFnrhReceptionSessionUi();
     }
 
-    async function searchFnrhPrecheckins(event) {
+    async function searchFnrhPrecheckins(event, periodOverride = null) {
       event?.preventDefault();
       if (isSearchingFnrhPrecheckins) return false;
       if (event) {
         setStatus("fnrhPrecheckinLinkStatus", "");
       }
 
-      const startDate = normalizeDateValue(document.getElementById("fnrhPrecheckinStartDate")?.value);
-      const endDate = normalizeDateValue(document.getElementById("fnrhPrecheckinEndDate")?.value);
+      const startDate = normalizeDateValue(
+        periodOverride?.dataInicio ?? document.getElementById("fnrhPrecheckinStartDate")?.value
+      );
+      const endDate = normalizeDateValue(
+        periodOverride?.dataFim ?? document.getElementById("fnrhPrecheckinEndDate")?.value
+      );
 
       if (!selectedStay?.id) {
         setStatus("fnrhPrecheckinSearchStatus", "Selecione uma reserva antes de buscar.", "warning");
@@ -2503,6 +2677,12 @@ João Silva"></textarea>
 
         fnrhPrecheckinsIgnoredCount = result.ignoredCount;
         fnrhPrecheckins = result.candidates;
+        fnrhPrecheckinSearchContext = {
+          stayId: String(requestedStayId),
+          dataInicio: startDate,
+          dataFim: endDate,
+          exibirVinculado: false
+        };
         setStatus(
           "fnrhPrecheckinSearchStatus",
           `${fnrhPrecheckins.length} pré-check-in(s) sem vínculo encontrado(s).`,
