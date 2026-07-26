@@ -41,6 +41,7 @@ const KNOWN_FNRH_GUEST_SITUATIONS = new Set([
   "CHECKOUT_REALIZADO"
 ]);
 const fnrhSituationSyncByStayId = new Map();
+const fnrhGuestOperationByGuestId = new Map();
 
 // =========================
 // FunÃ§Ãµes auxiliares
@@ -941,7 +942,11 @@ async function fetchConfirmedFnrhReservationCandidate(fnrhReservaId, fnrhHospede
 
 async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
   const mode = process.env.FNRH_MODE || "mock";
-  console.log("[FNRH] guest check-in mode:", mode);
+  console.log("[FNRH] guest operation:", {
+    operation: "checkin",
+    stage: "patch_mode",
+    mode
+  });
 
   if (mode === "mock") {
     return {
@@ -952,7 +957,8 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
         hospede_id: fnrhHospedeId,
         situacao_id: "CHECKIN_REALIZADO",
         data_hora: checkinAtIso
-      }
+      },
+      compatible: true
     };
   }
 
@@ -985,15 +991,10 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
     cpf_solicitante: cpfSolicitante
   };
 
-  console.log("[FNRH] guest check-in request url:", finalUrl);
-  console.log("[FNRH] guest check-in request headers:", {
-    "Content-Type": "text/plain",
-    Authorization: `Basic ${maskValue(Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64"), 8, 4)}`,
-    FNRH_USER: maskValue(user, 4, 4),
-    FNRH_API_KEY: maskValue(apiKey, 3, 2),
-    cpf_solicitante: maskValue(cpfSolicitante, 3, 2)
+  console.log("[FNRH] guest operation:", {
+    operation: "checkin",
+    stage: "patch_request"
   });
-  console.log("[FNRH] guest check-in request body:", checkinAtIso);
 
   let response;
 
@@ -1004,36 +1005,49 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
       body: checkinAtIso
     });
   } catch (networkError) {
-    console.error("[FNRH] guest check-in network error:", networkError);
+    console.error("[FNRH] guest operation error:", {
+      operation: "checkin",
+      stage: "patch_network",
+      status: null,
+      code: String(networkError?.code || networkError?.name || "NETWORK_ERROR")
+    });
     networkError.fnrhStatus = null;
-    networkError.fnrhBody = {
-      error: networkError.message || "Erro de rede ao realizar check-in na FNRH"
-    };
     throw networkError;
   }
 
   let body;
   const text = await response.text();
+  let compatible = true;
 
   try {
     body = JSON.parse(text);
   } catch {
-    body = { raw: text };
+    body = null;
+    compatible = false;
   }
 
-  console.log("[FNRH] guest check-in response status:", response.status);
-  console.log("[FNRH] guest check-in response body:", JSON.stringify(body, null, 2));
+  console.log("[FNRH] guest operation:", {
+    operation: "checkin",
+    stage: "patch_response",
+    status: response.status,
+    compatible
+  });
 
   return {
     ok: response.ok,
     status: response.status,
-    body
+    body,
+    compatible
   };
 }
 
 async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
   const mode = process.env.FNRH_MODE || "mock";
-  console.log("[FNRH] guest check-out mode:", mode);
+  console.log("[FNRH] guest operation:", {
+    operation: "checkout",
+    stage: "patch_mode",
+    mode
+  });
 
   if (mode === "mock") {
     return {
@@ -1044,7 +1058,8 @@ async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
         hospede_id: fnrhHospedeId,
         situacao_id: "CHECKOUT_REALIZADO",
         data_hora: checkoutAtIso
-      }
+      },
+      compatible: true
     };
   }
 
@@ -1077,15 +1092,10 @@ async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
     cpf_solicitante: cpfSolicitante
   };
 
-  console.log("[FNRH] guest check-out request url:", finalUrl);
-  console.log("[FNRH] guest check-out request headers:", {
-    "Content-Type": "text/plain",
-    Authorization: `Basic ${maskValue(Buffer.from(`${user}:${apiKey}`, "utf8").toString("base64"), 8, 4)}`,
-    FNRH_USER: maskValue(user, 4, 4),
-    FNRH_API_KEY: maskValue(apiKey, 3, 2),
-    cpf_solicitante: maskValue(cpfSolicitante, 3, 2)
+  console.log("[FNRH] guest operation:", {
+    operation: "checkout",
+    stage: "patch_request"
   });
-  console.log("[FNRH] guest check-out request body:", checkoutAtIso);
 
   let response;
 
@@ -1096,30 +1106,39 @@ async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
       body: checkoutAtIso
     });
   } catch (networkError) {
-    console.error("[FNRH] guest check-out network error:", networkError);
+    console.error("[FNRH] guest operation error:", {
+      operation: "checkout",
+      stage: "patch_network",
+      status: null,
+      code: String(networkError?.code || networkError?.name || "NETWORK_ERROR")
+    });
     networkError.fnrhStatus = null;
-    networkError.fnrhBody = {
-      error: networkError.message || "Erro de rede ao realizar check-out na FNRH"
-    };
     throw networkError;
   }
 
   let body;
   const text = await response.text();
+  let compatible = true;
 
   try {
     body = JSON.parse(text);
   } catch {
-    body = { raw: text };
+    body = null;
+    compatible = false;
   }
 
-  console.log("[FNRH] guest check-out response status:", response.status);
-  console.log("[FNRH] guest check-out response body:", JSON.stringify(body, null, 2));
+  console.log("[FNRH] guest operation:", {
+    operation: "checkout",
+    stage: "patch_response",
+    status: response.status,
+    compatible
+  });
 
   return {
     ok: response.ok,
     status: response.status,
-    body
+    body,
+    compatible
   };
 }
 
@@ -3386,6 +3405,483 @@ app.post("/stays/:stayId/fnrh/importar-vincular-precheckin", async (req, res) =>
   }
 });
 
+function createFnrhGuestOperationError(status, publicMessage, code, stage, fnrhStatus = null) {
+  const error = new Error(publicMessage);
+  error.status = status;
+  error.publicMessage = publicMessage;
+  error.code = code;
+  error.stage = stage;
+  error.fnrhStatus = fnrhStatus;
+  return error;
+}
+
+async function loadFnrhGuestOperationContext(guestId) {
+  const guest = await dbGetAsync(
+    `SELECT guests.id, guests.stay_id, guests.fnrh_hospede_id,
+            guests.fnrh_checkin_at, guests.fnrh_checkout_at,
+            guests.fnrh_situacao_hospede_id, guests.fnrh_situacao_synced_at,
+            stays.fnrh_reserva_id
+     FROM guests
+     INNER JOIN stays ON stays.id = guests.stay_id
+     WHERE guests.id = ? AND stays.property_id = ?`,
+    [guestId, PROPERTY_ID]
+  );
+
+  if (!guest) {
+    throw createFnrhGuestOperationError(
+      404,
+      "Hóspede não encontrado",
+      "FNRH_GUEST_OPERATION_NOT_FOUND",
+      "validacao_local"
+    );
+  }
+
+  const fnrhHospedeId = normalizeFnrhUuid(guest.fnrh_hospede_id);
+  if (!isValidUuid(fnrhHospedeId)) {
+    throw createFnrhGuestOperationError(
+      400,
+      "Hóspede sem identificador FNRH válido para esta operação.",
+      "FNRH_GUEST_OPERATION_INVALID_GUEST_ID",
+      "validacao_local"
+    );
+  }
+
+  const fnrhReservaId = normalizeFnrhUuid(guest.fnrh_reserva_id);
+  if (!isValidUuid(fnrhReservaId)) {
+    throw createFnrhGuestOperationError(
+      409,
+      "A reserva local não possui identificador FNRH válido.",
+      "FNRH_GUEST_OPERATION_INVALID_RESERVATION_ID",
+      "validacao_local"
+    );
+  }
+
+  return {
+    guest: {
+      id: guest.id,
+      stay_id: guest.stay_id,
+      fnrh_hospede_id: fnrhHospedeId,
+      fnrh_checkin_at: guest.fnrh_checkin_at,
+      fnrh_checkout_at: guest.fnrh_checkout_at,
+      fnrh_situacao_hospede_id: guest.fnrh_situacao_hospede_id,
+      fnrh_situacao_synced_at: guest.fnrh_situacao_synced_at
+    },
+    stay: {
+      id: guest.stay_id,
+      fnrh_reserva_id: fnrhReservaId
+    }
+  };
+}
+
+async function persistFnrhGuestOperationState(
+  guest,
+  { operation = null, operationalTimestamp = null, situationCode = null, syncedAt = null }
+) {
+  const assignments = [];
+  const params = [];
+
+  if (operation === "checkin" && operationalTimestamp) {
+    assignments.push("fnrh_checkin_at = ?");
+    params.push(operationalTimestamp);
+  } else if (operation === "checkout" && operationalTimestamp) {
+    assignments.push("fnrh_checkout_at = ?");
+    params.push(operationalTimestamp);
+  }
+
+  if (situationCode && syncedAt) {
+    assignments.push("fnrh_situacao_hospede_id = ?", "fnrh_situacao_synced_at = ?");
+    params.push(situationCode, syncedAt);
+  }
+
+  if (!assignments.length) return;
+
+  params.push(guest.id, guest.stay_id, guest.fnrh_hospede_id);
+  const result = await dbRunAsync(
+    `UPDATE guests
+     SET ${assignments.join(", ")}
+     WHERE id = ?
+       AND stay_id = ?
+       AND LOWER(TRIM(fnrh_hospede_id)) = ?`,
+    params
+  );
+  if (result.changes !== 1) {
+    throw new Error("Guest local mudou durante a operação FNRH");
+  }
+}
+
+async function confirmOfficialSituationForLocalGuest(stay, guest, { persist = true } = {}) {
+  const syncedAt = new Date().toISOString();
+  let officialResult;
+
+  try {
+    officialResult = await fetchFnrhReservationGuests(stay.fnrh_reserva_id);
+  } catch (error) {
+    throw createFnrhGuestOperationError(
+      502,
+      "Não foi possível consultar a situação oficial na FNRH.",
+      "FNRH_GUEST_OPERATION_OFFICIAL_REQUEST_FAILED",
+      "consulta_oficial",
+      error?.fnrhStatus ?? null
+    );
+  }
+
+  if (!officialResult.ok) {
+    throw createFnrhGuestOperationError(
+      502,
+      "Não foi possível consultar a situação oficial na FNRH.",
+      "FNRH_GUEST_OPERATION_OFFICIAL_HTTP_ERROR",
+      "resposta_oficial",
+      officialResult.status
+    );
+  }
+
+  const officialItems = getFnrhOfficialCandidateItems(officialResult.body);
+  if (!officialItems) {
+    throw createFnrhGuestOperationError(
+      502,
+      "A FNRH retornou um formato incompatível para a consulta oficial.",
+      "FNRH_GUEST_OPERATION_OFFICIAL_INVALID_FORMAT",
+      "formato_resposta",
+      officialResult.status
+    );
+  }
+
+  const matches = officialItems
+    .map(normalizeFnrhOfficialCandidate)
+    .filter((candidate) => {
+      return normalizeFnrhUuid(candidate?.hospedeId) === guest.fnrh_hospede_id;
+    });
+
+  if (matches.length > 1) {
+    throw createFnrhGuestOperationError(
+      502,
+      "A FNRH retornou identificadores conflitantes para o hóspede.",
+      "FNRH_GUEST_OPERATION_OFFICIAL_DUPLICATE",
+      "correspondencia_oficial",
+      officialResult.status
+    );
+  }
+  if (matches.length !== 1) {
+    throw createFnrhGuestOperationError(
+      409,
+      "O hóspede não foi encontrado de forma única na reserva oficial.",
+      "FNRH_GUEST_OPERATION_OFFICIAL_GUEST_NOT_FOUND",
+      "correspondencia_oficial",
+      officialResult.status
+    );
+  }
+
+  const situation = normalizeFnrhOfficialSituation(matches[0].situation);
+  if (!situation) {
+    throw createFnrhGuestOperationError(
+      409,
+      "Atualize a situação oficial antes de realizar esta operação.",
+      "FNRH_GUEST_OPERATION_OFFICIAL_SITUATION_INVALID",
+      "situacao_oficial",
+      officialResult.status
+    );
+  }
+
+  if (persist) {
+    await persistFnrhGuestOperationState(guest, {
+      situationCode: situation.code,
+      syncedAt
+    });
+  }
+
+  return {
+    code: situation.code,
+    isKnown: situation.isKnown,
+    syncedAt,
+    httpStatus: officialResult.status
+  };
+}
+
+function logFnrhGuestOperationError(guestId, stayId, operation, error) {
+  console.error("[FNRH] guest operation error:", {
+    guest_id: guestId,
+    stay_id: stayId ?? null,
+    operation,
+    stage: error?.stage || "processamento",
+    status: error?.fnrhStatus ?? null,
+    code: String(error?.code || "FNRH_GUEST_OPERATION_INTERNAL_ERROR")
+  });
+}
+
+function sendFnrhGuestOperationFailure(res, guestId, stayId, operation, error) {
+  logFnrhGuestOperationError(guestId, stayId, operation, error);
+  const status = Number(error?.status) || 500;
+  const message = error?.publicMessage ||
+    "Não foi possível concluir a operação FNRH.";
+  return res.status(status).json({
+    error: message,
+    guest_id: guestId
+  });
+}
+
+function sendFnrhAlreadyConfirmed(res, guest, operation, officialStatus) {
+  return res.json({
+    success: true,
+    already_confirmed: true,
+    performed_by_system: false,
+    official_status: officialStatus,
+    guest_id: guest.id,
+    message: operation === "checkin"
+      ? "Check-in já confirmado na FNRH."
+      : "Checkout já confirmado na FNRH."
+  });
+}
+
+function getFnrhOperationalTimestampField(operation) {
+  return operation === "checkin" ? "checkin_at" : "checkout_at";
+}
+
+async function executeFnrhGuestOperation(guestId, operation, res) {
+  let context;
+  try {
+    context = await loadFnrhGuestOperationContext(guestId);
+  } catch (error) {
+    return sendFnrhGuestOperationFailure(res, guestId, null, operation, error);
+  }
+
+  const { guest, stay } = context;
+  let officialBefore;
+  try {
+    officialBefore = await confirmOfficialSituationForLocalGuest(stay, guest);
+  } catch (error) {
+    return sendFnrhGuestOperationFailure(res, guest.id, stay.id, operation, error);
+  }
+
+  if (operation === "checkin") {
+    if (officialBefore.code === "CHECKIN_REALIZADO") {
+      return sendFnrhAlreadyConfirmed(res, guest, operation, officialBefore.code);
+    }
+    if (officialBefore.code === "CHECKOUT_REALIZADO") {
+      return res.status(409).json({
+        error: "O checkout deste hóspede já está confirmado na FNRH.",
+        guest_id: guest.id
+      });
+    }
+    if (String(guest.fnrh_checkin_at || "").trim()) {
+      return res.status(409).json({
+        error: "O registro local de check-in diverge da situação oficial. Atualize ou confira a situação antes de tentar novamente.",
+        guest_id: guest.id
+      });
+    }
+    if (
+      officialBefore.code === "PRECHECKIN_NAOVINCULADO" ||
+      officialBefore.code === "PRECHECKIN_PENDENTE"
+    ) {
+      return res.status(409).json({
+        error: "O pré-check-in oficial ainda não está realizado para este hóspede.",
+        guest_id: guest.id
+      });
+    }
+    if (
+      officialBefore.code !== "PRECHECKIN_REALIZADO" ||
+      !officialBefore.isKnown
+    ) {
+      return res.status(409).json({
+        error: "Atualize a situação oficial antes de realizar o check-in.",
+        guest_id: guest.id
+      });
+    }
+  } else {
+    if (officialBefore.code === "CHECKOUT_REALIZADO") {
+      return sendFnrhAlreadyConfirmed(res, guest, operation, officialBefore.code);
+    }
+    if (String(guest.fnrh_checkout_at || "").trim()) {
+      return res.status(409).json({
+        error: "O registro local de checkout diverge da situação oficial. Atualize ou confira a situação antes de tentar novamente.",
+        guest_id: guest.id
+      });
+    }
+    if (
+      officialBefore.code === "PRECHECKIN_REALIZADO" ||
+      officialBefore.code === "PRECHECKIN_PENDENTE" ||
+      officialBefore.code === "PRECHECKIN_NAOVINCULADO"
+    ) {
+      return res.status(409).json({
+        error: "O check-in oficial ainda não está confirmado para este hóspede.",
+        guest_id: guest.id
+      });
+    }
+    if (
+      officialBefore.code !== "CHECKIN_REALIZADO" ||
+      !officialBefore.isKnown
+    ) {
+      return res.status(409).json({
+        error: "Atualize a situação oficial antes de realizar o checkout.",
+        guest_id: guest.id
+      });
+    }
+  }
+
+  const operationTimestamp = new Date().toISOString();
+  const expectedSituation = operation === "checkin"
+    ? "CHECKIN_REALIZADO"
+    : "CHECKOUT_REALIZADO";
+  const sendPatch = operation === "checkin"
+    ? sendFnrhGuestCheckin
+    : sendFnrhGuestCheckout;
+  let patchResult;
+  let patchError = null;
+
+  try {
+    patchResult = await sendPatch(guest.fnrh_hospede_id, operationTimestamp);
+  } catch (error) {
+    patchError = error;
+  }
+
+  if (patchResult?.ok && patchResult.compatible !== false) {
+    let officialAfter = null;
+    try {
+      officialAfter = await confirmOfficialSituationForLocalGuest(stay, guest, {
+        persist: false
+      });
+    } catch (error) {
+      logFnrhGuestOperationError(guest.id, stay.id, operation, error);
+    }
+
+    try {
+      if (officialAfter?.code === expectedSituation) {
+        await persistFnrhGuestOperationState(guest, {
+          operation,
+          operationalTimestamp: operationTimestamp,
+          situationCode: officialAfter.code,
+          syncedAt: officialAfter.syncedAt
+        });
+      } else {
+        await persistFnrhGuestOperationState(guest, {
+          operation,
+          operationalTimestamp: operationTimestamp
+        });
+      }
+    } catch (error) {
+      error.publicMessage =
+        "A FNRH confirmou a operação, mas não foi possível persistir o resultado local.";
+      error.code = "FNRH_GUEST_OPERATION_PERSIST_FAILED";
+      error.stage = "persistencia_local";
+      return sendFnrhGuestOperationFailure(res, guest.id, stay.id, operation, error);
+    }
+
+    const timestampField = getFnrhOperationalTimestampField(operation);
+    if (officialAfter?.code === expectedSituation) {
+      return res.json({
+        success: true,
+        already_confirmed: false,
+        performed_by_system: true,
+        official_status_confirmed: true,
+        guest_id: guest.id,
+        [timestampField]: operationTimestamp,
+        response_status: patchResult.status,
+        message: operation === "checkin"
+          ? "Check-in FNRH realizado com sucesso"
+          : "Checkout FNRH realizado com sucesso"
+      });
+    }
+
+    return res.json({
+      success: true,
+      already_confirmed: false,
+      performed_by_system: true,
+      official_status_confirmed: false,
+      status_sync_pending: true,
+      guest_id: guest.id,
+      [timestampField]: operationTimestamp,
+      response_status: patchResult.status,
+      message: operation === "checkin"
+        ? "Check-in aceito pela FNRH; confirmação oficial pendente."
+        : "Checkout aceito pela FNRH; confirmação oficial pendente."
+    });
+  }
+
+  let recoverySituation = null;
+  try {
+    recoverySituation = await confirmOfficialSituationForLocalGuest(stay, guest, {
+      persist: false
+    });
+  } catch (error) {
+    logFnrhGuestOperationError(guest.id, stay.id, operation, error);
+  }
+
+  if (recoverySituation?.code === expectedSituation) {
+    try {
+      await persistFnrhGuestOperationState(guest, {
+        operation,
+        operationalTimestamp: operationTimestamp,
+        situationCode: recoverySituation.code,
+        syncedAt: recoverySituation.syncedAt
+      });
+    } catch (error) {
+      error.publicMessage =
+        "A operação foi confirmada na FNRH, mas não foi possível persistir o resultado local.";
+      error.code = "FNRH_GUEST_OPERATION_RECOVERY_PERSIST_FAILED";
+      error.stage = "persistencia_local";
+      return sendFnrhGuestOperationFailure(res, guest.id, stay.id, operation, error);
+    }
+
+    return res.json({
+      success: true,
+      recovered_after_uncertain_patch: true,
+      performed_by_system: true,
+      official_status_confirmed: true,
+      guest_id: guest.id,
+      [getFnrhOperationalTimestampField(operation)]: operationTimestamp,
+      response_status: patchResult?.status ?? patchError?.fnrhStatus ?? null
+    });
+  }
+
+  if (recoverySituation) {
+    try {
+      await persistFnrhGuestOperationState(guest, {
+        situationCode: recoverySituation.code,
+        syncedAt: recoverySituation.syncedAt
+      });
+    } catch (error) {
+      error.publicMessage = "Não foi possível persistir a situação oficial consultada.";
+      error.code = "FNRH_GUEST_OPERATION_RECOVERY_STATUS_PERSIST_FAILED";
+      error.stage = "persistencia_local";
+      return sendFnrhGuestOperationFailure(res, guest.id, stay.id, operation, error);
+    }
+  }
+
+  return res.status(502).json({
+    error: "Não foi possível confirmar o resultado na FNRH. Atualize a situação antes de tentar novamente.",
+    guest_id: guest.id
+  });
+}
+
+function registerFnrhGuestOperationRoute(path, operation) {
+  app.post(path, async (req, res) => {
+    const guestId = parsePositiveInteger(req.params.id);
+    if (!guestId) {
+      return res.status(400).json({ error: "id do hóspede deve ser um inteiro positivo" });
+    }
+
+    const key = String(guestId);
+    if (fnrhGuestOperationByGuestId.has(key)) {
+      return res.status(409).json({
+        error: "Já existe uma operação FNRH em andamento para este hóspede."
+      });
+    }
+
+    const operationToken = {};
+    fnrhGuestOperationByGuestId.set(key, operationToken);
+    try {
+      return await executeFnrhGuestOperation(guestId, operation, res);
+    } finally {
+      if (fnrhGuestOperationByGuestId.get(key) === operationToken) {
+        fnrhGuestOperationByGuestId.delete(key);
+      }
+    }
+  });
+}
+
+registerFnrhGuestOperationRoute("/guests/:id/fnrh-checkin", "checkin");
+registerFnrhGuestOperationRoute("/guests/:id/fnrh-checkout", "checkout");
+
+if (false) {
 app.post("/guests/:id/fnrh-checkin", (req, res) => {
   const guestId = req.params.id;
 
@@ -3596,6 +4092,7 @@ app.post("/guests/:id/fnrh-checkout", (req, res) => {
     }
   );
 });
+}
 
 app.delete("/guests/:id", (req, res) => {
   const guestId = req.params.id;
