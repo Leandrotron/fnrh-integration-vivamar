@@ -649,7 +649,7 @@ async function fetchFnrhReservationGuests(fnrhReservaId) {
   } catch (networkError) {
     const durationMs = Date.now() - startedAt;
     console.error("[FNRH][debug] reservation guests network error:", {
-      message: networkError.message,
+      type: networkError?.name || "Error",
       duration_ms: durationMs
     });
     networkError.fnrhStatus = null;
@@ -819,16 +819,22 @@ function normalizeFnrhOfficialCandidate(item) {
     birthDate: normalizeOptionalFnrhDate(pessoa.data_nascimento || item.data_nascimento),
     documentType,
     documentValue,
-    situation: String(hospede.situacao_hospede_id || item.situacao_hospede_id || "").trim()
+    situation: String(hospede.situacao_hospede_id || item.situacao_hospede_id || "").trim(),
+    situationLabel: String(hospede.situacao_hospede || item.situacao_hospede || "").trim() || null,
+    situationColor: String(hospede.situacao_cor || item.situacao_cor || "").trim() || null
   };
 }
 
-function getFnrhOfficialCandidateList(body) {
-  const items = Array.isArray(body?.dados)
+function getFnrhOfficialCandidateItems(body) {
+  return Array.isArray(body?.dados)
     ? body.dados
     : Array.isArray(body?.dados?.dados_hospedes)
       ? body.dados.dados_hospedes
-      : [];
+      : null;
+}
+
+function getFnrhOfficialCandidateList(body) {
+  const items = getFnrhOfficialCandidateItems(body) || [];
   return items.map(normalizeFnrhOfficialCandidate).filter(Boolean);
 }
 
@@ -859,6 +865,15 @@ function dbGetAsync(sql, params = []) {
     db.get(sql, params, (error, row) => {
       if (error) reject(error);
       else resolve(row || null);
+    });
+  });
+}
+
+function dbAllAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (error, rows) => {
+      if (error) reject(error);
+      else resolve(Array.isArray(rows) ? rows : []);
     });
   });
 }
@@ -1375,6 +1390,236 @@ app.get("/api/fnrh/debug/reserva/:id/hospedes", (req, res) => {
       }
     }
   );
+});
+
+function normalizeFnrhComparisonText(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function normalizeFnrhDocumentForComparison(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "");
+}
+
+function maskFnrhOfficialDocument(candidate) {
+  const documentType = String(candidate?.documentType || "").trim().toUpperCase();
+  const documentValue = String(candidate?.documentValue || "").trim();
+  if (!documentValue) return null;
+
+  if (documentType === "CPF") {
+    const cpf = getFnrhCandidateCpf(candidate);
+    return cpf ? `***.***.***-${cpf.slice(-2)}` : null;
+  }
+
+  const normalized = normalizeFnrhDocumentForComparison(documentValue);
+  if (normalized.length <= 2) return null;
+  const visibleLength = normalized.length >= 8 ? 4 : 2;
+  return `***${normalized.slice(-visibleLength)}`;
+}
+
+function getFnrhOfficialCandidateConflictKey(candidate) {
+  return JSON.stringify([
+    normalizeFnrhComparisonText(candidate?.fullName),
+    String(candidate?.documentType || "").trim().toUpperCase(),
+    normalizeFnrhDocumentForComparison(candidate?.documentValue),
+    String(candidate?.situation || "").trim().toUpperCase()
+  ]);
+}
+
+function normalizeUniqueFnrhOfficialCandidates(items) {
+  const candidatesById = new Map();
+  let invalidIdCount = 0;
+
+  for (const item of items) {
+    const candidate = normalizeFnrhOfficialCandidate(item);
+    if (!candidate || !isValidUuid(candidate.hospedeId)) {
+      invalidIdCount += 1;
+      continue;
+    }
+
+    const existing = candidatesById.get(candidate.hospedeId);
+    if (!existing) {
+      candidatesById.set(candidate.hospedeId, candidate);
+      continue;
+    }
+
+    if (
+      getFnrhOfficialCandidateConflictKey(existing) !==
+      getFnrhOfficialCandidateConflictKey(candidate)
+    ) {
+      return {
+        candidates: [],
+        invalidIdCount,
+        hasConflict: true
+      };
+    }
+  }
+
+  return {
+    candidates: Array.from(candidatesById.values()),
+    invalidIdCount,
+    hasConflict: false
+  };
+}
+
+app.get("/stays/:stayId/fnrh/hospedes-oficiais", async (req, res) => {
+  const stayId = parsePositiveInteger(req.params.stayId);
+  const operationalErrorMessage = "Não foi possível consultar os hóspedes oficiais da reserva.";
+
+  if (!stayId) {
+    return res.status(400).json({ error: "stayId deve ser um inteiro positivo" });
+  }
+
+  try {
+    const stay = await dbGetAsync(
+      `SELECT id, fnrh_reserva_id
+       FROM stays
+       WHERE id = ? AND property_id = ?`,
+      [stayId, PROPERTY_ID]
+    );
+    if (!stay) {
+      return res.status(404).json({ error: "Stay não encontrada" });
+    }
+
+    const fnrhReservaId = String(stay.fnrh_reserva_id || "").trim();
+    if (!fnrhReservaId) {
+      return res.status(409).json({
+        error: "Registre a reserva na FNRH antes de consultar os hóspedes oficiais."
+      });
+    }
+
+    const localGuests = await dbAllAsync(
+      `SELECT id, fnrh_hospede_id, is_main_guest, fnrh_checkin_at, fnrh_checkout_at
+       FROM guests
+       WHERE stay_id = ?`,
+      [stayId]
+    );
+    const validLocalGuests = localGuests.filter((guest) => {
+      return isValidUuid(normalizeFnrhUuid(guest.fnrh_hospede_id));
+    });
+    const localGuestsByFnrhId = new Map(
+      validLocalGuests.map((guest) => [normalizeFnrhUuid(guest.fnrh_hospede_id), guest])
+    );
+
+    let officialResult;
+    try {
+      officialResult = await fetchFnrhReservationGuests(fnrhReservaId);
+    } catch (error) {
+      console.error("[FNRH] operational reservation guests error:", {
+        stay_id: stayId,
+        etapa: "consulta_oficial",
+        status: error?.fnrhStatus ?? null,
+        code: "FNRH_RESERVATION_GUESTS_REQUEST_FAILED"
+      });
+      return res.status(502).json({ error: operationalErrorMessage });
+    }
+
+    if (!officialResult.ok) {
+      console.error("[FNRH] operational reservation guests error:", {
+        stay_id: stayId,
+        etapa: "resposta_oficial",
+        status: officialResult.status,
+        code: "FNRH_RESERVATION_GUESTS_HTTP_ERROR"
+      });
+      return res.status(502).json({ error: operationalErrorMessage });
+    }
+
+    const officialItems = getFnrhOfficialCandidateItems(officialResult.body);
+    if (!officialItems) {
+      console.error("[FNRH] operational reservation guests error:", {
+        stay_id: stayId,
+        etapa: "formato_resposta",
+        status: officialResult.status,
+        code: "FNRH_RESERVATION_GUESTS_INVALID_FORMAT"
+      });
+      return res.status(502).json({ error: operationalErrorMessage });
+    }
+
+    const normalized = normalizeUniqueFnrhOfficialCandidates(officialItems);
+    if (normalized.hasConflict) {
+      console.error("[FNRH] operational reservation guests error:", {
+        stay_id: stayId,
+        etapa: "deduplicacao",
+        status: officialResult.status,
+        code: "FNRH_RESERVATION_GUESTS_CONFLICT"
+      });
+      return res.status(502).json({ error: operationalErrorMessage });
+    }
+
+    const officialIds = new Set(normalized.candidates.map((candidate) => candidate.hospedeId));
+    const guests = normalized.candidates.map((candidate) => {
+      const localGuest = localGuestsByFnrhId.get(candidate.hospedeId) || null;
+      return {
+        fnrh_hospede_id: candidate.hospedeId,
+        full_name: candidate.fullName || null,
+        document_type: candidate.documentType || null,
+        document_masked: maskFnrhOfficialDocument(candidate),
+        situacao_hospede_id: candidate.situation || null,
+        situacao_hospede: candidate.situationLabel,
+        situacao_cor: candidate.situationColor,
+        is_local: !!localGuest,
+        local_guest_id: localGuest?.id ?? null,
+        local_is_main_guest: localGuest ? Number(localGuest.is_main_guest) === 1 : null,
+        local_checkin_at: String(localGuest?.fnrh_checkin_at || "").trim() || null,
+        local_checkout_at: String(localGuest?.fnrh_checkout_at || "").trim() || null
+      };
+    }).sort((left, right) => {
+      if (left.is_local !== right.is_local) return left.is_local ? 1 : -1;
+      return String(left.full_name || "").localeCompare(
+        String(right.full_name || ""),
+        "pt-BR",
+        { sensitivity: "base" }
+      );
+    });
+
+    const matchedTotal = guests.filter((guest) => guest.is_local).length;
+    const localOnlyTotal = Array.from(localGuestsByFnrhId.keys()).filter((id) => {
+      return !officialIds.has(id);
+    }).length;
+    const summary = {
+      official_total: guests.length,
+      local_total: validLocalGuests.length,
+      matched_total: matchedTotal,
+      missing_local_total: guests.length - matchedTotal,
+      local_only_total: localOnlyTotal
+    };
+
+    console.log("[FNRH] operational reservation guests response:", {
+      stay_id: stayId,
+      etapa: "concluido",
+      status: officialResult.status,
+      official_total: summary.official_total,
+      local_total: summary.local_total,
+      matched_total: summary.matched_total,
+      missing_local_total: summary.missing_local_total,
+      local_only_total: summary.local_only_total,
+      ignored_invalid_official_ids: normalized.invalidIdCount
+    });
+
+    return res.json({
+      success: true,
+      stay_id: stayId,
+      summary,
+      guests
+    });
+  } catch (error) {
+    console.error("[FNRH] operational reservation guests error:", {
+      stay_id: stayId,
+      etapa: "processamento_local",
+      status: null,
+      code: String(error?.code || "FNRH_RESERVATION_GUESTS_INTERNAL_ERROR")
+    });
+    return res.status(500).json({
+      error: "Erro interno ao consultar os hóspedes oficiais."
+    });
+  }
 });
 
 app.get("/checkins", (req, res) => {
