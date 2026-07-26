@@ -1622,6 +1622,293 @@ app.get("/stays/:stayId/fnrh/hospedes-oficiais", async (req, res) => {
   }
 });
 
+app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
+  const stayId = parsePositiveInteger(req.params.stayId);
+  const requestBody = req.body;
+  const allowedBodyFields = ["fnrh_hospede_id", "is_main_guest"];
+
+  if (!stayId) {
+    return res.status(400).json({ error: "stayId deve ser um inteiro positivo" });
+  }
+  if (!requestBody || typeof requestBody !== "object" || Array.isArray(requestBody)) {
+    return res.status(400).json({ error: "Corpo da requisição inválido" });
+  }
+  if (
+    Object.keys(requestBody).length !== allowedBodyFields.length ||
+    Object.keys(requestBody).some((field) => !allowedBodyFields.includes(field))
+  ) {
+    return res.status(400).json({
+      error: "O corpo aceita somente fnrh_hospede_id e is_main_guest"
+    });
+  }
+
+  const fnrhHospedeId = normalizeFnrhUuid(requestBody.fnrh_hospede_id);
+  const isMainGuest = requestBody.is_main_guest;
+  if (!isValidUuid(fnrhHospedeId)) {
+    return res.status(400).json({ error: "fnrh_hospede_id deve ser um UUID válido" });
+  }
+  if (typeof isMainGuest !== "boolean") {
+    return res.status(400).json({ error: "is_main_guest deve ser boolean" });
+  }
+
+  const sendAlreadyImported = (guest) => {
+    return res.status(200).json({
+      success: true,
+      already_imported: true,
+      official_status: null,
+      guest
+    });
+  };
+  const sendExistingFnrhConflict = (guest) => {
+    if (String(guest.stay_id) === String(stayId)) {
+      return sendAlreadyImported(guest);
+    }
+    return res.status(409).json({
+      error: "Este registro FNRH já está associado a outra hospedagem local."
+    });
+  };
+  const synchronizationMessage =
+    "A situação oficial deste hóspede precisa ser sincronizada antes da importação.";
+  const externalErrorMessage = "Não foi possível confirmar o hóspede na reserva oficial.";
+
+  try {
+    const stay = await dbGetAsync(
+      `SELECT id, fnrh_reserva_id
+       FROM stays
+       WHERE id = ? AND property_id = ?`,
+      [stayId, PROPERTY_ID]
+    );
+    if (!stay) {
+      return res.status(404).json({ error: "Stay não encontrada" });
+    }
+
+    const fnrhReservaId = String(stay.fnrh_reserva_id || "").trim();
+    if (!fnrhReservaId) {
+      return res.status(409).json({
+        error: "Registre a reserva na FNRH antes de importar hóspedes oficiais."
+      });
+    }
+
+    const existingByFnrhId = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
+    if (existingByFnrhId) {
+      return sendExistingFnrhConflict(existingByFnrhId);
+    }
+
+    let officialResult;
+    try {
+      officialResult = await fetchFnrhReservationGuests(fnrhReservaId);
+    } catch (error) {
+      console.error("[FNRH] linked guest import error:", {
+        stay_id: stayId,
+        etapa: "consulta_oficial",
+        status: error?.fnrhStatus ?? null,
+        code: "FNRH_LINKED_GUEST_REQUEST_FAILED"
+      });
+      return res.status(502).json({ error: externalErrorMessage });
+    }
+
+    if (!officialResult.ok) {
+      console.error("[FNRH] linked guest import error:", {
+        stay_id: stayId,
+        etapa: "resposta_oficial",
+        status: officialResult.status,
+        code: "FNRH_LINKED_GUEST_HTTP_ERROR"
+      });
+      return res.status(502).json({ error: externalErrorMessage });
+    }
+
+    const officialItems = getFnrhOfficialCandidateItems(officialResult.body);
+    if (!officialItems) {
+      console.error("[FNRH] linked guest import error:", {
+        stay_id: stayId,
+        etapa: "formato_resposta",
+        status: officialResult.status,
+        code: "FNRH_LINKED_GUEST_INVALID_FORMAT"
+      });
+      return res.status(502).json({ error: externalErrorMessage });
+    }
+
+    const officialMatches = officialItems
+      .map(normalizeFnrhOfficialCandidate)
+      .filter((candidate) => candidate?.hospedeId === fnrhHospedeId);
+    if (!officialMatches.length) {
+      return res.status(404).json({
+        error: "O hóspede não foi encontrado entre os hóspedes oficiais desta reserva."
+      });
+    }
+    if (officialMatches.length !== 1) {
+      console.error("[FNRH] linked guest import error:", {
+        stay_id: stayId,
+        etapa: "correspondencia_oficial",
+        status: officialResult.status,
+        code: "FNRH_LINKED_GUEST_AMBIGUOUS"
+      });
+      return res.status(502).json({ error: externalErrorMessage });
+    }
+
+    const confirmedCandidate = officialMatches[0];
+    if (
+      String(confirmedCandidate.situation || "").trim().toUpperCase() !==
+      "PRECHECKIN_REALIZADO"
+    ) {
+      return res.status(409).json({ error: synchronizationMessage });
+    }
+    if (!isFnrhCandidateOfficialDataValid(confirmedCandidate)) {
+      return res.status(422).json({
+        error: "Os dados oficiais do hóspede são insuficientes para criar o registro local."
+      });
+    }
+
+    const cpf = getFnrhCandidateCpf(confirmedCandidate);
+    const birthDate = normalizeOptionalFnrhDate(confirmedCandidate.birthDate);
+    const pessoaId = String(confirmedCandidate.pessoaId || "").trim() || null;
+
+    const currentByFnrhId = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
+    if (currentByFnrhId) {
+      return sendExistingFnrhConflict(currentByFnrhId);
+    }
+
+    if (isMainGuest) {
+      const existingMainGuest = await dbGetAsync(
+        `SELECT id FROM guests WHERE stay_id = ? AND is_main_guest = 1 LIMIT 1`,
+        [stayId]
+      );
+      if (existingMainGuest) {
+        const concurrentGuest = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
+        if (concurrentGuest) {
+          return sendExistingFnrhConflict(concurrentGuest);
+        }
+        return res.status(409).json({
+          error: "Esta hospedagem já possui um hóspede principal."
+        });
+      }
+    }
+
+    if (cpf) {
+      const existingCpfGuest = await dbGetAsync(
+        `SELECT id
+         FROM guests
+         WHERE stay_id = ? AND cpf = ?
+         LIMIT 1`,
+        [stayId, cpf]
+      );
+      if (existingCpfGuest) {
+        const concurrentGuest = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
+        if (concurrentGuest) {
+          return sendExistingFnrhConflict(concurrentGuest);
+        }
+        return res.status(409).json({
+          error: "Já existe um hóspede local com este CPF. Verifique o hóspede existente antes de importar."
+        });
+      }
+    }
+
+    let insertResult;
+    try {
+      insertResult = await dbRunAsync(
+        `INSERT INTO guests
+         (stay_id, full_name, cpf, birth_date, is_main_guest, fnrh_hospede_id,
+          fnrh_pessoa_id, fnrh_checkin_at, fnrh_checkout_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, NULL, NULL
+         WHERE (
+           ? = 0 OR NOT EXISTS (
+             SELECT 1 FROM guests WHERE stay_id = ? AND is_main_guest = 1
+           )
+         )
+         AND (
+           ? IS NULL OR NOT EXISTS (
+             SELECT 1 FROM guests WHERE stay_id = ? AND cpf = ?
+           )
+         )`,
+        [
+          stayId,
+          confirmedCandidate.fullName,
+          cpf,
+          birthDate,
+          isMainGuest ? 1 : 0,
+          fnrhHospedeId,
+          pessoaId,
+          isMainGuest ? 1 : 0,
+          stayId,
+          cpf,
+          stayId,
+          cpf
+        ]
+      );
+    } catch (insertError) {
+      if (isFnrhHospedeIdUniqueConstraintError(insertError)) {
+        const concurrentGuest = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
+        if (concurrentGuest) {
+          return sendExistingFnrhConflict(concurrentGuest);
+        }
+      }
+      throw insertError;
+    }
+
+    if (insertResult.changes !== 1) {
+      const concurrentGuest = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
+      if (concurrentGuest) {
+        return sendExistingFnrhConflict(concurrentGuest);
+      }
+      if (isMainGuest) {
+        const concurrentMainGuest = await dbGetAsync(
+          `SELECT id FROM guests WHERE stay_id = ? AND is_main_guest = 1 LIMIT 1`,
+          [stayId]
+        );
+        if (concurrentMainGuest) {
+          return res.status(409).json({
+            error: "Esta hospedagem já possui um hóspede principal."
+          });
+        }
+      }
+      if (cpf) {
+        const concurrentCpfGuest = await dbGetAsync(
+          `SELECT id FROM guests WHERE stay_id = ? AND cpf = ? LIMIT 1`,
+          [stayId, cpf]
+        );
+        if (concurrentCpfGuest) {
+          return res.status(409).json({
+            error: "Já existe um hóspede local com este CPF. Verifique o hóspede existente antes de importar."
+          });
+        }
+      }
+      return res.status(409).json({
+        error: "Os dados locais mudaram antes da importação. Atualize e tente novamente."
+      });
+    }
+
+    const importedGuest = await loadPropertyGuestById(insertResult.lastID);
+    if (!importedGuest) {
+      return res.status(500).json({
+        error: "Hóspede criado, mas não foi possível recarregar o registro local."
+      });
+    }
+
+    console.log("[FNRH] linked guest import response:", {
+      stay_id: stayId,
+      etapa: "concluido",
+      status: 201,
+      resultado: "created"
+    });
+    return res.status(201).json({
+      success: true,
+      already_imported: false,
+      official_status: confirmedCandidate.situation,
+      guest: importedGuest
+    });
+  } catch (error) {
+    console.error("[FNRH] linked guest import error:", {
+      stay_id: stayId,
+      etapa: "processamento_local",
+      status: null,
+      code: String(error?.code || "FNRH_LINKED_GUEST_INTERNAL_ERROR")
+    });
+    return res.status(500).json({
+      error: "Erro interno ao importar o hóspede oficial."
+    });
+  }
+});
+
 app.get("/checkins", (req, res) => {
   db.all(
     "SELECT * FROM checkins WHERE property_id = ? ORDER BY created_at DESC",
