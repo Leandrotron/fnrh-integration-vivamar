@@ -2481,9 +2481,9 @@ João Silva"></textarea>
         stayId,
         isLoading: true,
         error: "",
-        isStale: false,
-        feedback: "",
-        feedbackTone: ""
+        isStale: previous.isStale,
+        feedback: previous.isStale ? previous.feedback : "",
+        feedbackTone: previous.isStale ? previous.feedbackTone : ""
       };
       renderFnrhOfficialGuests();
 
@@ -2564,7 +2564,7 @@ João Silva"></textarea>
       }
 
       const requestId = Number(fnrhSituationSyncState.requestId || 0) + 1;
-      const shouldRefreshOfficialGuests =
+      const hadVisibleOfficialGuests =
         fnrhOfficialGuestsState.stayId === stayId &&
         Array.isArray(fnrhOfficialGuestsState.guests);
       fnrhSituationSyncState = {
@@ -2605,9 +2605,6 @@ João Silva"></textarea>
         ) {
           return false;
         }
-        if (shouldRefreshOfficialGuests) {
-          await loadFnrhOfficialGuests();
-        }
         if (
           fnrhSituationSyncState.requestId !== requestId ||
           fnrhSituationSyncState.stayId !== stayId ||
@@ -2616,6 +2613,12 @@ João Silva"></textarea>
           return false;
         }
 
+        if (hadVisibleOfficialGuests) {
+          fnrhOfficialGuestsState.isStale = true;
+          fnrhOfficialGuestsState.feedback =
+            "As situações locais foram sincronizadas. Atualize os hóspedes da FNRH para renovar esta lista oficial.";
+          fnrhOfficialGuestsState.feedbackTone = "warning";
+        }
         fnrhSituationSyncState.message = buildFnrhSituationSyncSummary(data);
         fnrhSituationSyncState.tone =
           (Number(data?.unknown_status_total) || 0) > 0 ? "warning" : "success";
