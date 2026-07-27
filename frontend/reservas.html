@@ -1270,7 +1270,6 @@ João Silva"></textarea>
     let stayGuestCountsById = {};
     let isSendingFnrh = false;
     let isCheckingFnrhReservationGuests = false;
-    let lastAutoFnrhGuestsStatusStayId = null;
     let checkingInGuestFnrhById = {};
     let checkingOutGuestFnrhById = {};
     let guestCepLookupPromise = null;
@@ -4346,7 +4345,6 @@ João Silva"></textarea>
       setStatus("guestFormStatus", "");
       setStatus("actionStatus", "");
       setStatus("fnrhGuestsStatusLine", "");
-      lastAutoFnrhGuestsStatusStayId = null;
       renderStayList();
       renderDetails();
     }
@@ -4371,7 +4369,6 @@ João Silva"></textarea>
           selectedGuests = [];
           isCreatingStay = false;
           setSelectedStayId(null);
-          lastAutoFnrhGuestsStatusStayId = null;
           setStatus("fnrhGuestsStatusLine", "");
           renderDetails();
           return;
@@ -4432,7 +4429,6 @@ João Silva"></textarea>
         setStatus("guestFormStatus", "");
         setStatus("fnrhGuestsStatusLine", "");
         showCopyLinkFeedback("");
-        maybeAutoCheckFnrhReservationGuestsStatus();
         return true;
       } catch (error) {
         if (requestId !== stayDetailsRequestId) {
@@ -4826,23 +4822,6 @@ João Silva"></textarea>
           setStatus("actionStatus", conflictMessage, "warning");
         }
       }
-    }
-
-    function maybeAutoCheckFnrhReservationGuestsStatus() {
-      const stayId = selectedStay?.id;
-      const hasFnrhReference = !!String(selectedStay?.fnrh_reserva_id || "").trim() || !!getOfficialFnrhPrecheckinLink(selectedStay);
-
-      if (!stayId || !hasFnrhReference) {
-        setStatus("fnrhGuestsStatusLine", "");
-        return;
-      }
-
-      if (String(lastAutoFnrhGuestsStatusStayId) === String(stayId)) {
-        return;
-      }
-
-      lastAutoFnrhGuestsStatusStayId = stayId;
-      checkFnrhReservationGuestsStatus();
     }
 
     async function checkFnrhReservationGuestsStatus() {
