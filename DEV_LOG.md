@@ -1,3 +1,51 @@
+## [2026-08-24] — Auditoria e Fase 1 da reorganização de `reservas.html`
+
+### Diagnóstico concluído
+
+- Criado `docs/RESERVAS_UX_AND_UNLINKED_FNRH_AUDIT.md` com o inventário completo da interface operacional.
+- Identificadas 30 intenções de ação: 7 principais, 14 contextuais, 8 excepcionais e 1 técnica/diagnóstica.
+- Documentados handlers, endpoints, escritas locais, chamadas FNRH, disponibilidade e finalidade operacional.
+- Mapeado o fluxo de fichas `PRECHECKIN_NAOVINCULADO`, incluindo consulta, comparação, vínculo, importação e persistência.
+- A viabilidade de localizar ficha avulsa por CPF ficou classificada como `AINDA NÃO SABEMOS — precisa de teste real controlado`.
+- Nenhum GET real foi executado durante a auditoria e nenhum dado pessoal foi registrado no relatório.
+
+### Fase 1 de UX implementada
+
+- `frontend/reservas.html` foi reorganizado visualmente em:
+  - Reserva;
+  - Pré-check-in FNRH;
+  - Hóspedes / Hospedagem;
+  - Resolver pendências;
+  - Mais opções.
+- WhatsApp e próximas ações operacionais mantiveram destaque.
+- Atualização de situações, diagnóstico manual e lista interna foram rebaixados para áreas recolhíveis.
+- Consulta de hóspedes oficiais, importação já existente e tratamento de fichas sem vínculo passaram a ter contexto visual de pendência.
+- O progresso `X/Y pré-check-ins realizados` recebeu tratamento visual próprio sem mudança de cálculo ou consulta.
+- Termos técnicos foram simplificados, preservando a diferença entre trazer um hóspede oficial ao painel e vincular uma ficha avulsa.
+
+### Compatibilidade preservada
+
+- Nenhum botão, ID, função, listener, endpoint ou chamada `fetch` foi removido.
+- Permanecem 83 IDs estáticos, 153 funções, 38 registros de listeners, 4 chamadas `fetch` e 35 elementos `<button>`.
+- Backend, SQLite, payloads e regras FNRH não foram alterados.
+- A lista oficial e a sincronização continuam disponíveis mesmo no caso-limite de reserva com `fnrh_reserva_id` e sem link oficial.
+
+### Validações
+
+- Estrutura HTML, JavaScript embutido e balanceamento de CSS aprovados.
+- `node --check backend/server.js` aprovado.
+- `node --check backend/database/db.js` aprovado.
+- `git diff --check` aprovado.
+- Nenhuma operação real de escrita ou leitura FNRH foi executada nesta fase.
+
+### Próximos passos
+
+- Revisar visualmente a organização com a recepção em dados reais.
+- Ajustar somente detalhes de hierarquia que surgirem no uso, sem alterar regras.
+- Executar o teste controlado do GET de fichas não vinculadas em tarefa separada antes de qualquer implementação de CPF/passaporte.
+
+---
+
 ## [2026-04-26] – Estabilização, UX e Operação
 
 ### UI / UX

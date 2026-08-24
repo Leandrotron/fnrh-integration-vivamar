@@ -9,6 +9,15 @@ Backend:
 - SQLite
 - Modelo: stays + guests
 
+Nota operacional 2026-08-24:
+- A interface principal continua em `frontend/reservas.html` e foi reorganizada sem alterar backend, banco, endpoints ou payloads FNRH.
+- Ações de consulta, atualização de situações, diagnóstico, importação e vínculo foram separadas visualmente conforme seus efeitos reais.
+- A consulta de hóspedes oficiais permanece uma leitura; atualizar situações persiste estados apenas no painel; diagnóstico permanece leitura técnica.
+- Importar hóspede oficial já pertencente à reserva é diferente de vincular uma ficha `PRECHECKIN_NAOVINCULADO`.
+- A hipótese de localizar ficha avulsa por CPF/passaporte ainda não foi implementada.
+- O código prevê `tipo_documento` e `numero_documento`, mas ainda falta uma resposta real controlada que prove CPF completo no GET de fichas não vinculadas.
+- O teste necessário está descrito em `docs/RESERVAS_UX_AND_UNLINKED_FNRH_AUDIT.md` e não deve ser executado incidentalmente.
+
 Nota tecnica 2026-04-24:
 - O endpoint individual de check-out real foi validado via `POST /guests/:id/fnrh-checkout`.
 - A FNRH aceitou `PATCH /hospedes/{hospede_id}/checkout` com body `text/plain` em timestamp ISO 8601.

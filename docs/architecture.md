@@ -9,6 +9,50 @@ Desenvolver um sistema de **pré-check-in digital** em que o hóspede:
 - permite envio para a FNRH via API;
 - reduz ou elimina o retrabalho manual na recepção.
 
+## Estado operacional em 24/08/2026
+
+O projeto evoluiu além da arquitetura inicial descrita nas seções históricas abaixo.
+
+### Componentes ativos
+
+- `frontend/reservas.html`: interface operacional principal da recepção.
+- `frontend/stays.html`: interface legada preservada.
+- `backend/server.js`: API Express e orquestração FNRH.
+- `backend/database/db.js`: inicialização e evolução incremental do SQLite.
+- `backend/database.sqlite`: banco operacional local, não versionado.
+
+### Modelo operacional
+
+- `stays` representa a hospedagem/reserva local.
+- `guests` representa os hóspedes locais associados a uma stay.
+- IDs e situações oficiais da FNRH são persistidos nas entidades locais quando os fluxos existentes confirmam a operação.
+- `checkins` permanece como estrutura legada; a direção atual é `stays + guests`.
+
+### Fluxo principal atual
+
+```text
+Reserva local
+  -> registro da hospedagem na FNRH
+  -> link/QR oficial de pré-check-in
+  -> preenchimento individual dos hóspedes
+  -> consulta e conciliação de hóspedes oficiais
+  -> check-in individual
+  -> checkout individual
+```
+
+### Organização da interface
+
+Após a Fase 1 de UX, a tela principal está organizada em Reserva, Pré-check-in FNRH, Hóspedes/Hospedagem, Resolver pendências e Mais opções. A reorganização preservou integralmente IDs, handlers, endpoints e regras de negócio.
+
+### Fichas não vinculadas
+
+- A leitura usa o endpoint interno `GET /fnrh/precheckins`, que encaminha para a consulta oficial de pré-check-ins.
+- Vínculo e importação continuam exigindo ação explícita e revalidação do backend.
+- A busca futura por CPF/passaporte não está implementada.
+- A disponibilidade de CPF completo em ficha `PRECHECKIN_NAOVINCULADO` ainda depende de teste real controlado.
+
+Referência detalhada: `docs/RESERVAS_UX_AND_UNLINKED_FNRH_AUDIT.md`.
+
 ---
 
 ## Vale a pena ter um repositório?

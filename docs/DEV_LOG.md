@@ -1,5 +1,56 @@
 # DEV_LOG
 
+## 2026-08-24 - Auditoria de UX e reorganização operacional da tela de reservas
+
+### Resumo da sessão
+
+- A interface principal `frontend/reservas.html` foi auditada antes de qualquer mudança visual.
+- O diagnóstico foi registrado em `docs/RESERVAS_UX_AND_UNLINKED_FNRH_AUDIT.md`.
+- A primeira fase de simplificação foi aplicada somente no frontend, sem mudança de contrato, persistência ou integração externa.
+
+### Estado da interface
+
+- A área de detalhes agora comunica uma sequência operacional:
+  - Reserva;
+  - Pré-check-in FNRH;
+  - Hóspedes / Hospedagem;
+  - Resolver pendências;
+  - Mais opções.
+- Ações frequentes permanecem visíveis e ações manuais/técnicas foram agrupadas em `<details>`.
+- Hóspedes oficiais ausentes no painel e fichas avulsas continuam usando os mesmos fluxos de importação e vínculo.
+- Check-in e checkout continuam sendo renderizados por hóspede conforme as mesmas regras de habilitação.
+
+### Decisões registradas
+
+- Não ocultar a lista oficial nem a sincronização no caso de existir `fnrh_reserva_id` sem link oficial.
+- Não transformar a consulta diagnóstica em ação principal.
+- Não unir semanticamente atualização, sincronização e diagnóstico, pois produzem efeitos diferentes.
+- Não implementar CPF/passaporte até que um GET real controlado prove quais dados o endpoint de pré-check-ins não vinculados retorna.
+- Não alterar os diagnósticos históricos: eles permanecem como evidência do momento em que foram produzidos.
+
+### Integridade técnica
+
+- Todos os 83 IDs estáticos anteriores foram preservados e continuam únicos.
+- Contagens preservadas: 153 funções, 38 listeners, 4 `fetch` e 35 botões no código-fonte.
+- Nenhuma linha de endpoint ou chamada `fetch` foi alterada.
+- Backend e banco permaneceram intactos.
+
+### Validações executadas
+
+- validação estrutural de tags HTML;
+- compilação sintática do JavaScript inline;
+- verificação de chaves CSS;
+- `node --check backend/server.js`;
+- `node --check backend/database/db.js`;
+- `git diff --check`.
+
+### Próximo passo recomendado
+
+- Fazer revisão visual na pousada com reservas em estados reais antes da próxima fase de simplificação.
+- Tratar CPF/passaporte somente em uma tarefa posterior ao teste controlado descrito no relatório de auditoria.
+
+---
+
 ## 2026-04-22 - Fechamento da nova interface `reservas.html`
 
 ### Resumo da sessao

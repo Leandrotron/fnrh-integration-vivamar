@@ -262,6 +262,103 @@
       margin-top: 10px;
     }
 
+    .operational-section {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .operational-section-heading {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .operational-section-heading h3,
+    .operational-section-heading h4 {
+      margin: 0 0 4px;
+      color: #2456c7;
+    }
+
+    .operational-section-kicker {
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .precheckin-progress {
+      margin-top: 12px;
+      min-height: 0;
+      padding: 12px 14px;
+      border: 1px solid #b7ccef;
+      border-radius: 12px;
+      background: #eef4ff;
+      color: #1e3a66;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .precheckin-progress:empty {
+      display: none;
+    }
+
+    .lodging-section {
+      margin-top: 18px;
+      border-color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .resolution-section {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid #ead7a7;
+      border-radius: 16px;
+      background: #fffcf4;
+    }
+
+    .resolution-section .operational-section-heading h4 {
+      color: #7a5200;
+    }
+
+    .advanced-options {
+      margin-top: 18px;
+      padding: 0 16px 16px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 14px;
+      background: #f8fafc;
+    }
+
+    .advanced-options > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 0;
+      color: #334155;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .advanced-options-body {
+      display: grid;
+      gap: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .technical-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
     .status-line {
       min-height: 18px;
       font-size: 14px;
@@ -665,6 +762,15 @@
       background: #f8fbff;
     }
 
+    .fnrh-official-guests.resolution-section {
+      border-color: #ead7a7;
+      background: #fffcf4;
+    }
+
+    .fnrh-official-guests.resolution-section .fnrh-official-guests-header h4 {
+      color: #7a5200;
+    }
+
     .fnrh-official-guests-header,
     .fnrh-official-guests-summary {
       display: flex;
@@ -777,6 +883,11 @@
       flex-wrap: wrap;
       justify-content: flex-end;
       gap: 8px;
+    }
+
+    .fnrh-guest-actions button:not(:disabled) {
+      background: var(--accent);
+      font-weight: bold;
     }
 
     .fnrh-precheckin-search {
@@ -916,6 +1027,7 @@
       }
 
       .flow-header,
+      .operational-section-heading,
       .before-actions,
       .after-grid,
       .after-checkin-row {
@@ -967,6 +1079,10 @@
       .fnrh-precheckin-link-actions button {
         width: 100%;
       }
+
+      .technical-actions button {
+        flex: 1 1 180px;
+      }
     }
   </style>
 </head>
@@ -974,7 +1090,7 @@
   <div class="page">
     <div class="page-header">
       <h1>Reservas</h1>
-      <div class="subtitle">Fluxo direto de reserva para geração rápida do link FNRH.</div>
+      <div class="subtitle">Gerencie reserva, pré-check-in e hospedagem em uma sequência clara.</div>
     </div>
 
     <div class="layout">
@@ -983,7 +1099,7 @@
           <h2>Reservas</h2>
           <div class="button-row" style="margin-bottom:12px;">
             <button id="newStayBtn" type="button">Nova reserva</button>
-            <button id="reloadListBtn" type="button" class="secondary">Atualizar lista</button>
+            <button id="reloadListBtn" type="button" class="secondary">Recarregar reservas</button>
           </div>
           <div class="field">
             <label for="staySearchInput">Buscar reserva</label>
@@ -1020,11 +1136,11 @@
           <div id="beforeFnrhSection" class="flow-box before">
             <div class="flow-header">
               <div class="flow-title">
-                <div class="flow-kicker">Fluxo principal</div>
-                <h2>ANTES DA FNRH</h2>
-                <div class="muted">Criação e edição da reserva antes do envio.</div>
+                <div class="flow-kicker">1. Dados básicos</div>
+                <h2>RESERVA</h2>
+                <div class="muted">Identificação, período, quantidade de hóspedes e contato.</div>
               </div>
-              <div class="flow-note">Salve a reserva e envie para a FNRH sem depender de hóspede cadastrado.</div>
+              <div class="flow-note">Confira os dados, salve a reserva e avance para o pré-check-in.</div>
             </div>
             <div class="form-grid">
               <div class="field">
@@ -1075,16 +1191,16 @@
                 <div id="createStatus" class="status-line" style="margin-top:10px;"></div>
               </div>
               <div class="send-box">
-                <button id="sendFnrhBtn" type="button">Enviar para FNRH</button>
+                <button id="sendFnrhBtn" type="button">Criar pré-check-in na FNRH</button>
                 <div id="actionStatus" class="status-line"></div>
-                <div class="muted">Gera o link oficial para o hóspede preencher no portal da FNRH.</div>
+                <div class="muted">Cria o pré-check-in oficial e gera o link para o hóspede.</div>
               </div>
             </div>
           </div>
 
           <details id="guestOptionalDetails" class="guest-optional-box">
             <summary>
-              <span>Dados do hóspede para check-in/check-out (opcional)</span>
+              <span>Cadastrar ou editar hóspede</span>
             </summary>
             <div class="guest-optional-body">
               <div id="guestLinkedSummary" class="guest-inline-summary">Nenhum hóspede vinculado.</div>
@@ -1118,36 +1234,44 @@
             </div>
           </details>
 
-          <section id="fnrhOfficialGuestsSection" class="fnrh-official-guests" hidden>
+          <section id="fnrhOfficialGuestsSection" class="fnrh-official-guests resolution-section" hidden>
             <div class="fnrh-official-guests-header">
               <div>
-                <h4>Hóspedes oficiais da reserva</h4>
-                <div class="muted">Consulta manual dos hóspedes já vinculados oficialmente.</div>
+                <div class="operational-section-kicker">Resolver pendências</div>
+                <h4>Hóspedes oficiais e pendências</h4>
+                <div class="muted">Veja quem já pertence à reserva na FNRH e quem ainda precisa entrar no painel.</div>
               </div>
               <div class="fnrh-official-guests-actions">
-                <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Atualizar hóspedes da FNRH</button>
-                <button id="syncFnrhGuestSituationsBtn" type="button">Sincronizar situações no painel</button>
+                <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Ver hóspedes da FNRH</button>
               </div>
             </div>
             <div class="fnrh-official-actions-help">
-              Atualizar hóspedes da FNRH consulta a lista oficial.<br>
-              Sincronizar situações no painel salva o estado oficial nos hóspedes locais.
+              Esta consulta somente lê a lista oficial. Trazer um hóspede ao painel exige uma confirmação separada.
             </div>
             <div id="fnrhOfficialGuestsSummary" class="fnrh-official-guests-summary"></div>
             <div id="fnrhOfficialGuestsUpdatedAt" class="muted"></div>
-            <div id="fnrhSituationSyncStatus" class="status-line" aria-live="polite"></div>
             <div id="fnrhOfficialGuestsStatus" class="status-line" aria-live="polite"></div>
             <div id="fnrhOfficialGuestsList" class="fnrh-official-guests-list"></div>
+            <details class="advanced-options">
+              <summary>Mais opções desta consulta</summary>
+              <div class="advanced-options-body">
+                <div class="technical-actions">
+                  <button id="syncFnrhGuestSituationsBtn" type="button" class="secondary">Atualizar situações no painel</button>
+                </div>
+                <div id="fnrhSituationSyncStatus" class="status-line" aria-live="polite"></div>
+                <div class="muted">Esta ação grava no painel os estados lidos na FNRH.</div>
+              </div>
+            </details>
           </section>
 
           <div id="afterFnrhSection" class="flow-box after" style="display:none;">
             <div class="flow-header">
               <div class="flow-title">
-                <div class="flow-kicker">Após o envio</div>
-                <h3>DEPOIS DA FNRH</h3>
-                <div class="muted">Link oficial, QR Code e operações após o envio.</div>
+                <div class="flow-kicker">2. Preenchimento oficial</div>
+                <h3>PRÉ-CHECK-IN FNRH</h3>
+                <div class="muted">Acompanhe o preenchimento e compartilhe o acesso oficial.</div>
               </div>
-              <div class="flow-note">Esse bloco aparece quando a FNRH retorna o link oficial de pré-check-in.</div>
+              <div class="flow-note">O progresso indica rapidamente quantos hóspedes já concluíram o pré-check-in.</div>
             </div>
 
             <div class="after-grid">
@@ -1157,15 +1281,14 @@
                   <div id="fnrhLinkBox" class="link-box">Link oficial da FNRH ainda não gerado.</div>
                 </div>
                 <div class="button-row" style="margin-top:12px;">
+                  <button id="copyWhatsappMessageBtn" type="button">WhatsApp</button>
                   <button id="copyFnrhLinkBtn" type="button" class="secondary">Copiar link</button>
                   <button id="openFnrhLinkBtn" type="button" class="secondary">Abrir link</button>
-                  <button id="copyWhatsappMessageBtn" type="button" class="secondary">WhatsApp</button>
                   <button id="showQrBtn" type="button" class="secondary">QR Code</button>
-                  <button id="checkFnrhGuestsStatusBtn" type="button" class="secondary">Consultar status FNRH</button>
                   <span id="copyLinkFeedback" class="copy-feedback" aria-live="polite"></span>
                 </div>
                 <div id="fnrhStatusLine" class="status-line" style="margin-top:12px;">Nenhum envio realizado ainda.</div>
-                <div id="fnrhGuestsStatusLine" class="status-line" style="margin-top:8px;"></div>
+                <div id="fnrhGuestsStatusLine" class="status-line precheckin-progress"></div>
               </div>
 
               <div class="after-status">
@@ -1180,67 +1303,100 @@
               </div>
             </div>
 
-            <div class="after-checkin-row">
-              <div class="fnrh-guests-section">
-                <div class="fnrh-guests-header">
-                  <div class="after-checkin-copy">
-                    <h4>Hóspedes na FNRH</h4>
-                    <p>Check-in e check-out são realizados individualmente por hóspede.</p>
-                  </div>
-                  <button id="openGuestDetailsBtn" type="button" class="text-button" style="display:none;">Abrir dados do hóspede</button>
-                </div>
-                <div id="fnrhGuestOperationsList" class="fnrh-guests-list"></div>
-                <div id="guestStatus" class="status-line"></div>
-                <div class="fnrh-precheckin-search">
-                  <section id="fnrhReceptionSessionBox" class="fnrh-reception-session" hidden>
-                    <h5>Atendimento sem Gov.br</h5>
-                    <div id="fnrhReceptionSessionSummary" class="muted"></div>
-                    <div class="fnrh-reception-actions">
-                      <button id="startFnrhReceptionSessionBtn" type="button">Iniciar atendimento sem Gov.br</button>
-                      <button id="searchFnrhReceptionNewBtn" type="button" class="secondary" hidden>Buscar novos preenchimentos</button>
-                      <button id="endFnrhReceptionSessionBtn" type="button" class="danger" hidden>Encerrar atendimento</button>
-                    </div>
-                    <div id="fnrhReceptionSessionStatus" class="status-line" aria-live="polite"></div>
-                    <div id="fnrhReceptionResults" class="fnrh-reception-results"></div>
-                  </section>
-                  <h5>Pré-check-ins sem vínculo</h5>
-                  <div class="muted">Consulte candidatos da FNRH para conferência, sem realizar vínculo.</div>
-                  <form id="fnrhPrecheckinSearchForm" class="fnrh-precheckin-period">
-                    <div class="field">
-                      <label for="fnrhPrecheckinStartDate">Data inicial</label>
-                      <input id="fnrhPrecheckinStartDate" type="date" required>
-                    </div>
-                    <div class="field">
-                      <label for="fnrhPrecheckinEndDate">Data final</label>
-                      <input id="fnrhPrecheckinEndDate" type="date" required>
-                    </div>
-                    <button id="searchFnrhPrecheckinsBtn" type="submit">Buscar pré-check-ins</button>
-                  </form>
-                  <div id="fnrhPrecheckinSearchStatus" class="status-line" aria-live="polite"></div>
-                  <div id="fnrhPrecheckinLinkStatus" class="status-line" aria-live="polite"></div>
-                  <div id="fnrhPrecheckinResults" class="fnrh-precheckin-results"></div>
+            <section class="operational-section lodging-section">
+              <div class="operational-section-heading">
+                <div>
+                  <div class="operational-section-kicker">3. Operação da hospedagem</div>
+                  <h4>HÓSPEDES / HOSPEDAGEM</h4>
+                  <div class="muted">Veja cada pessoa e execute somente a próxima ação disponível.</div>
                 </div>
               </div>
-            </div>
+              <div class="after-checkin-row">
+                <div class="fnrh-guests-section">
+                  <div class="fnrh-guests-header">
+                    <div class="after-checkin-copy">
+                      <h4>Hóspedes conhecidos</h4>
+                      <p>Check-in e check-out são realizados individualmente por hóspede.</p>
+                    </div>
+                    <button id="openGuestDetailsBtn" type="button" class="text-button" style="display:none;">Abrir dados do hóspede</button>
+                  </div>
+                  <div id="fnrhGuestOperationsList" class="fnrh-guests-list"></div>
+                  <div id="guestStatus" class="status-line"></div>
+                </div>
+              </div>
+            </section>
 
-            <details id="internalGuestChecklist" class="guest-optional-box" style="margin-top:16px;">
-              <summary>
-                <span>Lista interna de hóspedes</span>
-              </summary>
-              <div class="guest-optional-body">
-                <div class="muted">Marque quem já preencheu a FNRH.</div>
-                <div id="internalGuestChecklistCount" class="guest-inline-summary">0/0 preenchidos</div>
-                <div class="field">
-                  <label for="internalGuestChecklistInput">Nomes da lista</label>
-                  <textarea id="internalGuestChecklistInput" placeholder="Digite um nome por linha. Ex:
+            <section class="resolution-section">
+              <div class="operational-section-heading">
+                <div>
+                  <div class="operational-section-kicker">4. Situações que exigem conferência</div>
+                  <h4>RESOLVER PENDÊNCIAS</h4>
+                  <div class="muted">Traga hóspedes oficiais ao painel ou trate fichas ainda sem vínculo.</div>
+                </div>
+              </div>
+
+              <div class="fnrh-precheckin-search">
+                <section id="fnrhReceptionSessionBox" class="fnrh-reception-session" hidden>
+                  <h5>Acompanhamento de ficha avulsa</h5>
+                  <div id="fnrhReceptionSessionSummary" class="muted"></div>
+                  <div class="fnrh-reception-actions">
+                    <button id="startFnrhReceptionSessionBtn" type="button">Iniciar atendimento sem Gov.br</button>
+                    <button id="searchFnrhReceptionNewBtn" type="button" class="secondary" hidden>Buscar novos preenchimentos</button>
+                    <button id="endFnrhReceptionSessionBtn" type="button" class="danger" hidden>Encerrar atendimento</button>
+                  </div>
+                  <div id="fnrhReceptionSessionStatus" class="status-line" aria-live="polite"></div>
+                  <div id="fnrhReceptionResults" class="fnrh-reception-results"></div>
+                </section>
+                <h5>Fichas ainda não vinculadas</h5>
+                <div class="muted">Consulte candidatos da FNRH para conferência. Nenhum vínculo acontece sem uma ação explícita.</div>
+                <form id="fnrhPrecheckinSearchForm" class="fnrh-precheckin-period">
+                  <div class="field">
+                    <label for="fnrhPrecheckinStartDate">Data inicial</label>
+                    <input id="fnrhPrecheckinStartDate" type="date" required>
+                  </div>
+                  <div class="field">
+                    <label for="fnrhPrecheckinEndDate">Data final</label>
+                    <input id="fnrhPrecheckinEndDate" type="date" required>
+                  </div>
+                  <button id="searchFnrhPrecheckinsBtn" type="submit">Buscar fichas</button>
+                </form>
+                <div id="fnrhPrecheckinSearchStatus" class="status-line" aria-live="polite"></div>
+                <div id="fnrhPrecheckinLinkStatus" class="status-line" aria-live="polite"></div>
+                <div id="fnrhPrecheckinResults" class="fnrh-precheckin-results"></div>
+              </div>
+            </section>
+
+            <details class="advanced-options">
+              <summary>Mais opções</summary>
+              <div class="advanced-options-body">
+                <div>
+                  <div class="operational-section-kicker">Atualização manual e diagnóstico</div>
+                  <div class="technical-actions">
+                    <button id="checkFnrhGuestsStatusBtn" type="button" class="secondary">Ver diagnóstico da FNRH</button>
+                  </div>
+                  <div class="muted" style="margin-top:8px;">O diagnóstico apenas consulta o estado oficial agora.</div>
+                </div>
+
+                <details id="internalGuestChecklist" class="guest-optional-box">
+                  <summary>
+                    <span>Lista interna de hóspedes</span>
+                  </summary>
+                  <div class="guest-optional-body">
+                    <div class="muted">Marque quem já preencheu a FNRH.</div>
+                    <div id="internalGuestChecklistCount" class="guest-inline-summary">0/0 preenchidos</div>
+                    <div class="field">
+                      <label for="internalGuestChecklistInput">Nomes da lista</label>
+                      <textarea id="internalGuestChecklistInput" placeholder="Digite um nome por linha. Ex:
 Pax 1
 Pax 2
 João Silva"></textarea>
-                </div>
-                <div class="button-row">
-                  <button id="saveInternalGuestChecklistBtn" type="button" class="secondary">Salvar lista</button>
-                </div>
-                <div id="internalGuestChecklistItems" class="stack"></div>
+                    </div>
+                    <div class="button-row">
+                      <button id="saveInternalGuestChecklistBtn" type="button" class="secondary">Salvar lista</button>
+                    </div>
+                    <div id="internalGuestChecklistItems" class="stack"></div>
+                  </div>
+                </details>
               </div>
             </details>
           </div>
@@ -1825,7 +1981,7 @@ João Silva"></textarea>
                   data-open-manual-import-candidate-index="${candidateIndex}"
                   ${isImporting ? "disabled" : ""}
                 >
-                  Adicionar manualmente a esta reserva
+                  Confirmar pessoa e vincular ficha
                 </button>
               </div>
             `}
@@ -1907,7 +2063,7 @@ João Silva"></textarea>
           ? `
             <div class="fnrh-precheckin-link-actions">
               <button type="button" class="secondary" data-link-fnrh-guest-id="${escapeHtml(guestKey)}" ${isLinking ? "disabled" : ""}>
-                ${isLinking ? "Vinculando..." : "Vincular à reserva"}
+                ${isLinking ? "Vinculando..." : "Vincular ficha à reserva"}
               </button>
             </div>
           `
@@ -1973,7 +2129,7 @@ João Silva"></textarea>
       const button = document.getElementById("searchFnrhPrecheckinsBtn");
       if (!button) return;
       button.disabled = isSearchingFnrhPrecheckins || !selectedStay?.id;
-      button.textContent = isSearchingFnrhPrecheckins ? "Buscando..." : "Buscar pré-check-ins";
+      button.textContent = isSearchingFnrhPrecheckins ? "Buscando..." : "Buscar fichas";
     }
 
     function clearFnrhPrecheckinResults(clearStatus = true) {
@@ -2326,11 +2482,11 @@ João Silva"></textarea>
         isSyncing;
       button.textContent = stateMatchesStay && fnrhOfficialGuestsState.isLoading
         ? "Atualizando hóspedes da FNRH..."
-        : "Atualizar hóspedes da FNRH";
+        : "Ver hóspedes da FNRH";
       syncButton.disabled = !hasOfficialReservation || isSyncing;
       syncButton.textContent = isSyncing
         ? "Sincronizando situações..."
-        : "Sincronizar situações no painel";
+        : "Atualizar situações no painel";
       summary.innerHTML = "";
       updatedAt.textContent = "";
       syncStatus.textContent = "";
@@ -2428,7 +2584,7 @@ João Silva"></textarea>
             </div>
             ${hasMainGuest ? `<div class="fnrh-precheckin-warning">A hospedagem já possui hóspede principal.</div>` : ""}` : `
             <div class="fnrh-official-guest-actions">
-              <button type="button" data-open-official-import-index="${index}" ${isImporting ? "disabled" : ""}>Adicionar ao painel</button>
+              <button type="button" data-open-official-import-index="${index}" ${isImporting ? "disabled" : ""}>Trazer hóspede para o painel</button>
             </div>`;
         } else {
           controls = `<div class="fnrh-precheckin-warning">A situação oficial precisa ser sincronizada antes da importação.</div>`;
@@ -3034,7 +3190,7 @@ João Silva"></textarea>
           ? `
             <div class="fnrh-precheckin-link-actions">
               <button type="button" class="secondary" data-link-fnrh-guest-id="${escapeHtml(guestKey)}" ${isLinking ? "disabled" : ""}>
-                ${isLinking ? "Vinculando..." : "Vincular à reserva"}
+                ${isLinking ? "Vinculando..." : "Vincular ficha à reserva"}
               </button>
             </div>
           `
@@ -4268,10 +4424,10 @@ João Silva"></textarea>
       const fnrhStatus = getFnrhStatusMeta(selectedStay);
       sendButton.disabled = !hasStay || isSendingFnrh || hasFnrhReservaId;
       sendButton.textContent = isSendingFnrh
-        ? "Enviando..."
+        ? "Criando pré-check-in..."
         : hasFnrhReservaId
           ? "Reserva já registrada na FNRH"
-          : "Enviar para FNRH";
+          : "Criar pré-check-in na FNRH";
       document.getElementById("copyFnrhLinkBtn").disabled = !officialLink;
       whatsappButton.disabled = !officialLink;
       whatsappButton.textContent = hasReservationWhatsapp ? "Enviar WhatsApp" : "Copiar mensagem WhatsApp";
@@ -4279,7 +4435,7 @@ João Silva"></textarea>
       document.getElementById("showQrBtn").disabled = !officialLink;
       const checkFnrhGuestsStatusButton = document.getElementById("checkFnrhGuestsStatusBtn");
       checkFnrhGuestsStatusButton.disabled = !hasFnrhReference || isCheckingFnrhReservationGuests;
-      checkFnrhGuestsStatusButton.textContent = isCheckingFnrhReservationGuests ? "Consultando..." : "Consultar status FNRH";
+      checkFnrhGuestsStatusButton.textContent = isCheckingFnrhReservationGuests ? "Consultando..." : "Ver diagnóstico da FNRH";
       const linkBox = document.getElementById("fnrhLinkBox");
       linkBox.textContent = officialLink || "Link oficial da FNRH ainda não gerado.";
       linkBox.classList.toggle("available", !!officialLink);
