@@ -1977,11 +1977,10 @@ João Silva"></textarea>
               <div class="fnrh-precheckin-link-actions">
                 <button
                   type="button"
-                  class="secondary"
                   data-open-manual-import-candidate-index="${candidateIndex}"
                   ${isImporting ? "disabled" : ""}
                 >
-                  Confirmar pessoa e vincular ficha
+                  Vincular ficha à reserva
                 </button>
               </div>
             `}
@@ -2415,7 +2414,8 @@ João Silva"></textarea>
       const fnrhHospedeId = normalizeFnrhHospedeId(candidate?.fnrh_hospede_id);
       if (!candidate || !isValidFnrhHospedeUuid(fnrhHospedeId)) return null;
       if (candidate.is_local === true) return null;
-      if (String(candidate.situacao_hospede_id || "").trim().toUpperCase() !== "PRECHECKIN_REALIZADO") {
+      const officialSituation = String(candidate.situacao_hospede_id || "").trim().toUpperCase();
+      if (!["PRECHECKIN_REALIZADO", "CHECKIN_REALIZADO"].includes(officialSituation)) {
         return null;
       }
       if (selectedGuests.some((guest) => {
@@ -2587,7 +2587,7 @@ João Silva"></textarea>
               <button type="button" data-open-official-import-index="${index}" ${isImporting ? "disabled" : ""}>Trazer hóspede para o painel</button>
             </div>`;
         } else {
-          controls = `<div class="fnrh-precheckin-warning">A situação oficial precisa ser sincronizada antes da importação.</div>`;
+          controls = `<div class="fnrh-precheckin-warning">Este hóspede ainda não pode ser trazido para o painel.</div>`;
         }
         return `
           <article class="fnrh-official-guest-card">
@@ -3028,9 +3028,8 @@ João Silva"></textarea>
       ).trim();
       const confirmationMessage = eligibility.source === "manual"
         ? [
-            "Esta é uma recuperação manual de pré-check-in antigo.",
-            `Adicionar “${candidateName}” à stay ${stayLabel} como ${roleLabel}?`,
-            "O vínculo será solicitado à FNRH.",
+            `Vincular a ficha de “${candidateName}” à reserva ${stayLabel} e adicionar ao painel como ${roleLabel}?`,
+            "O vínculo será solicitado à FNRH manualmente por decisão da recepção.",
             "Confirme somente após conferir pessoalmente que a pessoa pertence a esta reserva."
           ].join("\n\n")
         : [

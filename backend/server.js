@@ -1981,8 +1981,8 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
       error: "Este registro FNRH já está associado a outra hospedagem local."
     });
   };
-  const synchronizationMessage =
-    "A situação oficial deste hóspede precisa ser sincronizada antes da importação.";
+  const ineligibleSituationMessage =
+    "A situação oficial deste hóspede não permite importação para o painel.";
   const externalErrorMessage = "Não foi possível confirmar o hóspede na reserva oficial.";
 
   try {
@@ -2061,11 +2061,9 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
     }
 
     const confirmedCandidate = officialMatches[0];
-    if (
-      String(confirmedCandidate.situation || "").trim().toUpperCase() !==
-      "PRECHECKIN_REALIZADO"
-    ) {
-      return res.status(409).json({ error: synchronizationMessage });
+    const officialSituation = String(confirmedCandidate.situation || "").trim().toUpperCase();
+    if (!["PRECHECKIN_REALIZADO", "CHECKIN_REALIZADO"].includes(officialSituation)) {
+      return res.status(409).json({ error: ineligibleSituationMessage });
     }
     if (!isFnrhCandidateOfficialDataValid(confirmedCandidate)) {
       return res.status(422).json({
@@ -2076,6 +2074,7 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
     const cpf = getFnrhCandidateCpf(confirmedCandidate);
     const birthDate = normalizeOptionalFnrhDate(confirmedCandidate.birthDate);
     const pessoaId = String(confirmedCandidate.pessoaId || "").trim() || null;
+    const situationSyncedAt = new Date().toISOString();
 
     const currentByFnrhId = await findLocalGuestByFnrhHospedeId(fnrhHospedeId);
     if (currentByFnrhId) {
@@ -2122,8 +2121,9 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
       insertResult = await dbRunAsync(
         `INSERT INTO guests
          (stay_id, full_name, cpf, birth_date, is_main_guest, fnrh_hospede_id,
-          fnrh_pessoa_id, fnrh_checkin_at, fnrh_checkout_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, NULL, NULL
+          fnrh_pessoa_id, fnrh_checkin_at, fnrh_checkout_at,
+          fnrh_situacao_hospede_id, fnrh_situacao_synced_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?
          WHERE (
            ? = 0 OR NOT EXISTS (
              SELECT 1 FROM guests WHERE stay_id = ? AND is_main_guest = 1
@@ -2142,6 +2142,8 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
           isMainGuest ? 1 : 0,
           fnrhHospedeId,
           pessoaId,
+          officialSituation,
+          situationSyncedAt,
           isMainGuest ? 1 : 0,
           stayId,
           cpf,
@@ -2202,12 +2204,13 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
       stay_id: stayId,
       etapa: "concluido",
       status: 201,
-      resultado: "created"
+      resultado: "created",
+      situacao: officialSituation
     });
     return res.status(201).json({
       success: true,
       already_imported: false,
-      official_status: confirmedCandidate.situation,
+      official_status: officialSituation,
       guest: importedGuest
     });
   } catch (error) {

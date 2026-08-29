@@ -1,3 +1,14 @@
+## [2026-08-29] — Fluxos externos FNRH e TLS local validados
+
+- Importação de hóspede em `CHECKIN_REALIZADO` validada em caso real: check-in feito no site FNRH → consulta pelo painel → importação preservando a situação oficial → checkout disponível.
+- Fichas `PRECHECKIN_NAOVINCULADO` foram localizadas e vinculadas manualmente, sem correspondência automática.
+- Fluxo sem Gov.br validado em atendimento real; hóspede estrangeiro não exigiu CPF.
+- Causa TLS local identificada como HTTPS scanning do Avast; `scripts/start-local.bat` passou a iniciar o backend com `node --use-system-ca server.js`.
+- Backend iniciado normalmente e `GET /fnrh/precheckins` retornou HTTP 200, sem `UNABLE_TO_VERIFY_LEAF_SIGNATURE` e sem desativar a validação TLS.
+- A interface permanece funcional, mas ainda precisa de uma etapa futura de simplificação de UX.
+
+---
+
 ## [2026-08-24] — Auditoria e Fase 1 da reorganização de `reservas.html`
 
 ### Diagnóstico concluído
