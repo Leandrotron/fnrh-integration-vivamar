@@ -1017,6 +1017,64 @@
       height: auto;
     }
 
+    .fnrh-operation-time-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .fnrh-operation-time-modal[hidden] {
+      display: none;
+    }
+
+    .fnrh-operation-time-card {
+      width: min(100%, 420px);
+      padding: 20px;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+    }
+
+    .fnrh-operation-time-card h3 {
+      margin: 0 0 8px;
+      color: #2456c7;
+    }
+
+    .fnrh-operation-time-options {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .fnrh-operation-time-option {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-weight: 600;
+    }
+
+    .fnrh-operation-time-field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .fnrh-operation-time-field[hidden] {
+      display: none;
+    }
+
+    .fnrh-operation-time-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
     @media (max-width: 960px) {
       .layout {
         grid-template-columns: 1fr;
@@ -1428,6 +1486,7 @@ João Silva"></textarea>
     let isCheckingFnrhReservationGuests = false;
     let checkingInGuestFnrhById = {};
     let checkingOutGuestFnrhById = {};
+    let fnrhOperationTimeDialogContext = null;
     let guestCepLookupPromise = null;
     let guestCepResolvedCityId = "";
     let guestCepResolvedStateId = "";
@@ -4403,10 +4462,14 @@ João Silva"></textarea>
       }).join("");
 
       container.querySelectorAll("[data-fnrh-checkin-id]").forEach((button) => {
-        button.addEventListener("click", () => checkInGuestFnrh(button.dataset.fnrhCheckinId));
+        button.addEventListener("click", () => {
+          openFnrhOperationTimeDialog(button.dataset.fnrhCheckinId, "checkin");
+        });
       });
       container.querySelectorAll("[data-fnrh-checkout-id]").forEach((button) => {
-        button.addEventListener("click", () => checkOutGuestFnrh(button.dataset.fnrhCheckoutId));
+        button.addEventListener("click", () => {
+          openFnrhOperationTimeDialog(button.dataset.fnrhCheckoutId, "checkout");
+        });
       });
 
       renderAfterStatusList();
@@ -4796,7 +4859,97 @@ João Silva"></textarea>
         selectedGuests.some((guest) => String(guest?.id) === String(guestId));
     }
 
-    async function checkInGuestFnrh(guestId) {
+    function getCurrentDateTimeLocalValue() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      const hour = String(now.getHours()).padStart(2, "0");
+      const minute = String(now.getMinutes()).padStart(2, "0");
+      return `${year}-${month}-${day}T${hour}:${minute}`;
+    }
+
+    function formatFnrhManualDateTime(value) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || ""));
+      if (!match) return String(value || "");
+      return `${match[3]}/${match[2]}/${match[1]} às ${match[4]}:${match[5]}`;
+    }
+
+    function getFnrhGuestOperationRequestOptions(dataHoraLocal) {
+      if (!dataHoraLocal) {
+        return { method: "POST" };
+      }
+      return {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_hora_local: dataHoraLocal })
+      };
+    }
+
+    function updateFnrhOperationTimeDialog() {
+      const manualOption = document.querySelector('input[name="fnrhOperationTimeOption"]:checked')?.value === "manual";
+      const field = document.getElementById("fnrhOperationManualField");
+      const input = document.getElementById("fnrhOperationDateTimeInput");
+      field.hidden = !manualOption;
+      input.required = manualOption;
+      input.setCustomValidity("");
+      if (manualOption) input.focus();
+    }
+
+    function closeFnrhOperationTimeDialog() {
+      document.getElementById("fnrhOperationTimeModal").hidden = true;
+      fnrhOperationTimeDialogContext = null;
+    }
+
+    function openFnrhOperationTimeDialog(guestId, operation) {
+      const guest = selectedGuests.find((item) => String(item.id) === String(guestId));
+      if (!guest?.id) {
+        setStatus("guestStatus", "Hóspede não encontrado para a operação.", "warning");
+        return;
+      }
+
+      const control = getFnrhGuestControlState(guest);
+      const isCheckin = operation === "checkin";
+      if ((isCheckin && !control.allowCheckin) || (!isCheckin && !control.allowCheckout)) {
+        setStatus("guestStatus", control.guidance, "warning");
+        renderFnrhGuestOperations();
+        return;
+      }
+
+      fnrhOperationTimeDialogContext = { guestId: String(guest.id), operation };
+      document.getElementById("fnrhOperationTimeTitle").textContent = isCheckin
+        ? "Horário do check-in"
+        : "Horário do checkout";
+      document.querySelector('input[name="fnrhOperationTimeOption"][value="now"]').checked = true;
+      document.getElementById("fnrhOperationDateTimeInput").value = getCurrentDateTimeLocalValue();
+      document.getElementById("fnrhOperationTimeModal").hidden = false;
+      updateFnrhOperationTimeDialog();
+      document.querySelector('input[name="fnrhOperationTimeOption"][value="now"]').focus();
+    }
+
+    async function submitFnrhOperationTimeDialog(event) {
+      event.preventDefault();
+      const context = fnrhOperationTimeDialogContext;
+      if (!context) return;
+
+      const selectedOption = document.querySelector('input[name="fnrhOperationTimeOption"]:checked')?.value;
+      const input = document.getElementById("fnrhOperationDateTimeInput");
+      const dataHoraLocal = selectedOption === "manual" ? input.value.trim() : null;
+      if (selectedOption === "manual" && !dataHoraLocal) {
+        input.setCustomValidity("Informe a data e a hora efetivas.");
+        input.reportValidity();
+        return;
+      }
+
+      closeFnrhOperationTimeDialog();
+      if (context.operation === "checkin") {
+        await checkInGuestFnrh(context.guestId, dataHoraLocal);
+      } else {
+        await checkOutGuestFnrh(context.guestId, dataHoraLocal);
+      }
+    }
+
+    async function checkInGuestFnrh(guestId, dataHoraLocal = null) {
       const guest = selectedGuests.find((item) => String(item.id) === String(guestId));
       if (!guest?.id) {
         setStatus("guestStatus", "Hóspede não encontrado para check-in.", "warning");
@@ -4816,7 +4969,10 @@ João Silva"></textarea>
       }
 
       const guestName = String(guest.full_name || "Hóspede").trim();
-      if (!window.confirm(`Confirmar check-in FNRH de ${guestName}?`)) {
+      const confirmationMessage = dataHoraLocal
+        ? `Registrar check-in FNRH de ${guestName} em ${formatFnrhManualDateTime(dataHoraLocal)}?`
+        : `Confirmar check-in FNRH de ${guestName}?`;
+      if (!window.confirm(confirmationMessage)) {
         return;
       }
 
@@ -4826,9 +4982,10 @@ João Silva"></textarea>
       setStatus("guestStatus", `Registrando check-in de ${guestName}...`, "warning");
 
       try {
-        const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkin`, {
-          method: "POST"
-        });
+        const data = await fetchJson(
+          `${API_BASE}/guests/${guest.id}/fnrh-checkin`,
+          getFnrhGuestOperationRequestOptions(dataHoraLocal)
+        );
         if (!isFnrhGuestOperationContextActive(stayId, guest.id)) {
           return;
         }
@@ -4859,7 +5016,7 @@ João Silva"></textarea>
       }
     }
 
-    async function checkOutGuestFnrh(guestId) {
+    async function checkOutGuestFnrh(guestId, dataHoraLocal = null) {
       const guest = selectedGuests.find((item) => String(item.id) === String(guestId));
       if (!guest?.id) {
         setStatus("guestStatus", "Hóspede não encontrado para check-out.", "warning");
@@ -4879,7 +5036,10 @@ João Silva"></textarea>
       }
 
       const guestName = String(guest.full_name || "Hóspede").trim();
-      if (!window.confirm(`Confirmar check-out FNRH de ${guestName}?`)) {
+      const confirmationMessage = dataHoraLocal
+        ? `Registrar check-out FNRH de ${guestName} em ${formatFnrhManualDateTime(dataHoraLocal)}?`
+        : `Confirmar check-out FNRH de ${guestName}?`;
+      if (!window.confirm(confirmationMessage)) {
         return;
       }
 
@@ -4889,9 +5049,10 @@ João Silva"></textarea>
       setStatus("guestStatus", `Finalizando check-out de ${guestName}...`, "warning");
 
       try {
-        const data = await fetchJson(`${API_BASE}/guests/${guest.id}/fnrh-checkout`, {
-          method: "POST"
-        });
+        const data = await fetchJson(
+          `${API_BASE}/guests/${guest.id}/fnrh-checkout`,
+          getFnrhGuestOperationRequestOptions(dataHoraLocal)
+        );
         if (!isFnrhGuestOperationContextActive(stayId, guest.id)) {
           return;
         }
@@ -5249,6 +5410,17 @@ Obrigado!`;
           closeQrModal();
         }
       });
+      document.getElementById("fnrhOperationTimeForm").addEventListener("submit", submitFnrhOperationTimeDialog);
+      document.getElementById("fnrhOperationTimeCancelBtn").addEventListener("click", closeFnrhOperationTimeDialog);
+      document.querySelectorAll('input[name="fnrhOperationTimeOption"]').forEach((input) => {
+        input.addEventListener("change", updateFnrhOperationTimeDialog);
+      });
+      document.getElementById("fnrhOperationTimeModal").addEventListener("click", (event) => {
+        if (event.target.id === "fnrhOperationTimeModal") closeFnrhOperationTimeDialog();
+      });
+      document.getElementById("fnrhOperationTimeModal").addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeFnrhOperationTimeDialog();
+      });
 
       updateOriginVisibility();
       loadPrefillFromQuery();
@@ -5261,6 +5433,34 @@ Obrigado!`;
       initializeReservationsPage();
     }
   </script>
+
+  <div id="fnrhOperationTimeModal" class="fnrh-operation-time-modal" role="dialog" aria-modal="true" aria-labelledby="fnrhOperationTimeTitle" hidden>
+    <div class="fnrh-operation-time-card">
+      <form id="fnrhOperationTimeForm">
+        <h3 id="fnrhOperationTimeTitle">Horário da operação</h3>
+        <div class="muted">Escolha o horário efetivo que será registrado na FNRH.</div>
+        <div class="fnrh-operation-time-options">
+          <label class="fnrh-operation-time-option">
+            <input type="radio" name="fnrhOperationTimeOption" value="now" checked>
+            Agora
+          </label>
+          <label class="fnrh-operation-time-option">
+            <input type="radio" name="fnrhOperationTimeOption" value="manual">
+            Informar outra data/hora
+          </label>
+        </div>
+        <div id="fnrhOperationManualField" class="fnrh-operation-time-field" hidden>
+          <label for="fnrhOperationDateTimeInput">Data e hora efetivas</label>
+          <input id="fnrhOperationDateTimeInput" type="datetime-local" step="60">
+          <div class="muted">Use o horário local da pousada.</div>
+        </div>
+        <div class="fnrh-operation-time-actions">
+          <button id="fnrhOperationTimeCancelBtn" type="button" class="secondary">Cancelar</button>
+          <button type="submit">Continuar</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div id="qrModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
     <div style="background:#fff; padding:20px; border-radius:8px; text-align:center; min-width:280px;">

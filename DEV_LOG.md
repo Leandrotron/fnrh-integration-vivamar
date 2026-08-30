@@ -1,3 +1,11 @@
+## [2026-08-30] — Data/hora efetiva opcional no check-in e checkout FNRH
+
+- Check-in e checkout individuais passaram a aceitar opcionalmente `data_hora_local`, interpretada no fuso `America/Sao_Paulo` e convertida para UTC antes do envio oficial em `text/plain`.
+- Sem horário informado, o comportamento permanece “agora”, usando `new Date().toISOString()`.
+- A evolução foi motivada pelo teste real controlado em que a FNRH aceitou e preservou um timestamp retroativo de check-in.
+
+---
+
 ## [2026-08-29] — Fluxos externos FNRH e TLS local validados
 
 - Importação de hóspede em `CHECKIN_REALIZADO` validada em caso real: check-in feito no site FNRH → consulta pelo painel → importação preservando a situação oficial → checkout disponível.

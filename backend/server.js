@@ -42,6 +42,8 @@ const KNOWN_FNRH_GUEST_SITUATIONS = new Set([
 ]);
 const fnrhSituationSyncByStayId = new Map();
 const fnrhGuestOperationByGuestId = new Map();
+const FNRH_PROPERTY_TIME_ZONE = "America/Sao_Paulo";
+const FNRH_MANUAL_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
 // =========================
 // FunÃ§Ãµes auxiliares
@@ -3639,7 +3641,118 @@ function getFnrhOperationalTimestampField(operation) {
   return operation === "checkin" ? "checkin_at" : "checkout_at";
 }
 
-async function executeFnrhGuestOperation(guestId, operation, res) {
+function getFnrhGuestOperationOfficialErrorMessage(patchResult, patchError) {
+  const responseBody = patchResult?.body || patchError?.fnrhBody || null;
+  const candidates = [
+    responseBody?.error?.message,
+    responseBody?.error,
+    responseBody?.message,
+    responseBody?.mensagem
+  ];
+  const message = candidates.find((candidate) => {
+    return typeof candidate === "string" && candidate.trim();
+  });
+  return message ? message.trim() : null;
+}
+
+function getFnrhPropertyTimeParts(timestamp) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: FNRH_PROPERTY_TIME_ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(new Date(timestamp));
+  return Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  );
+}
+
+function getFnrhPropertyUtcOffset(timestamp) {
+  const parts = getFnrhPropertyTimeParts(timestamp);
+  const representedAsUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second
+  );
+  return representedAsUtc - Math.floor(timestamp / 1000) * 1000;
+}
+
+function convertFnrhLocalDateTimeToUtc(value) {
+  if (typeof value !== "string") {
+    throw new Error("data_hora_local deve ser uma data e hora válida.");
+  }
+
+  const normalized = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(normalized);
+  if (!match) {
+    throw new Error("data_hora_local deve usar o formato AAAA-MM-DDTHH:mm.");
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText] = match;
+  const expected = {
+    year: Number(yearText),
+    month: Number(monthText),
+    day: Number(dayText),
+    hour: Number(hourText),
+    minute: Number(minuteText),
+    second: 0
+  };
+  const localAsUtc = Date.UTC(
+    expected.year,
+    expected.month - 1,
+    expected.day,
+    expected.hour,
+    expected.minute,
+    0
+  );
+  const roundTrip = new Date(localAsUtc);
+  if (
+    roundTrip.getUTCFullYear() !== expected.year ||
+    roundTrip.getUTCMonth() + 1 !== expected.month ||
+    roundTrip.getUTCDate() !== expected.day ||
+    roundTrip.getUTCHours() !== expected.hour ||
+    roundTrip.getUTCMinutes() !== expected.minute
+  ) {
+    throw new Error("data_hora_local deve representar uma data e hora válida.");
+  }
+
+  let timestamp = localAsUtc - getFnrhPropertyUtcOffset(localAsUtc);
+  timestamp = localAsUtc - getFnrhPropertyUtcOffset(timestamp);
+  const convertedParts = getFnrhPropertyTimeParts(timestamp);
+  if (Object.entries(expected).some(([key, expectedValue]) => convertedParts[key] !== expectedValue)) {
+    throw new Error(`data_hora_local não é válida no fuso ${FNRH_PROPERTY_TIME_ZONE}.`);
+  }
+
+  return new Date(timestamp).toISOString();
+}
+
+function getOptionalFnrhOperationTimestamp(requestBody) {
+  if (
+    !requestBody ||
+    typeof requestBody !== "object" ||
+    Array.isArray(requestBody) ||
+    !Object.prototype.hasOwnProperty.call(requestBody, "data_hora_local")
+  ) {
+    return null;
+  }
+
+  const timestamp = convertFnrhLocalDateTimeToUtc(requestBody.data_hora_local);
+  if (Date.parse(timestamp) > Date.now() + FNRH_MANUAL_FUTURE_TOLERANCE_MS) {
+    throw new Error("data_hora_local não pode estar mais de 5 minutos no futuro.");
+  }
+  return timestamp;
+}
+
+async function executeFnrhGuestOperation(guestId, operation, res, requestedTimestamp = null) {
   let context;
   try {
     context = await loadFnrhGuestOperationContext(guestId);
@@ -3720,7 +3833,7 @@ async function executeFnrhGuestOperation(guestId, operation, res) {
     }
   }
 
-  const operationTimestamp = new Date().toISOString();
+  const operationTimestamp = requestedTimestamp || new Date().toISOString();
   const expectedSituation = operation === "checkin"
     ? "CHECKIN_REALIZADO"
     : "CHECKOUT_REALIZADO";
@@ -3849,8 +3962,10 @@ async function executeFnrhGuestOperation(guestId, operation, res) {
     }
   }
 
+  const officialErrorMessage = getFnrhGuestOperationOfficialErrorMessage(patchResult, patchError);
   return res.status(502).json({
-    error: "Não foi possível confirmar o resultado na FNRH. Atualize a situação antes de tentar novamente.",
+    error: officialErrorMessage ||
+      "Não foi possível confirmar o resultado na FNRH. Atualize a situação antes de tentar novamente.",
     guest_id: guest.id
   });
 }
@@ -3860,6 +3975,13 @@ function registerFnrhGuestOperationRoute(path, operation) {
     const guestId = parsePositiveInteger(req.params.id);
     if (!guestId) {
       return res.status(400).json({ error: "id do hóspede deve ser um inteiro positivo" });
+    }
+
+    let requestedTimestamp;
+    try {
+      requestedTimestamp = getOptionalFnrhOperationTimestamp(req.body);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
     }
 
     const key = String(guestId);
@@ -3872,7 +3994,7 @@ function registerFnrhGuestOperationRoute(path, operation) {
     const operationToken = {};
     fnrhGuestOperationByGuestId.set(key, operationToken);
     try {
-      return await executeFnrhGuestOperation(guestId, operation, res);
+      return await executeFnrhGuestOperation(guestId, operation, res, requestedTimestamp);
     } finally {
       if (fnrhGuestOperationByGuestId.get(key) === operationToken) {
         fnrhGuestOperationByGuestId.delete(key);
