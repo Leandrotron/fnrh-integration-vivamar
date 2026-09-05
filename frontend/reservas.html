@@ -1300,7 +1300,7 @@
                 <div class="muted">Veja quem já pertence à reserva na FNRH e quem ainda precisa entrar no painel.</div>
               </div>
               <div class="fnrh-official-guests-actions">
-                <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Ver hóspedes da FNRH</button>
+                <button id="refreshFnrhOfficialGuestsBtn" type="button" class="secondary">Atualizar hóspedes da FNRH</button>
               </div>
             </div>
             <div class="fnrh-official-actions-help">
@@ -2541,7 +2541,7 @@ João Silva"></textarea>
         isSyncing;
       button.textContent = stateMatchesStay && fnrhOfficialGuestsState.isLoading
         ? "Atualizando hóspedes da FNRH..."
-        : "Ver hóspedes da FNRH";
+        : "Atualizar hóspedes da FNRH";
       syncButton.disabled = !hasOfficialReservation || isSyncing;
       syncButton.textContent = isSyncing
         ? "Sincronizando situações..."
@@ -4217,7 +4217,7 @@ João Silva"></textarea>
           </div>
         `;
         card.addEventListener("click", () => {
-          loadStayDetails(stay.id);
+          loadStayDetails(stay.id, null, { autoLoadFnrhGuests: true });
         });
         container.appendChild(card);
       }
@@ -4570,7 +4570,7 @@ João Silva"></textarea>
       renderDetails();
     }
 
-    async function loadStays(preferredStayId = null) {
+    async function loadStays(preferredStayId = null, options = {}) {
       try {
         stays = await fetchJson(`${API_BASE}/stays`);
         if (isCreatingStay) {
@@ -4596,14 +4596,14 @@ João Silva"></textarea>
         }
 
         const stayToOpen = stays.find((stay) => String(stay.id) === String(stayIdToOpen)) || stays[0];
-        await loadStayDetails(stayToOpen.id);
+        await loadStayDetails(stayToOpen.id, null, options);
       } catch (error) {
         setStatus("listStatus", error.message || "Erro ao carregar reservas.", "error");
         document.getElementById("stayList").innerHTML = `<div class="empty-state">Não foi possível buscar as reservas.</div>`;
       }
     }
 
-    async function loadStayDetails(stayId, expectedSelectedStayId = null) {
+    async function loadStayDetails(stayId, expectedSelectedStayId = null, options = {}) {
       const requestId = ++stayDetailsRequestId;
       pendingStayDetailsId = stayId;
       if (String(stayId) !== String(selectedStay?.id)) {
@@ -4644,6 +4644,14 @@ João Silva"></textarea>
         renderStayList();
 
         renderDetails();
+        if (
+          options.autoLoadFnrhGuests === true &&
+          String(selectedStay?.id) === String(stayId) &&
+          String(selectedStay?.fnrh_reserva_id || "").trim() &&
+          !(fnrhOfficialGuestsState.stayId === String(stayId) && fnrhOfficialGuestsState.isLoading)
+        ) {
+          void loadFnrhOfficialGuests();
+        }
         setStatus("actionStatus", "");
         setStatus("createStatus", "");
         setStatus("guestStatus", "");
@@ -5424,7 +5432,7 @@ Obrigado!`;
 
       updateOriginVisibility();
       loadPrefillFromQuery();
-      loadStays();
+      loadStays(null, { autoLoadFnrhGuests: true });
     }
 
     if (document.readyState === "loading") {
