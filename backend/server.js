@@ -723,7 +723,7 @@ function guardFnrhAssisted(req, res, next) {
   next();
 }
 
-async function requestFnrhAssisted(pathname, method = "GET", body) {
+async function requestFnrhAssisted(pathname, method = "GET", body, responseMeta = null) {
   const { baseUrl, requestHeaders } = getFnrhRequestConfig();
   let response;
   try {
@@ -731,6 +731,7 @@ async function requestFnrhAssisted(pathname, method = "GET", body) {
       method, headers: requestHeaders, redirect: "manual",
       ...(body ? { body: JSON.stringify(body) } : {})
     });
+    if (responseMeta) responseMeta.status = response.status;
     if (method === "GET" && pathname.startsWith("/pessoas/documento/CPF/") && response.status === 404) return { dados: null };
     const data = await response.json();
     if (!response.ok) {
@@ -858,11 +859,23 @@ app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req,
       if (!isValidUuid(pessoaId)) throw Object.assign(assistedError("Criação de pessoa sem ID confirmado. Não repita a inclusão.", 502), { uncertain: true });
       fnrhAssistedPeople.set(personKey, pessoaId);
     }
+    const responseMeta = {};
     const added = await requestFnrhAssisted(`/reservas/${encodeURIComponent(stay.fnrh_reserva_id)}/hospedes`, "POST", {
       pessoa_id: pessoaId, is_principal: req.body.is_principal, situacao_hospede_id: "PRECHECKIN_PENDENTE"
-    });
-    if (!isValidUuid(added?.hospede_id)) throw Object.assign(assistedError("Inclusão sem ID confirmado. Consulte a lista antes de repetir.", 502), { uncertain: true });
+    }, responseMeta);
+    if (!isValidUuid(added?.hospede_id)) {
+      console.log("[FNRH] fnrh_assisted_guest_uncertain_result", {
+        stay_id: stayId, fnrh_reserva_id: stay.fnrh_reserva_id, pessoa_id: pessoaId,
+        http_status: responseMeta.status, timestamp: new Date().toISOString()
+      });
+      throw Object.assign(assistedError("Inclusão sem ID confirmado. Consulte a lista antes de repetir.", 502), { uncertain: true });
+    }
     fnrhAssistedCompleted.add(operationKey);
+    console.log("[FNRH] fnrh_assisted_guest_created", {
+      stay_id: stayId, fnrh_reserva_id: stay.fnrh_reserva_id,
+      pessoa_id: pessoaId, hospede_id: added.hospede_id,
+      situacao_hospede_id: "PRECHECKIN_PENDENTE", timestamp: new Date().toISOString()
+    });
     return res.json({ pessoa_id: pessoaId, hospede_id: added.hospede_id, situacao_hospede_id: "PRECHECKIN_PENDENTE",
       message: "Hóspede incluído como pendente. Nenhum check-in ou importação foi realizado." });
   } catch (error) {
@@ -1016,6 +1029,7 @@ function normalizeFnrhOfficialCandidate(item) {
 }
 
 function getFnrhOfficialCandidateItems(body) {
+  if (body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).length === 0) return [];
   return Array.isArray(body?.dados)
     ? body.dados
     : Array.isArray(body?.dados?.dados_hospedes)
