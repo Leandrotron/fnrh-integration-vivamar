@@ -616,12 +616,11 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim, exibirVinculado) {
   };
 }
 
-async function fetchFnrhReservationGuests(fnrhReservaId) {
+function getFnrhRequestConfig() {
   const baseUrl = String(process.env.FNRH_BASE_URL || "").trim();
   const user = String(process.env.FNRH_USER || "").trim();
   const apiKey = String(process.env.FNRH_API_KEY || "").trim();
   const cpfSolicitante = String(process.env.FNRH_CPF_SOLICITANTE || "").trim();
-  const finalUrl = `${baseUrl}/reservas/${encodeURIComponent(fnrhReservaId)}/hospedes`;
 
   const missingVars = [
     !baseUrl && "FNRH_BASE_URL",
@@ -645,6 +644,12 @@ async function fetchFnrhReservationGuests(fnrhReservaId) {
     Authorization: authorization,
     cpf_solicitante: cpfSolicitante
   };
+  return { baseUrl, requestHeaders };
+}
+
+async function fetchFnrhReservationGuests(fnrhReservaId) {
+  const { baseUrl, requestHeaders } = getFnrhRequestConfig();
+  const finalUrl = `${baseUrl}/reservas/${encodeURIComponent(fnrhReservaId)}/hospedes`;
   const startedAt = Date.now();
 
   console.log("[FNRH][debug] reservation guests request:", {
@@ -692,6 +697,179 @@ async function fetchFnrhReservationGuests(fnrhReservaId) {
     body
   };
 }
+
+// Assisted requests never write locally or retry an official mutation.
+const fnrhAssistedBusy = new Set();
+const fnrhAssistedUncertain = new Set();
+const fnrhAssistedPeople = new Map();
+const fnrhAssistedCompleted = new Set();
+
+function assistedError(message, status = 400) {
+  return Object.assign(new Error(message), { status });
+}
+
+function guardFnrhAssisted(req, res, next) {
+  res.set("Cache-Control", "no-store");
+  const origin = req.get("origin");
+  try {
+    if (req.get("X-Vivamar-Assisted") !== "1" ||
+        req.get("sec-fetch-site") === "cross-site" ||
+        (origin && new URL(origin).host !== req.get("host"))) {
+      return res.status(403).json({ error: "Abra esta ação pelo painel da recepção." });
+    }
+  } catch {
+    return res.status(403).json({ error: "Origem inválida." });
+  }
+  next();
+}
+
+async function requestFnrhAssisted(pathname, method = "GET", body) {
+  const { baseUrl, requestHeaders } = getFnrhRequestConfig();
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${pathname}`, {
+      method, headers: requestHeaders, redirect: "manual",
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    if (method === "GET" && pathname.startsWith("/pessoas/documento/CPF/") && response.status === 404) return { dados: null };
+    const data = await response.json();
+    if (!response.ok) {
+      throw Object.assign(assistedError(`A FNRH recusou a operação (HTTP ${response.status}). Revise os dados antes de continuar.`, 502), {
+        uncertain: method !== "GET" && (response.status < 400 || response.status >= 500)
+      });
+    }
+    return data;
+  } catch (error) {
+    if (error.status) throw error;
+    throw Object.assign(assistedError("Não foi possível confirmar a resposta da FNRH. Não repita uma inclusão sem conferir o resultado oficial.", 502), {
+      uncertain: method !== "GET"
+    });
+  }
+}
+
+async function lookupFnrhAssistedPerson(cpf) {
+  const body = await requestFnrhAssisted(`/pessoas/documento/CPF/${cpf}`);
+  const d = body?.dados;
+  if (d == null && body && typeof body === "object" && !Array.isArray(body) &&
+      (Object.keys(body).length === 0 || Object.prototype.hasOwnProperty.call(body, "dados"))) {
+    return { pessoa_id: null, fields: { cpf } };
+  }
+  if (!d || typeof d !== "object" || Array.isArray(d)) throw assistedError("Resposta de pessoa não reconhecida.", 502);
+  const doc = d.documento || {};
+  const id = d.id || d.pessoa_id || null;
+  const returnedCpf = normalizeCPF(doc.numero_documento || "");
+  const returnedType = doc.tipo_documento?.id || doc.tipo_documento_id || (typeof doc.tipo_documento === "string" ? doc.tipo_documento : "");
+  if ((d.id && d.pessoa_id && d.id !== d.pessoa_id) || (returnedType && returnedType !== "CPF") ||
+      (returnedCpf && returnedCpf !== cpf) || (id && (!isValidUuid(id) || returnedCpf !== cpf))) {
+    throw assistedError("Identidade oficial ambígua. Inclusão bloqueada.", 409);
+  }
+  const p = d.dado_pessoal || d;
+  const c = d.contato || {};
+  const a = c.endereco || {};
+  const domain = value => typeof value === "object" && value ? value.id || "" : value || "";
+  const fields = {
+    cpf, nome: p.nome || "", data_nascimento: p.data_nascimento || "",
+    genero_id: domain(p.genero || p.genero_id), GeneroDescricao: p.GeneroDescricao || "",
+    PaisNacionalidade_id: domain(p.PaisNacionalidade_id), PaisResidencia_id: domain(a.PaisResidencia_id),
+    cep: a.cep || "", logradouro: a.logradouro || "", numero: a.numero || "",
+    complemento: a.complemento || "", bairro: a.bairro || "", cidade: a.cidade?.nome || "",
+    cidade_id: a.cidade?.id || "", estado_id: a.cidade?.estado?.uf || "",
+    raca_id: domain(p.raca_id), deficiencia_id: domain(p.deficiencia?.possui_deficiencia || p.deficiencia_id),
+    tipo_deficiencia_id: domain(p.deficiencia?.tipo_deficiencia || p.tipo_deficiencia_id)
+  };
+  return { pessoa_id: id, fields };
+}
+
+function buildFnrhAssistedPerson(input) {
+  const text = key => String(input?.[key] || "").trim();
+  const cpf = normalizeCPF(text("cpf"));
+  if (!isValidCPF(cpf)) throw assistedError("Informe um CPF válido.");
+  const birth = text("data_nascimento");
+  const parsed = new Date(`${birth}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birth) || !Number.isFinite(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== birth || parsed > new Date()) throw assistedError("Data de nascimento inválida.");
+  const gender = text("genero_id");
+  if (!text("nome") || !["HOMEM", "MULHER", "OUTRO", "NAOINFORMADO"].includes(gender)) throw assistedError("Informe nome completo e gênero.");
+  if (gender === "OUTRO" && !text("GeneroDescricao")) throw assistedError("Informe a descrição do gênero.");
+  if (text("PaisNacionalidade_id") !== "BR" || text("PaisResidencia_id") !== "BR") throw assistedError("Esta primeira versão atende brasileiros residentes no Brasil.");
+  if (!/^\d{7}$/.test(text("cidade_id")) || !/^(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)$/.test(text("estado_id"))) throw assistedError("Informe município IBGE e UF válidos.");
+  const cep = onlyDigits(text("cep"));
+  if (cep && (cep.length !== 8 || !text("logradouro") || !text("numero") || !text("bairro"))) throw assistedError("Com CEP, informe logradouro, número e bairro completos.");
+  const person = {
+    nome: text("nome"), data_nascimento: birth, genero_id: gender, PaisNacionalidade_id: "BR",
+    documento_id: { tipo_documento_id: "CPF", numero_documento: cpf },
+    contato: { PaisResidencia_id: "BR", cidade_id: text("cidade_id"), estado_id: text("estado_id") }
+  };
+  for (const key of ["logradouro", "numero", "complemento", "bairro"]) if (text(key)) person.contato[key] = text(key);
+  if (cep) person.contato.cep = cep;
+  if (gender === "OUTRO") person.GeneroDescricao = text("GeneroDescricao");
+  if (text("raca_id")) person.raca_id = text("raca_id");
+  if (text("deficiencia_id")) {
+    if (!["SIM", "NAO", "NAOINFORMAR"].includes(text("deficiencia_id"))) throw assistedError("Deficiência inválida.");
+    person.deficiencia_id = text("deficiencia_id");
+    if (person.deficiencia_id === "SIM") {
+      if (!text("tipo_deficiencia_id")) throw assistedError("Informe o código oficial do tipo de deficiência.");
+      person.tipo_deficiencia_id = text("tipo_deficiencia_id");
+    }
+  }
+  return person;
+}
+
+app.get("/fnrh/pessoas/documento/CPF/:cpf", guardFnrhAssisted, async (req, res) => {
+  const cpf = normalizeCPF(req.params.cpf);
+  if (!isValidCPF(cpf)) return res.status(400).json({ error: "Informe um CPF válido." });
+  try { return res.json(await lookupFnrhAssistedPerson(cpf)); }
+  catch (error) { return res.status(error.status || 502).json({ error: error.message }); }
+});
+
+app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req, res) => {
+  const stayId = parsePositiveInteger(req.params.stayId);
+  const cpf = normalizeCPF(req.body?.cpf || "");
+  if (!stayId || !isValidCPF(cpf) || typeof req.body?.is_principal !== "boolean") return res.status(400).json({ error: "Stay, CPF ou papel inválido." });
+  if (req.body.situacao_hospede_id != null || req.body.pessoa_id != null) return res.status(400).json({ error: "Identidade e situação são confirmadas pelo servidor." });
+  const personKey = crypto.createHash("sha256").update(cpf).digest("hex");
+  const operationKey = `${stayId}:${personKey}`;
+  if (fnrhAssistedCompleted.has(operationKey)) return res.status(409).json({ error: "Inclusão já confirmada. Atualize a lista oficial; não repita." });
+  const keys = [`stay:${stayId}`, `cpf:${personKey}`];
+  if (keys.some(key => fnrhAssistedUncertain.has(key))) return res.status(409).json({ error: "Há uma inclusão de resultado incerto. Confira a FNRH antes de nova tentativa; não reinicie o serviço para repetir." });
+  if (keys.some(key => fnrhAssistedBusy.has(key))) return res.status(409).json({ error: "Já existe uma inclusão em andamento." });
+  keys.forEach(key => fnrhAssistedBusy.add(key));
+  try {
+    const stay = await dbGetAsync("SELECT id, fnrh_reserva_id FROM stays WHERE id = ? AND property_id = ?", [stayId, PROPERTY_ID]);
+    if (!stay || !isValidUuid(stay.fnrh_reserva_id)) throw assistedError("A stay precisa de uma reserva FNRH existente.", 409);
+    const official = await fetchFnrhReservationGuests(stay.fnrh_reserva_id);
+    const items = getFnrhOfficialCandidateItems(official.body) ||
+      (official.body && typeof official.body === "object" && !Array.isArray(official.body) && Object.keys(official.body).length === 0 ? [] : null);
+    if (!official.ok || !items) throw assistedError("Não foi possível conferir os hóspedes oficiais. Nenhuma inclusão iniciada.", 502);
+    const candidates = items.map(normalizeFnrhOfficialCandidate);
+    if (candidates.some(c => !c || !isValidUuid(c.hospedeId) || !isValidUuid(c.pessoaId) ||
+        !["CPF", "PASSAPORTE"].includes(c.documentType) || !c.documentValue || /[*•]/.test(c.documentValue) ||
+        (c.documentType === "CPF" && !isValidCPF(normalizeCPF(c.documentValue))))) throw assistedError("Lista oficial sem identificação suficiente para excluir duplicidade.", 409);
+    const lookup = await lookupFnrhAssistedPerson(cpf);
+    let pessoaId = lookup.pessoa_id || fnrhAssistedPeople.get(personKey);
+    if (lookup.pessoa_id && fnrhAssistedPeople.has(personKey) && lookup.pessoa_id !== fnrhAssistedPeople.get(personKey)) throw assistedError("Identidade divergente. Confira a pessoa na FNRH.", 409);
+    if (candidates.some(c => (pessoaId && c.pessoaId === pessoaId) ||
+        (c.documentType === "CPF" && normalizeCPF(c.documentValue) === cpf))) throw assistedError("Esta pessoa já está na reserva FNRH. Atualize a lista oficial.", 409);
+    if (req.body.is_principal && items.some(item => Number(item.hospede?.responsavel_quarto) === 1 || Number(item.hospede?.is_principal) === 1)) throw assistedError("A reserva já possui titular. Selecione acompanhante.", 409);
+    if (!pessoaId) {
+      const person = buildFnrhAssistedPerson(req.body);
+      const created = await requestFnrhAssisted("/pessoas", "POST", { pessoa: person });
+      pessoaId = created?.pessoa_id;
+      if (!isValidUuid(pessoaId)) throw Object.assign(assistedError("Criação de pessoa sem ID confirmado. Não repita a inclusão.", 502), { uncertain: true });
+      fnrhAssistedPeople.set(personKey, pessoaId);
+    }
+    const added = await requestFnrhAssisted(`/reservas/${encodeURIComponent(stay.fnrh_reserva_id)}/hospedes`, "POST", {
+      pessoa_id: pessoaId, is_principal: req.body.is_principal, situacao_hospede_id: "PRECHECKIN_PENDENTE"
+    });
+    if (!isValidUuid(added?.hospede_id)) throw Object.assign(assistedError("Inclusão sem ID confirmado. Consulte a lista antes de repetir.", 502), { uncertain: true });
+    fnrhAssistedCompleted.add(operationKey);
+    return res.json({ pessoa_id: pessoaId, hospede_id: added.hospede_id, situacao_hospede_id: "PRECHECKIN_PENDENTE",
+      message: "Hóspede incluído como pendente. Nenhum check-in ou importação foi realizado." });
+  } catch (error) {
+    if (error.uncertain) keys.forEach(key => fnrhAssistedUncertain.add(key));
+    return res.status(error.status || 502).json({ error: error.status ? error.message : "Não foi possível concluir a operação. Confira a FNRH antes de repetir." });
+  } finally { keys.forEach(key => fnrhAssistedBusy.delete(key)); }
+});
 
 async function linkFnrhPreCheckin(fnrhReservaId, fnrhHospedeId) {
   const mode = process.env.FNRH_MODE || "mock";
