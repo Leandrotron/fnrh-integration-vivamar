@@ -160,6 +160,33 @@ function assignMissingStayPublicTokens() {
 }
 
 db.serialize(() => {
+  // Ficha Viva Mar: coleta local, separada dos hospedes operacionais.
+  db.run(`CREATE TABLE IF NOT EXISTS vivamar_preregistros (
+    id INTEGER PRIMARY KEY,
+    stay_id INTEGER NOT NULL REFERENCES stays(id),
+    submission_key TEXT NOT NULL,
+    client_person_key TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    birth_date TEXT NOT NULL,
+    document_type TEXT,
+    document_number TEXT,
+    nationality TEXT,
+    residence_country TEXT,
+    gender_id TEXT,
+    personal_details_json TEXT,
+    operational_details_json TEXT,
+    responsible_preregistro_id INTEGER REFERENCES vivamar_preregistros(id),
+    review_status TEXT NOT NULL DEFAULT 'RECEBIDO',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_vivamar_stay ON vivamar_preregistros(stay_id)`);
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vivamar_submission
+    ON vivamar_preregistros(stay_id, submission_key, client_person_key)`);
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vivamar_document
+    ON vivamar_preregistros(stay_id, document_type, document_number)
+    WHERE document_number IS NOT NULL AND document_number <> ''`);
+
   // estrutura atual
   db.run(`
     CREATE TABLE IF NOT EXISTS checkins (

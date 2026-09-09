@@ -1292,6 +1292,17 @@
             </div>
           </details>
 
+          <section id="vivamarSection" class="resolution-section" hidden>
+            <h4>Ficha Viva Mar</h4>
+            <p class="muted">Dados locais recebidos para conferência pela recepção.</p>
+            <div class="button-row">
+              <a id="vivamarOpen" target="_blank" rel="noopener">Abrir Ficha Viva Mar</a>
+              <button type="button" class="secondary" onclick="loadVivamarPreregistros()">Atualizar Ficha Viva Mar</button>
+            </div>
+            <p id="vivamarStatus" role="status" aria-live="polite"></p>
+            <div id="vivamarCards"></div>
+          </section>
+
           <section id="assistedSection" class="resolution-section" hidden>
             <h4>Pré-check-in assistido</h4>
             <p class="muted">Use esta opção quando a recepção estiver auxiliando o hóspede com dados fornecidos por ele.</p>
@@ -4534,6 +4545,44 @@ João Silva"></textarea>
       updateFnrhSectionsVisibility();
     }
 
+    let vivamarRequestId = 0;
+    function resetVivamarSection() {
+      vivamarRequestId++;
+      document.getElementById("vivamarSection").hidden = true;
+      document.getElementById("vivamarCards").replaceChildren();
+      document.getElementById("vivamarStatus").textContent = "";
+    }
+    async function loadVivamarPreregistros() {
+      const stayId = selectedStay?.id;
+      if (!stayId || isCreatingStay) { resetVivamarSection(); return; }
+      const requestId = ++vivamarRequestId;
+      const section = document.getElementById("vivamarSection");
+      const status = document.getElementById("vivamarStatus");
+      const cards = document.getElementById("vivamarCards");
+      section.hidden = false;
+      document.getElementById("vivamarOpen").href = `precheckin-vivamar.html?stay_id=${encodeURIComponent(stayId)}`;
+      cards.replaceChildren(); status.textContent = "Carregando Ficha Viva Mar…";
+      try {
+        const data = await fetchJson(`${API_BASE}/stays/${encodeURIComponent(stayId)}/ficha-vivamar`);
+        if (requestId !== vivamarRequestId || String(selectedStay?.id) !== String(stayId)) return;
+        if (!Array.isArray(data.preregistros)) throw new Error("Resposta inválida da Ficha Viva Mar.");
+        status.textContent = `${data.preregistros.length} pré-registro(s) recebido(s).`;
+        for (const person of data.preregistros) {
+          const card = document.createElement("article"); card.className = "resolution-section";
+          const title = document.createElement("strong"); title.textContent = person.full_name; card.append(title);
+          const details = document.createElement("p");
+          details.textContent = [person.classification, person.review_status,
+            person.document_masked ? `${person.document_type}: ${person.document_masked}` : "Sem documento",
+            person.responsible_name ? `Responsável local: ${person.responsible_name}` : "",
+            person.responsavel_pendente ? "Responsável pendente" : "",
+            person.vehicle_plate ? `Placa: ${person.vehicle_plate}` : ""].filter(Boolean).join(" · ");
+          card.append(details); cards.append(card);
+        }
+      } catch (error) {
+        if (requestId === vivamarRequestId && String(selectedStay?.id) === String(stayId)) status.textContent = `Não foi possível carregar a Ficha Viva Mar: ${error.message}`;
+      }
+    }
+
     const assistedFieldDefinitions = [
       ["nome", "Nome completo"], ["data_nascimento", "Data de nascimento", "date"],
       ["genero_id", "Gênero", ["HOMEM", "MULHER", "OUTRO", "NAOINFORMADO"]],
@@ -4657,6 +4706,7 @@ João Silva"></textarea>
     }
 
     function renderDetails() {
+      if (!selectedStay?.id || isCreatingStay) resetVivamarSection();
       renderAssistedForm();
       const empty = document.getElementById("detailsEmpty");
       const content = document.getElementById("detailsContent");
@@ -4743,6 +4793,7 @@ João Silva"></textarea>
       const requestId = ++stayDetailsRequestId;
       pendingStayDetailsId = stayId;
       if (String(stayId) !== String(selectedStay?.id)) {
+        resetVivamarSection();
         resetAssistedForm();
         document.getElementById("assistedSection").hidden = true;
         clearFnrhPrecheckinResults();
@@ -4782,6 +4833,7 @@ João Silva"></textarea>
         renderStayList();
 
         renderDetails();
+        void loadVivamarPreregistros();
         if (
           options.autoLoadFnrhGuests === true &&
           String(selectedStay?.id) === String(stayId) &&

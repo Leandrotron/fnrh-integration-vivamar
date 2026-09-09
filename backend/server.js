@@ -2862,6 +2862,181 @@ app.put("/stays/:id", (req, res) => {
 });
 
 // cria hÃ³spede vinculado a uma suÃ­te
+// BEGIN VIVAMAR LOCAL
+// Rotas da Fase 1 sao locais e precisam de revisao antes de futura exposicao publica.
+const VIVAMAR_PERSONAL_FIELDS = ["phone", "email", "postal_code", "street", "number", "complement", "neighborhood", "city", "state"];
+const VIVAMAR_OPERATIONAL_FIELDS = ["vehicle_plate", "estimated_arrival", "notes"];
+function vivamarError(message, status = 400) { return Object.assign(new Error(message), { status }); }
+function vivamarObject(value, fields) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !fields.includes(key))) {
+    throw vivamarError("Estrutura ou campo desconhecido na Ficha Viva Mar.");
+  }
+  return value;
+}
+function vivamarText(value, max = 160) {
+  if (value == null) return "";
+  if (typeof value !== "string" || value.length > max) throw vivamarError("Campo com tipo ou tamanho inválido.");
+  return value.trim();
+}
+function vivamarDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+function vivamarClassification(birth, arrival) {
+  // Regra operacional local na data de entrada; NAO representa regra oficial FNRH.
+  if (!vivamarDate(birth) || !vivamarDate(arrival) || arrival < birth) return "PENDENTE";
+  const years = Number(arrival.slice(0, 4)) - Number(birth.slice(0, 4)) - (arrival.slice(5) < birth.slice(5) ? 1 : 0);
+  return years >= 18 ? "ADULTO" : "MENOR";
+}
+function vivamarNormalize(body) {
+  vivamarObject(body, ["submission_key", "people"]);
+  const key = value => {
+    const text = vivamarText(value, 80);
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(text)) throw vivamarError("Chave de submissão/pessoa inválida.");
+    return text;
+  };
+  if (!Array.isArray(body.people) || body.people.length < 1 || body.people.length > 20) throw vivamarError("Informe de 1 a 20 pessoas.");
+  const submissionKey = key(body.submission_key);
+  const fields = ["client_person_key", "full_name", "birth_date", "document_type", "document_number", "nationality", "residence_country", "gender_id", "responsible_client_person_key", "personal_details", "operational_details"];
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const people = body.people.map(input => {
+    vivamarObject(input, fields);
+    const fullName = vivamarText(input.full_name);
+    const birth = vivamarText(input.birth_date, 10);
+    if (!fullName || !vivamarDate(birth) || birth > today) throw vivamarError("Nome e data de nascimento real, não futura, são obrigatórios.");
+    const type = vivamarText(input.document_type, 20).toUpperCase();
+    let number = vivamarText(input.document_number, 80);
+    if (!["", "CPF", "PASSAPORTE"].includes(type) || (!!type !== !!number)) throw vivamarError("Informe tipo e número do documento, ou deixe ambos vazios.");
+    if (type === "CPF") {
+      number = normalizeCPF(number);
+      if (!isValidCPF(number)) throw vivamarError("CPF inválido.");
+    }
+    const country = value => {
+      const code = vivamarText(value, 2).toUpperCase();
+      if (code && !/^[A-Z]{2}$/.test(code)) throw vivamarError("País deve usar código de duas letras.");
+      return code;
+    };
+    const gender = vivamarText(input.gender_id, 20);
+    if (!["", "HOMEM", "MULHER", "OUTRO", "NAOINFORMADO"].includes(gender)) throw vivamarError("Gênero inválido.");
+    const details = (value, allowed) => {
+      const source = vivamarObject(value ?? {}, allowed);
+      return Object.fromEntries(allowed.map(field => [field, vivamarText(source[field], field === "notes" ? 1000 : 160)]));
+    };
+    return { client_person_key: key(input.client_person_key), full_name: fullName, birth_date: birth,
+      document_type: type, document_number: number, nationality: country(input.nationality), residence_country: country(input.residence_country), gender_id: gender,
+      responsible_client_person_key: input.responsible_client_person_key ? key(input.responsible_client_person_key) : null,
+      personal_details: details(input.personal_details, VIVAMAR_PERSONAL_FIELDS),
+      operational_details: details(input.operational_details, VIVAMAR_OPERATIONAL_FIELDS) };
+  });
+  if (new Set(people.map(person => person.client_person_key)).size !== people.length) throw vivamarError("Chaves de pessoas repetidas.");
+  return { submission_key: submissionKey, people };
+}
+function vivamarStoredPerson(row, rows) {
+  return { client_person_key: row.client_person_key, full_name: row.full_name, birth_date: row.birth_date,
+    document_type: row.document_type || "", document_number: row.document_number || "", nationality: row.nationality || "",
+    residence_country: row.residence_country || "", gender_id: row.gender_id || "",
+    responsible_client_person_key: rows.find(item => item.id === row.responsible_preregistro_id)?.client_person_key || null,
+    personal_details: JSON.parse(row.personal_details_json), operational_details: JSON.parse(row.operational_details_json) };
+}
+function vivamarSummary(row, rows, stay) {
+  const classification = vivamarClassification(row.birth_date, stay.data_entrada);
+  const responsible = rows.find(item => item.id === row.responsible_preregistro_id);
+  const validResponsible = responsible && responsible.submission_key === row.submission_key && vivamarClassification(responsible.birth_date, stay.data_entrada) === "ADULTO";
+  return { id: row.id, stay_id: row.stay_id, full_name: row.full_name, classification,
+    review_status: row.review_status, document_type: row.document_type || null,
+    document_masked: row.document_number ? (row.document_number.length > 4 ? `***${row.document_number.slice(-2)}` : "***") : null,
+    responsible_preregistro_id: row.responsible_preregistro_id, responsible_name: responsible?.full_name || null,
+    responsavel_pendente: classification === "MENOR" && !validResponsible,
+    vehicle_plate: JSON.parse(row.operational_details_json).vehicle_plate || null, created_at: row.created_at };
+}
+async function vivamarConnection() {
+  const connection = await new Promise((resolve, reject) => {
+    const instance = new sqlite3.Database(db.filename, sqlite3.OPEN_READWRITE, error => error ? reject(error) : resolve(instance));
+  });
+  connection.configure("busyTimeout", 5000);
+  return { all: (sql, params = []) => new Promise((resolve, reject) => connection.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows))),
+    run: (sql, params = []) => new Promise((resolve, reject) => connection.run(sql, params, function(error) { error ? reject(error) : resolve(this.lastID); })),
+    close: () => new Promise(resolve => connection.close(resolve)) };
+}
+async function vivamarStay(connection, value) {
+  const id = parsePositiveInteger(value);
+  if (!id) throw vivamarError("Stay inválida.");
+  const [stay] = await connection.all(`SELECT id, reservation_id, sub_reservation_id, data_entrada, data_saida,
+    quantidade_hospede_adulto, quantidade_hospede_menor FROM stays WHERE id = ? AND property_id = ?`, [id, PROPERTY_ID]);
+  if (!stay) throw vivamarError("Stay não encontrada.", 404);
+  return stay;
+}
+function vivamarRoute(handler) {
+  return async (req, res) => {
+    let connection;
+    try { connection = await vivamarConnection(); await handler(req, res, connection); }
+    catch (error) {
+      const conflict = error.code === "SQLITE_CONSTRAINT";
+      res.status(conflict ? 409 : error.status || 500).json({ error: conflict ? "Documento ou submissão já registrado nesta stay." : error.status ? error.message : "Não foi possível acessar a Ficha Viva Mar." });
+    } finally { if (connection) await connection.close(); }
+  };
+}
+app.get("/stays/:stayId/ficha-vivamar/contexto", vivamarRoute(async (req, res, connection) => {
+  const stay = await vivamarStay(connection, req.params.stayId);
+  const { id, ...context } = stay;
+  res.json({ stay_id: id, ...context });
+}));
+app.get("/stays/:stayId/ficha-vivamar", vivamarRoute(async (req, res, connection) => {
+  const stay = await vivamarStay(connection, req.params.stayId);
+  const rows = await connection.all("SELECT * FROM vivamar_preregistros WHERE stay_id = ? ORDER BY id", [stay.id]);
+  res.json({ stay_id: stay.id, preregistros: rows.map(row => vivamarSummary(row, rows, stay)) });
+}));
+app.post("/stays/:stayId/ficha-vivamar", vivamarRoute(async (req, res, connection) => {
+  if (Buffer.byteLength(JSON.stringify(req.body) || "") > 65536) throw vivamarError("Submissão excede 64 KB.", 413);
+  const input = vivamarNormalize(req.body);
+  let transaction = false;
+  try {
+    await connection.run("BEGIN IMMEDIATE TRANSACTION"); transaction = true;
+    const stay = await vivamarStay(connection, req.params.stayId);
+    for (const person of input.people) {
+      if (!person.responsible_client_person_key) continue;
+      const responsible = input.people.find(item => item.client_person_key === person.responsible_client_person_key);
+      if (!responsible || responsible === person || vivamarClassification(responsible.birth_date, stay.data_entrada) !== "ADULTO" || vivamarClassification(person.birth_date, stay.data_entrada) !== "MENOR") {
+        throw vivamarError("Responsável deve ser outro adulto da mesma submissão, associado a um menor.");
+      }
+    }
+    let rows = await connection.all("SELECT * FROM vivamar_preregistros WHERE stay_id = ? AND submission_key = ? ORDER BY id", [stay.id, input.submission_key]);
+    const repeated = rows.length > 0;
+    if (repeated) {
+      if (rows.length !== input.people.length || input.people.some(person => {
+        const row = rows.find(item => item.client_person_key === person.client_person_key);
+        return !row || JSON.stringify(person) !== JSON.stringify(vivamarStoredPerson(row, rows));
+      })) throw vivamarError("Esta chave já foi recebida com conteúdo diferente. Nenhum dado foi sobrescrito.", 409);
+    } else {
+      const ids = new Map();
+      const now = new Date().toISOString();
+      for (const person of input.people) {
+        const id = await connection.run(`INSERT INTO vivamar_preregistros
+          (stay_id, submission_key, client_person_key, full_name, birth_date, document_type, document_number, nationality,
+           residence_country, gender_id, personal_details_json, operational_details_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [stay.id, input.submission_key, person.client_person_key, person.full_name, person.birth_date,
+            person.document_type || null, person.document_number || null, person.nationality, person.residence_country,
+            person.gender_id, JSON.stringify(person.personal_details), JSON.stringify(person.operational_details), now, now]);
+        ids.set(person.client_person_key, id);
+      }
+      for (const person of input.people) if (person.responsible_client_person_key) {
+        await connection.run("UPDATE vivamar_preregistros SET responsible_preregistro_id = ? WHERE id = ? AND stay_id = ?",
+          [ids.get(person.responsible_client_person_key), ids.get(person.client_person_key), stay.id]);
+      }
+      rows = await connection.all("SELECT * FROM vivamar_preregistros WHERE stay_id = ? AND submission_key = ? ORDER BY id", [stay.id, input.submission_key]);
+    }
+    await connection.run("COMMIT"); transaction = false;
+    res.status(repeated ? 200 : 201).json({ submission_key: input.submission_key, repeated,
+      preregistros: rows.map(row => vivamarSummary(row, rows, stay)) });
+  } catch (error) {
+    if (transaction) await connection.run("ROLLBACK");
+    throw error;
+  }
+}));
+// END VIVAMAR LOCAL
+
 app.post("/guests", (req, res) => {
   const {
     stay_id,

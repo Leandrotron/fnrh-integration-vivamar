@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ficha Viva Mar</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3f7f7;color:#183b40;font:16px system-ui,sans-serif}main{max-width:900px;margin:auto;padding:24px}h1{margin-bottom:8px}fieldset{border:1px solid #cbdcde;border-radius:12px;background:white;padding:20px;margin:20px 0}legend{font-weight:700}label{display:grid;gap:5px}input,select,textarea,button{font:inherit;padding:10px;border:1px solid #aabfc2;border-radius:6px;max-width:100%}textarea{min-height:80px}button{background:#17656e;color:white;cursor:pointer}button.secondary{background:white;color:#17656e}button:disabled{opacity:.55;cursor:default}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.actions{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}.muted{color:#536b70}.error{color:#a32222}[hidden]{display:none!important}#status{white-space:pre-line}a{color:#17656e}
+  </style>
+  <script src="app-config.js"></script>
+</head>
+<body><main>
+  <h1>Ficha Viva Mar</h1>
+  <p>Informe os dados para conferência pela recepção. O envio desta ficha não realiza check-in nem substitui a ficha oficial FNRH.</p>
+  <p id="context" class="muted">Carregando reserva…</p>
+  <form id="form">
+    <div id="people"></div>
+    <div class="actions"><button id="add" type="button" class="secondary" disabled>Adicionar pessoa</button><button id="save" type="submit" disabled>Enviar ficha à recepção</button></div>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <a href="reservas.html">Voltar ao painel da recepção</a>
+</main>
+<script>
+const api = getApiBase();
+const stayId = new URLSearchParams(location.search).get("stay_id") || "";
+const submissionKey = crypto.randomUUID();
+let context = null, busy = false, completed = false, lockedPayload = null;
+const people = document.getElementById("people");
+const form = document.getElementById("form");
+const statusLine = document.getElementById("status");
+function status(message, error = false) { statusLine.textContent = message; statusLine.className = error ? "error" : ""; }
+function realDate(value) { const d = new Date(`${value}T00:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(value || "") && Number.isFinite(d.getTime()) && d.toISOString().slice(0,10) === value; }
+function classification(birth) {
+  // Classificacao operacional na entrada, nao uma regra oficial FNRH.
+  const arrival = context?.data_entrada;
+  if (!realDate(birth) || !realDate(arrival) || arrival < birth) return "PENDENTE";
+  const age = Number(arrival.slice(0,4)) - Number(birth.slice(0,4)) - (arrival.slice(5) < birth.slice(5) ? 1 : 0);
+  return age >= 18 ? "ADULTO" : "MENOR";
+}
+function input(label, name, type = "text", required = false, max = 160) {
+  const wrapper = document.createElement("label"); wrapper.append(document.createTextNode(label));
+  const field = document.createElement("input"); field.name = name; field.type = type; field.required = required; field.maxLength = max;
+  wrapper.append(field); return wrapper;
+}
+function select(label, name, options) {
+  const wrapper = document.createElement("label"); wrapper.append(document.createTextNode(label));
+  const field = document.createElement("select"); field.name = name;
+  for (const [value, text] of options) field.add(new Option(text, value));
+  wrapper.append(field); return wrapper;
+}
+function field(card, name) { return card.querySelector(`[name="${name}"]`); }
+function refresh() {
+  const cards = [...people.children];
+  for (const [index, card] of cards.entries()) {
+    card.querySelector("legend").textContent = `Pessoa ${index + 1}`;
+    const kind = classification(field(card, "birth_date").value);
+    card.querySelector(".classification").textContent = `${kind} — classificação local na data de entrada`;
+    const responsible = field(card, "responsible_client_person_key"); const selected = responsible.value;
+    responsible.replaceChildren(new Option("Informar depois — responsável pendente", ""));
+    for (const [adultIndex, adult] of cards.entries()) if (adult !== card && classification(field(adult, "birth_date").value) === "ADULTO") {
+      responsible.add(new Option(field(adult, "full_name").value.trim() || `Pessoa ${adultIndex + 1}`, adult.dataset.key));
+    }
+    responsible.value = [...responsible.options].some(option => option.value === selected) ? selected : "";
+    responsible.parentElement.hidden = kind !== "MENOR";
+    if (kind !== "MENOR") responsible.value = "";
+    const documentType = field(card, "document_type").value;
+    const number = field(card, "document_number"); number.required = !!documentType;
+    number.disabled = !documentType || busy || completed || !!lockedPayload;
+    number.inputMode = documentType === "CPF" ? "numeric" : "text";
+    if (!documentType) number.value = "";
+    card.querySelector(".remove").disabled = cards.length === 1 || busy || completed || !!lockedPayload;
+  }
+  document.getElementById("add").disabled = !context || cards.length >= 20 || busy || completed || !!lockedPayload;
+  document.getElementById("save").disabled = !context || busy || completed;
+}
+function addPerson() {
+  if (busy || completed || lockedPayload || people.children.length >= 20) return;
+  const card = document.createElement("fieldset"); card.dataset.key = crypto.randomUUID();
+  card.innerHTML = '<legend></legend><p class="classification muted"></p><div class="grid"></div><h3>Contato e endereço (opcionais)</h3><div class="grid personal"></div><h3>Informações para a pousada (opcionais)</h3><div class="grid operational"></div><div class="actions"><button class="remove secondary" type="button">Remover pessoa</button></div>';
+  const grid = card.querySelector(".grid");
+  grid.append(input("Nome completo", "full_name", "text", true), input("Data de nascimento", "birth_date", "date", true, 10),
+    select("Documento", "document_type", [["", "Sem documento"], ["CPF", "CPF"], ["PASSAPORTE", "Passaporte"]]), input("Número do documento", "document_number", "text", false, 80),
+    input("Nacionalidade (duas letras, ex.: BR)", "nationality", "text", false, 2), input("País de residência (duas letras)", "residence_country", "text", false, 2),
+    select("Gênero (opcional)", "gender_id", [["", "Não preenchido"], ["HOMEM", "Homem"], ["MULHER", "Mulher"], ["OUTRO", "Outro"], ["NAOINFORMADO", "Não informado"]]),
+    select("Responsável adulto desta ficha", "responsible_client_person_key", [["", "Informar depois"]]));
+  field(card,"birth_date").max = new Intl.DateTimeFormat("en-CA", {timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  const personal = [["Telefone", "phone", "tel"], ["E-mail", "email", "email"], ["CEP / código postal", "postal_code"], ["Logradouro", "street"], ["Número", "number"], ["Complemento", "complement"], ["Bairro", "neighborhood"], ["Cidade", "city"], ["Estado / região", "state"]];
+  for (const [label,name,type] of personal) card.querySelector(".personal").append(input(label,name,type || "text"));
+  card.querySelector(".operational").append(input("Placa do veículo", "vehicle_plate"), input("Previsão de chegada", "estimated_arrival", "datetime-local"));
+  const notesLabel = document.createElement("label"); notesLabel.textContent = "Observações";
+  const notes = document.createElement("textarea"); notes.name = "notes"; notes.maxLength = 1000; notesLabel.append(notes); card.querySelector(".operational").append(notesLabel);
+  card.querySelector(".remove").addEventListener("click", () => { if (!busy && !completed && !lockedPayload && people.children.length > 1) { card.remove(); refresh(); } });
+  card.addEventListener("input", refresh); card.addEventListener("change", refresh);
+  people.append(card); refresh();
+}
+function collect() {
+  const group = (card,names) => Object.fromEntries(names.map(name => [name,field(card,name).value.trim()]));
+  return {submission_key:submissionKey, people:[...people.children].map(card => ({client_person_key:card.dataset.key,
+    ...group(card,["full_name","birth_date","document_type","document_number","nationality","residence_country","gender_id"]),
+    responsible_client_person_key:field(card,"responsible_client_person_key").value || null,
+    personal_details:group(card,["phone","email","postal_code","street","number","complement","neighborhood","city","state"]),
+    operational_details:group(card,["vehicle_plate","estimated_arrival","notes"])}))};
+}
+function lockFields() {
+  people.querySelectorAll("input,select,textarea,button").forEach(el => { el.disabled = busy || completed || !!lockedPayload; });
+  refresh();
+}
+form.addEventListener("submit", async event => {
+  event.preventDefault(); if (!context || busy || completed) return;
+  const payload = lockedPayload || collect(); lockedPayload = payload; busy = true; lockFields(); status("Salvando ficha…");
+  try {
+    const response = await fetch(`${api}/stays/${encodeURIComponent(stayId)}/ficha-vivamar`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const data = await response.json();
+    if (!response.ok) {
+      if (response.status >= 400 && response.status < 500 && response.status !== 409) lockedPayload = null;
+      throw new Error(data.error || "Não foi possível salvar a ficha.");
+    }
+    completed = true; status(`Ficha recebida pela recepção: ${data.preregistros.length} pessoa(s). Nenhum check-in foi realizado.`);
+    document.getElementById("save").textContent = "Ficha recebida";
+  } catch (error) {
+    status(`${error.message}${lockedPayload ? " Você pode tentar novamente: serão mantidos a mesma chave e os mesmos dados, sem duplicar a submissão. Em caso de conflito, consulte a recepção." : " Corrija os dados e tente novamente."}`,true);
+    document.getElementById("save").textContent = lockedPayload ? "Tentar novamente com os mesmos dados" : "Enviar ficha à recepção";
+  } finally { busy = false; lockFields(); }
+});
+document.getElementById("add").addEventListener("click",addPerson);
+(async () => {
+  try {
+    if (!/^[1-9]\d*$/.test(stayId)) throw new Error("Link sem identificação válida da stay.");
+    const response = await fetch(`${api}/stays/${encodeURIComponent(stayId)}/ficha-vivamar/contexto`); const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Reserva não encontrada.");
+    context = data;
+    document.getElementById("context").textContent = `Reserva ${data.reservation_id} / ${data.sub_reservation_id} · Entrada: ${data.data_entrada || "não definida"} · Saída: ${data.data_saida || "não definida"} · Previsão: ${data.quantidade_hospede_adulto ?? 0} adulto(s), ${data.quantidade_hospede_menor ?? 0} menor(es).`;
+    addPerson();
+  } catch (error) { document.getElementById("context").textContent = "Ficha indisponível."; status(error.message,true); }
+})();
+</script>
+</body></html>
