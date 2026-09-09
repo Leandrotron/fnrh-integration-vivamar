@@ -2256,7 +2256,7 @@ app.post("/stays/:stayId/fnrh/importar-hospede-vinculado", async (req, res) => {
 
     const confirmedCandidate = officialMatches[0];
     const officialSituation = String(confirmedCandidate.situation || "").trim().toUpperCase();
-    if (!["PRECHECKIN_REALIZADO", "CHECKIN_REALIZADO"].includes(officialSituation)) {
+    if (!["PRECHECKIN_PENDENTE", "PRECHECKIN_REALIZADO", "CHECKIN_REALIZADO"].includes(officialSituation)) {
       return res.status(409).json({ error: ineligibleSituationMessage });
     }
     if (!isFnrhCandidateOfficialDataValid(confirmedCandidate)) {

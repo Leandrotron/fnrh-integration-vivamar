@@ -2496,7 +2496,7 @@ João Silva"></textarea>
       if (!candidate || !isValidFnrhHospedeUuid(fnrhHospedeId)) return null;
       if (candidate.is_local === true) return null;
       const officialSituation = String(candidate.situacao_hospede_id || "").trim().toUpperCase();
-      if (!["PRECHECKIN_REALIZADO", "CHECKIN_REALIZADO"].includes(officialSituation)) {
+      if (!["PRECHECKIN_PENDENTE", "PRECHECKIN_REALIZADO", "CHECKIN_REALIZADO"].includes(officialSituation)) {
         return null;
       }
       if (selectedGuests.some((guest) => {
