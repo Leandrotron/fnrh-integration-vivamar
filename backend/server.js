@@ -4152,8 +4152,7 @@ async function executeFnrhGuestOperation(guestId, operation, res, requestedTimes
       });
     }
     if (
-      officialBefore.code === "PRECHECKIN_NAOVINCULADO" ||
-      officialBefore.code === "PRECHECKIN_PENDENTE"
+      officialBefore.code === "PRECHECKIN_NAOVINCULADO"
     ) {
       return res.status(409).json({
         error: "O pré-check-in oficial ainda não está realizado para este hóspede.",
@@ -4161,7 +4160,7 @@ async function executeFnrhGuestOperation(guestId, operation, res, requestedTimes
       });
     }
     if (
-      officialBefore.code !== "PRECHECKIN_REALIZADO" ||
+      !["PRECHECKIN_PENDENTE", "PRECHECKIN_REALIZADO"].includes(officialBefore.code) ||
       !officialBefore.isKnown
     ) {
       return res.status(409).json({

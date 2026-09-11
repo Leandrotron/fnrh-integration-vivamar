@@ -4393,7 +4393,8 @@ João Silva"></textarea>
         stateLabel = divergence ? "Divergência de situação" : "Pré-check-in pendente";
         guidance = divergence
           ? "Há divergência entre o painel e a situação oficial. Sincronize e confira antes de continuar."
-          : "O pré-check-in ainda não está pronto para check-in.";
+          : "Pré-check-in pendente. O check-in pode ser confirmado pela recepção.";
+        allowCheckin = !divergence;
         tone = "warning";
       } else if (official.code === "PRECHECKIN_NAOVINCULADO") {
         divergence = hasCheckin || hasCheckout;
@@ -5167,9 +5168,12 @@ João Silva"></textarea>
       }
 
       const guestName = String(guest.full_name || "Hóspede").trim();
-      const confirmationMessage = dataHoraLocal
+      let confirmationMessage = dataHoraLocal
         ? `Registrar check-in FNRH de ${guestName} em ${formatFnrhManualDateTime(dataHoraLocal)}?`
         : `Confirmar check-in FNRH de ${guestName}?`;
+      if (control.official.code === "PRECHECKIN_PENDENTE") {
+        confirmationMessage = `Este hóspede está com pré-check-in pendente. Confirmar o check-in FNRH mesmo assim?\n\n${confirmationMessage}`;
+      }
       if (!window.confirm(confirmationMessage)) {
         return;
       }
