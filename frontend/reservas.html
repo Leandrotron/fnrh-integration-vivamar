@@ -1251,6 +1251,7 @@
               <div class="send-box">
                 <button id="sendFnrhBtn" type="button">Criar pré-check-in na FNRH</button>
                 <div id="actionStatus" class="status-line"></div>
+                <button id="linkExistingFnrhBtn" type="button" hidden onclick="linkExistingFnrhReservationToPanel()">Vincular ao painel</button>
                 <div class="muted">Cria o pré-check-in oficial e gera o link para o hóspede.</div>
               </div>
             </div>
@@ -1505,6 +1506,7 @@ João Silva"></textarea>
     let currentDateFilter = "all";
     let stayGuestCountsById = {};
     let isSendingFnrh = false;
+    let isLinkingExistingFnrh = false;
     let isCheckingFnrhReservationGuests = false;
     let checkingInGuestFnrhById = {};
     let checkingOutGuestFnrhById = {};
@@ -3830,6 +3832,10 @@ João Silva"></textarea>
       const rawMessage = String(stay?.fnrh_last_message || "").trim();
       const isDuplicate = rawStatus === "error" && isFnrhDuplicateMessage(rawMessage);
 
+      if (isDuplicate && String(stay?.fnrh_reserva_id || "").trim()) {
+        return { label: "Vinculada", tone: "success", message: "Reserva FNRH vinculada ao painel." };
+      }
+
       if (isDuplicate) {
         return {
           label: "Duplicada",
@@ -3977,6 +3983,8 @@ João Silva"></textarea>
 
       if (!hasGuest) {
         messages.push({ text: "Sem h\u00f3spede cadastrado", tone: "pending" });
+      } else if (fnrhStatus.label === "Vinculada") {
+        messages.push({ text: "Reserva FNRH vinculada ao painel", tone: "success" });
       } else if (selectedStay?.fnrh_last_status === "success") {
         messages.push({ text: "Enviado para FNRH", tone: "success" });
       } else if (selectedStay?.fnrh_last_status === "error" && fnrhStatus.label === "Duplicada") {
@@ -3988,7 +3996,7 @@ João Silva"></textarea>
       if (officialLink) {
         messages.push({ text: "Link oficial dispon\u00edvel", tone: "success" });
       } else if (fnrhStatus.message && selectedStay?.fnrh_last_status === "error") {
-        messages.push({ text: fnrhStatus.message, tone: "error" });
+        messages.push({ text: fnrhStatus.message, tone: fnrhStatus.tone });
       }
 
       return messages;
@@ -4509,7 +4517,10 @@ João Silva"></textarea>
       const whatsappButton = document.getElementById("copyWhatsappMessageBtn");
       const hasReservationWhatsapp = getWhatsappPhoneValue().length >= 10;
       const fnrhStatus = getFnrhStatusMeta(selectedStay);
-      sendButton.disabled = !hasStay || isSendingFnrh || hasFnrhReservaId;
+      const linkExistingButton = document.getElementById("linkExistingFnrhBtn");
+      linkExistingButton.hidden = !canLinkExistingFnrhReservation(selectedStay);
+      linkExistingButton.disabled = isLinkingExistingFnrh || isSendingFnrh;
+      sendButton.disabled = !hasStay || isSendingFnrh || isLinkingExistingFnrh || hasFnrhReservaId;
       sendButton.textContent = isSendingFnrh
         ? "Criando pré-check-in..."
         : hasFnrhReservaId
@@ -5342,6 +5353,39 @@ João Silva"></textarea>
       }
     }
 
+    function canLinkExistingFnrhReservation(stay) {
+      return !!stay?.id && !String(stay.fnrh_reserva_id || "").trim() &&
+        stay.fnrh_last_status === "error" && isFnrhDuplicateMessage(stay.fnrh_last_message);
+    }
+
+    async function linkExistingFnrhReservationToPanel() {
+      if (isLinkingExistingFnrh || isSendingFnrh || !canLinkExistingFnrhReservation(selectedStay)) return;
+      const stayId = selectedStay.id;
+      isLinkingExistingFnrh = true;
+      updateActionButtons();
+      setStatus("actionStatus", "Localizando reserva na FNRH...", "warning");
+      try {
+        await fetchJson(`${API_BASE}/stays/${encodeURIComponent(stayId)}/fnrh/vincular-reserva-existente`, { method: "POST" });
+        if (String(selectedStay?.id) !== String(stayId)) return;
+        await loadStays(stayId);
+        if (String(selectedStay?.id) !== String(stayId)) return;
+        if (!String(selectedStay?.fnrh_reserva_id || "").trim()) {
+          setStatus("actionStatus", "Vínculo confirmado pelo backend. Atualize o painel para carregar a reserva.", "warning");
+          return;
+        }
+        await loadFnrhOfficialGuests();
+        if (String(selectedStay?.id) === String(stayId)) setStatus("actionStatus", "Reserva FNRH vinculada ao painel.", "success");
+      } catch (error) {
+        if (String(selectedStay?.id) === String(stayId)) {
+          setStatus("actionStatus", error?.status && error.status < 500 ? error.message :
+            "Não foi possível confirmar o vínculo. Atualize o painel para verificar o estado antes de tentar novamente.", "error");
+        }
+      } finally {
+        isLinkingExistingFnrh = false;
+        updateActionButtons();
+      }
+    }
+
     async function sendSelectedStayToFNRH() {
       if (!selectedStay?.id) {
         setStatus("actionStatus", "Selecione uma reserva antes de enviar.", "warning");
@@ -5354,7 +5398,7 @@ João Silva"></textarea>
         return;
       }
 
-      if (isSendingFnrh) {
+      if (isSendingFnrh || isLinkingExistingFnrh) {
         return;
       }
 

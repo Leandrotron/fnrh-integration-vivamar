@@ -48,6 +48,8 @@ async function timedFnrhFetch(url, options) {
   let pathname = "";
   try { pathname = new URL(url).pathname; } catch { /* Let fetch handle invalid URLs as before. */ }
   const endpoint = /\/pessoas\/documento\//.test(pathname) ? "pessoa_por_documento"
+    : /\/reservas$/.test(pathname) ? "reserva_busca"
+    : /\/reservas\/[^/]+$/.test(pathname) ? "reserva_detalhe"
     : /\/pessoas$/.test(pathname) ? "pessoas"
     : /\/reservas\/[^/]+\/hospedes$/.test(pathname) ? "reserva_hospedes"
     : /\/hospedes\/[^/]+\/checkin$/.test(pathname) ? "hospede_checkin"
@@ -91,6 +93,7 @@ function fnrhTimingMiddleware(req, res, next) {
     : /^\/stays\/[^/]+\/fnrh\/hospede-assistido$/.test(path) ? "assisted_guest"
     : /^\/stays\/[^/]+\/fnrh\/hospedes-oficiais$/.test(path) ? "list_guests"
     : /^\/stays\/[^/]+\/fnrh\/sincronizar-situacoes$/.test(path) ? "reconcile_guests"
+    : /^\/stays\/[^/]+\/fnrh\/vincular-reserva-existente$/.test(path) ? "link_existing_reservation"
     : /^\/guests\/[^/]+\/fnrh-checkin$/.test(path) ? "checkin" : null;
   if (!op) return next();
   const context = { id: ++fnrhTimingSequence, op, started: performance.now(), externalStarted: false };
@@ -4965,6 +4968,106 @@ app.put("/guests/:id", (req, res) => {
       );
     }
   );
+});
+
+async function findFnrhReservationByCode(code) {
+  let candidate = null;
+  let expectedTotal = null;
+  let expectedPages = null;
+  let expectedSize = null;
+  let received = 0;
+  const seen = new Set();
+  // Public API v2: pagination is one-based. Unknown/inconsistent shapes fail closed.
+  for (let page = 1; page <= 100; page += 1) {
+    const body = await requestFnrhAssisted(`/reservas?page_number=${page}&codigo_reserva=${encodeURIComponent(code)}`, "GET");
+    const meta = body?.pagination;
+    const items = body?.dados;
+    if (!Array.isArray(items) || !meta ||
+        ![meta.PaginaAtual, meta.TotalPaginas, meta.TotalRegistros, meta.TamanhoPagina].every(Number.isSafeInteger) ||
+        meta.PaginaAtual !== page || meta.TotalRegistros < 0 || meta.TotalPaginas < 0 || meta.TamanhoPagina < 1 ||
+        meta.TotalPaginas !== Math.max(meta.TotalPaginas === 0 ? 0 : 1, Math.ceil(meta.TotalRegistros / meta.TamanhoPagina))) {
+      throw assistedError("Resposta de busca FNRH incompleta ou paginação inválida. Nenhum vínculo salvo.", 502);
+    }
+    if (page === 1) {
+      expectedTotal = meta.TotalRegistros;
+      expectedPages = meta.TotalPaginas;
+      expectedSize = meta.TamanhoPagina;
+    }
+    if (meta.TotalRegistros !== expectedTotal || meta.TotalPaginas !== expectedPages || meta.TamanhoPagina !== expectedSize ||
+        items.length !== Math.min(expectedSize, Math.max(0, expectedTotal - received))) {
+      throw assistedError("A listagem FNRH mudou ou está incompleta. Nenhum vínculo salvo.", 502);
+    }
+    for (const item of items) {
+      const id = normalizeFnrhUuid(item?.reserva_id);
+      if (!isValidUuid(id) || typeof item?.numero_reserva !== "string" || !item.numero_reserva.trim() || seen.has(id)) {
+        throw assistedError("Resultado FNRH ambíguo ou incompleto. Nenhum vínculo salvo.", 502);
+      }
+      seen.add(id);
+      if (item.numero_reserva === code) {
+        if (candidate) throw assistedError("Mais de uma reserva FNRH corresponde ao código comercial.", 409);
+        candidate = id;
+      }
+    }
+    received += items.length;
+    if (page >= expectedPages) {
+      if (received !== expectedTotal) throw assistedError("Listagem FNRH incompleta. Nenhum vínculo salvo.", 502);
+      if (!candidate) throw assistedError("Reserva não encontrada na FNRH para este código comercial.", 404);
+      return candidate;
+    }
+  }
+  throw assistedError("Não foi possível concluir a paginação FNRH. Nenhum vínculo salvo.", 502);
+}
+
+async function linkExistingFnrhReservation(stayId) {
+  const stay = await dbGetAsync("SELECT id, reservation_id, data_entrada, data_saida, fnrh_reserva_id FROM stays WHERE id = ? AND property_id = ?", [stayId, PROPERTY_ID]);
+  if (!stay) throw assistedError("Stay não encontrada.", 404);
+  const code = String(stay.reservation_id || "");
+  if (!code.trim() || code !== code.trim() || code.length > 200 || /[\x00-\x1f\x7f]/.test(code)) {
+    throw assistedError("A stay precisa de um código comercial válido.", 422);
+  }
+  const id = await measureFnrhPhase("link_existing_reservation", "search", () => findFnrhReservationByCode(code));
+  const existing = String(stay.fnrh_reserva_id || "").trim();
+  if (existing && normalizeFnrhUuid(existing) !== id) throw assistedError("Esta stay já está vinculada a outra reserva FNRH.", 409);
+  const body = await measureFnrhPhase("link_existing_reservation", "detail", () => requestFnrhAssisted(`/reservas/${encodeURIComponent(id)}`, "GET"));
+  const detail = body?.reserva;
+  const validDate = value => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  if (!detail || normalizeFnrhUuid(detail.reserva_id) !== id || detail.numero_reserva !== code ||
+      !validDate(detail.data_entrada) || !validDate(detail.data_saida) || detail.data_saida < detail.data_entrada ||
+      detail.data_entrada !== String(stay.data_entrada || "").slice(0, 10) ||
+      detail.data_saida !== String(stay.data_saida || "").slice(0, 10)) {
+    throw assistedError("Os dados da reserva oficial não correspondem à stay. Nenhum vínculo salvo.", 409);
+  }
+  let link = null;
+  try {
+    const url = new URL(detail.link_precheckin);
+    if (url.protocol === "https:" && !url.username && !url.password && !url.port &&
+        ["fnrh.turismo.serpro.gov.br", "fnrh.turismo.gov.br"].includes(url.hostname)) link = url.href;
+  } catch { /* An absent/invalid optional link does not prevent a verified ID link. */ }
+  const conflict = await dbGetAsync("SELECT id FROM stays WHERE LOWER(TRIM(fnrh_reserva_id)) = ? AND id <> ?", [id, stayId]);
+  if (conflict) throw assistedError("Esta reserva FNRH já está vinculada a outra stay.", 409);
+  // One atomic statement rechecks both local identity and uniqueness; no guest writes.
+  const saved = await dbRunAsync(`UPDATE stays
+    SET fnrh_reserva_id = ?, fnrh_link_precheckin_oficial = COALESCE(?, fnrh_link_precheckin_oficial)
+    WHERE id = ? AND property_id = ? AND reservation_id = ? AND data_entrada = ? AND data_saida = ?
+      AND (TRIM(COALESCE(fnrh_reserva_id, '')) = '' OR LOWER(TRIM(fnrh_reserva_id)) = ?)
+      AND NOT EXISTS (SELECT 1 FROM stays other WHERE other.id <> ? AND LOWER(TRIM(other.fnrh_reserva_id)) = ?)`,
+    [id, link, stayId, PROPERTY_ID, code, stay.data_entrada, stay.data_saida, id, stayId, id]);
+  if (saved.changes !== 1) throw assistedError("O vínculo local mudou ou conflita com outra stay. Atualize o painel.", 409);
+  return { message: "Reserva FNRH vinculada ao painel.", stay_id: stayId, fnrh_reserva_id: id };
+}
+
+app.post("/stays/:stayId/fnrh/vincular-reserva-existente", async (req, res) => {
+  const stayId = parsePositiveInteger(req.params.stayId);
+  if (!stayId) return res.status(400).json({ error: "stayId inválido." });
+  try {
+    return res.json(await linkExistingFnrhReservation(stayId));
+  } catch (error) {
+    const status = [404, 409, 422].includes(error?.status) ? error.status : 502;
+    return res.status(status).json({ error: status === 502
+      ? "Não foi possível concluir a consulta ou confirmar o vínculo. Atualize o painel para verificar o estado antes de tentar novamente."
+      : error.message });
+  }
 });
 
 app.post("/stays/:id/send-fnrh", (req, res) => {
