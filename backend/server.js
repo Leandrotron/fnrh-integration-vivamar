@@ -7,10 +7,112 @@ const sqlite3 = require("sqlite3").verbose();
 const db = require("./database/db");
 const express = require("express");
 const cors = require("cors");
+const { performance } = require("node:perf_hooks");
+const { AsyncLocalStorage } = require("node:async_hooks");
+
+const fnrhTimingContext = new AsyncLocalStorage();
+const fnrhResponseTiming = new WeakMap();
+let fnrhTimingSequence = 0;
+
+function logFnrhTiming(op, phase, started, fields = {}) {
+  const context = fnrhTimingContext.getStore();
+  console.log("[FNRH_TIMING]", JSON.stringify({
+    request_id: context?.id ?? null, op, phase,
+    duration_ms: Math.round((performance.now() - started) * 1000) / 1000,
+    ...fields
+  }));
+}
+
+function fnrhTimingError(error) {
+  const codes = [error?.name, error?.code, error?.cause?.code];
+  const timeout = codes.some(code => ["TimeoutError", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"].includes(code));
+  const type = codes.find(code => ["TimeoutError", "AbortError", "TypeError", "SyntaxError", "ETIMEDOUT", "ECONNRESET", "ENOTFOUND", "ECONNREFUSED", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"].includes(code)) || "Error";
+  return { outcome: timeout ? "timeout" : "error", error_type: type };
+}
+
+async function measureFnrhPhase(op, phase, action) {
+  const started = performance.now();
+  logFnrhTiming(op, `${phase}_start`, started);
+  try {
+    const result = await action();
+    logFnrhTiming(op, phase, started, { outcome: "complete" });
+    return result;
+  } catch (error) {
+    logFnrhTiming(op, phase, started, fnrhTimingError(error));
+    throw error;
+  }
+}
+
+async function timedFnrhFetch(url, options) {
+  // Only fixed logical names are logged; URLs, bodies and headers stay private.
+  let pathname = "";
+  try { pathname = new URL(url).pathname; } catch { /* Let fetch handle invalid URLs as before. */ }
+  const endpoint = /\/pessoas\/documento\//.test(pathname) ? "pessoa_por_documento"
+    : /\/pessoas$/.test(pathname) ? "pessoas"
+    : /\/reservas\/[^/]+\/hospedes$/.test(pathname) ? "reserva_hospedes"
+    : /\/hospedes\/[^/]+\/checkin$/.test(pathname) ? "hospede_checkin"
+    : /\/hospedes\/[^/]+\/checkout$/.test(pathname) ? "hospede_checkout"
+    : /\/hospedes\/[^/]+$/.test(pathname) ? "hospede_detalhe" : "fnrh_other";
+  const method = options?.method || "GET";
+  const started = performance.now();
+  const context = fnrhTimingContext.getStore();
+  if (context && !context.externalStarted) {
+    context.externalStarted = true;
+    logFnrhTiming(context.op, "local_before_first_request", context.started);
+  }
+  logFnrhTiming(endpoint, "fnrh_request_start", started, { method, endpoint });
+  try {
+    const response = await fetch(url, options);
+    fnrhResponseTiming.set(response, { endpoint, method });
+    logFnrhTiming(endpoint, "fnrh_request", started, { method, endpoint, status: response.status, outcome: response.ok ? "success" : "http_error" });
+    return response;
+  } catch (error) {
+    logFnrhTiming(endpoint, "fnrh_request", started, { method, endpoint, status: null, ...fnrhTimingError(error) });
+    throw error;
+  }
+}
+
+async function readFnrhResponse(response, format) {
+  const started = performance.now();
+  const meta = fnrhResponseTiming.get(response) || { endpoint: "fnrh_other", method: "GET" };
+  try {
+    const result = await response[format]();
+    logFnrhTiming(meta.endpoint, "fnrh_body", started, { ...meta, status: response.status, outcome: "complete" });
+    return result;
+  } catch (error) {
+    logFnrhTiming(meta.endpoint, "fnrh_body", started, { ...meta, status: response.status, ...fnrhTimingError(error) });
+    throw error;
+  }
+}
+
+function fnrhTimingMiddleware(req, res, next) {
+  const path = req.path;
+  const op = /^\/fnrh\/pessoas\/documento\/CPF\//.test(path) ? "lookup_cpf"
+    : /^\/stays\/[^/]+\/fnrh\/hospede-assistido$/.test(path) ? "assisted_guest"
+    : /^\/stays\/[^/]+\/fnrh\/hospedes-oficiais$/.test(path) ? "list_guests"
+    : /^\/stays\/[^/]+\/fnrh\/sincronizar-situacoes$/.test(path) ? "reconcile_guests"
+    : /^\/guests\/[^/]+\/fnrh-checkin$/.test(path) ? "checkin" : null;
+  if (!op) return next();
+  const context = { id: ++fnrhTimingSequence, op, started: performance.now(), externalStarted: false };
+  fnrhTimingContext.run(context, () => {
+    logFnrhTiming(op, "route_start", context.started);
+    let ended = false;
+    const finish = outcome => {
+      if (ended) return;
+      ended = true;
+      fnrhTimingContext.run(context, () => logFnrhTiming(op, "route_end", context.started, { status: res.statusCode, outcome }));
+    };
+    res.once("finish", () => finish("finished"));
+    res.once("close", () => finish("closed"));
+    next();
+  });
+}
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const FRONTEND_DIR = path.join(__dirname, "../frontend");
+
+app.use(fnrhTimingMiddleware);
 
 app.use(cors({
   origin: "*"
@@ -490,7 +592,7 @@ async function sendToFNRH(payload) {
   let response;
 
   try {
-    response = await fetch(finalUrl, {
+    response = await timedFnrhFetch(finalUrl, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(payload)
@@ -505,7 +607,7 @@ async function sendToFNRH(payload) {
   }
 
   let body;
-  const text = await response.text();
+  const text = await readFnrhResponse(response, "text");
 
   try {
     body = JSON.parse(text);
@@ -579,7 +681,7 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim, exibirVinculado) {
   let response;
 
   try {
-    response = await fetch(finalUrl, {
+    response = await timedFnrhFetch(finalUrl, {
       method: "GET",
       headers: requestHeaders
     });
@@ -596,7 +698,7 @@ async function fetchFnrhPreCheckins(dataInicio, dataFim, exibirVinculado) {
   }
 
   let body;
-  const text = await response.text();
+  const text = await readFnrhResponse(response, "text");
 
   try {
     body = JSON.parse(text);
@@ -659,7 +761,7 @@ async function fetchFnrhReservationGuests(fnrhReservaId) {
   let response;
 
   try {
-    response = await fetch(finalUrl, {
+    response = await timedFnrhFetch(finalUrl, {
       method: "GET",
       headers: requestHeaders
     });
@@ -677,7 +779,7 @@ async function fetchFnrhReservationGuests(fnrhReservaId) {
   }
 
   const durationMs = Date.now() - startedAt;
-  const text = await response.text();
+  const text = await readFnrhResponse(response, "text");
   let body;
 
   try {
@@ -727,13 +829,13 @@ async function requestFnrhAssisted(pathname, method = "GET", body, responseMeta 
   const { baseUrl, requestHeaders } = getFnrhRequestConfig();
   let response;
   try {
-    response = await fetch(`${baseUrl}${pathname}`, {
+    response = await timedFnrhFetch(`${baseUrl}${pathname}`, {
       method, headers: requestHeaders, redirect: "manual",
       ...(body ? { body: JSON.stringify(body) } : {})
     });
     if (responseMeta) responseMeta.status = response.status;
     if (method === "GET" && pathname.startsWith("/pessoas/documento/CPF/") && response.status === 404) return { dados: null };
-    const data = await response.json();
+    const data = await readFnrhResponse(response, "json");
     if (!response.ok) {
       throw Object.assign(assistedError(`A FNRH recusou a operação (HTTP ${response.status}). Revise os dados antes de continuar.`, 502), {
         uncertain: method !== "GET" && (response.status < 400 || response.status >= 500)
@@ -846,7 +948,7 @@ app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req,
   if (keys.some(key => fnrhAssistedBusy.has(key))) return res.status(409).json({ error: "Já existe uma inclusão em andamento." });
   keys.forEach(key => fnrhAssistedBusy.add(key));
   try {
-    const stay = await dbGetAsync("SELECT id, fnrh_reserva_id FROM stays WHERE id = ? AND property_id = ?", [stayId, PROPERTY_ID]);
+    const stay = await measureFnrhPhase("assisted_guest", "local_lookup", () => dbGetAsync("SELECT id, fnrh_reserva_id FROM stays WHERE id = ? AND property_id = ?", [stayId, PROPERTY_ID]));
     if (!stay || !isValidUuid(stay.fnrh_reserva_id)) throw assistedError("A stay precisa de uma reserva FNRH existente.", 409);
     const official = await fetchFnrhReservationGuests(stay.fnrh_reserva_id);
     const items = getFnrhOfficialCandidateItems(official.body) ||
@@ -856,7 +958,7 @@ app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req,
     if (candidates.some(c => !c || !isValidUuid(c.hospedeId) || !isValidUuid(c.pessoaId) ||
         !["CPF", "PASSAPORTE"].includes(c.documentType) || !c.documentValue || /[*•]/.test(c.documentValue) ||
         (c.documentType === "CPF" && !isValidCPF(normalizeCPF(c.documentValue))))) throw assistedError("Lista oficial sem identificação suficiente para excluir duplicidade.", 409);
-    const lookup = await lookupFnrhAssistedPerson(cpf);
+    const lookup = await measureFnrhPhase("assisted_guest", "person_lookup", () => lookupFnrhAssistedPerson(cpf));
     let pessoaId = lookup.pessoa_id || fnrhAssistedPeople.get(personKey);
     const birthDate = lookup.fields?.data_nascimento || (!pessoaId ? req.body.data_nascimento : null);
     const age = getFnrhAssistedAge(birthDate);
@@ -871,10 +973,15 @@ app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req,
         throw assistedError("O responsável deve ser outro hóspede adulto vinculado a esta reserva.");
       }
     }
-    if (lookup.pessoa_id && fnrhAssistedPeople.has(personKey) && lookup.pessoa_id !== fnrhAssistedPeople.get(personKey)) throw assistedError("Identidade divergente. Confira a pessoa na FNRH.", 409);
-    if (candidates.some(c => (pessoaId && c.pessoaId === pessoaId) ||
-        (c.documentType === "CPF" && normalizeCPF(c.documentValue) === cpf))) throw assistedError("Esta pessoa já está na reserva FNRH. Atualize a lista oficial.", 409);
-    if (req.body.is_principal && items.some(item => Number(item.hospede?.responsavel_quarto) === 1 || Number(item.hospede?.is_principal) === 1)) throw assistedError("A reserva já possui titular. Selecione acompanhante.", 409);
+    const duplicateStarted = performance.now();
+    try {
+      if (lookup.pessoa_id && fnrhAssistedPeople.has(personKey) && lookup.pessoa_id !== fnrhAssistedPeople.get(personKey)) throw assistedError("Identidade divergente. Confira a pessoa na FNRH.", 409);
+      if (candidates.some(c => (pessoaId && c.pessoaId === pessoaId) ||
+          (c.documentType === "CPF" && normalizeCPF(c.documentValue) === cpf))) throw assistedError("Esta pessoa já está na reserva FNRH. Atualize a lista oficial.", 409);
+      if (req.body.is_principal && items.some(item => Number(item.hospede?.responsavel_quarto) === 1 || Number(item.hospede?.is_principal) === 1)) throw assistedError("A reserva já possui titular. Selecione acompanhante.", 409);
+    } finally {
+      logFnrhTiming("assisted_guest", "duplicate_check", duplicateStarted);
+    }
     if (!pessoaId) {
       const person = buildFnrhAssistedPerson({ ...req.body, data_nascimento: birthDate });
       const created = await requestFnrhAssisted("/pessoas", "POST", { pessoa: person });
@@ -944,7 +1051,7 @@ async function linkFnrhPreCheckin(fnrhReservaId, fnrhHospedeId) {
   let response;
 
   try {
-    response = await fetch(finalUrl, {
+    response = await timedFnrhFetch(finalUrl, {
       method: "POST",
       headers: {
         Authorization: buildBasicAuthorization(user, apiKey),
@@ -961,7 +1068,7 @@ async function linkFnrhPreCheckin(fnrhReservaId, fnrhHospedeId) {
     throw networkError;
   }
 
-  const text = await response.text();
+  const text = await readFnrhResponse(response, "text");
   let body;
 
   try {
@@ -1217,7 +1324,7 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
   let response;
 
   try {
-    response = await fetch(finalUrl, {
+    response = await timedFnrhFetch(finalUrl, {
       method: "PATCH",
       headers: requestHeaders,
       body: checkinAtIso
@@ -1234,7 +1341,7 @@ async function sendFnrhGuestCheckin(fnrhHospedeId, checkinAtIso) {
   }
 
   let body;
-  const text = await response.text();
+  const text = await readFnrhResponse(response, "text");
   let compatible = true;
 
   try {
@@ -1318,7 +1425,7 @@ async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
   let response;
 
   try {
-    response = await fetch(finalUrl, {
+    response = await timedFnrhFetch(finalUrl, {
       method: "PATCH",
       headers: requestHeaders,
       body: checkoutAtIso
@@ -1335,7 +1442,7 @@ async function sendFnrhGuestCheckout(fnrhHospedeId, checkoutAtIso) {
   }
 
   let body;
-  const text = await response.text();
+  const text = await readFnrhResponse(response, "text");
   let compatible = true;
 
   try {
@@ -4147,7 +4254,7 @@ function getOptionalFnrhOperationTimestamp(requestBody) {
 async function executeFnrhGuestOperation(guestId, operation, res, requestedTimestamp = null) {
   let context;
   try {
-    context = await loadFnrhGuestOperationContext(guestId);
+    context = await measureFnrhPhase(operation, "local_lookup", () => loadFnrhGuestOperationContext(guestId));
   } catch (error) {
     return sendFnrhGuestOperationFailure(res, guestId, null, operation, error);
   }
@@ -4155,7 +4262,7 @@ async function executeFnrhGuestOperation(guestId, operation, res, requestedTimes
   const { guest, stay } = context;
   let officialBefore;
   try {
-    officialBefore = await confirmOfficialSituationForLocalGuest(stay, guest);
+    officialBefore = await measureFnrhPhase(operation, "revalidate_get", () => confirmOfficialSituationForLocalGuest(stay, guest));
   } catch (error) {
     return sendFnrhGuestOperationFailure(res, guest.id, stay.id, operation, error);
   }
@@ -4235,7 +4342,7 @@ async function executeFnrhGuestOperation(guestId, operation, res, requestedTimes
   let patchError = null;
 
   try {
-    patchResult = await sendPatch(guest.fnrh_hospede_id, operationTimestamp);
+    patchResult = await measureFnrhPhase(operation, "patch", () => sendPatch(guest.fnrh_hospede_id, operationTimestamp));
   } catch (error) {
     patchError = error;
   }
@@ -4243,9 +4350,7 @@ async function executeFnrhGuestOperation(guestId, operation, res, requestedTimes
   if (patchResult?.ok && patchResult.compatible !== false) {
     let officialAfter = null;
     try {
-      officialAfter = await confirmOfficialSituationForLocalGuest(stay, guest, {
-        persist: false
-      });
+      officialAfter = await measureFnrhPhase(operation, "reconcile_get", () => confirmOfficialSituationForLocalGuest(stay, guest, { persist: false }));
     } catch (error) {
       logFnrhGuestOperationError(guest.id, stay.id, operation, error);
     }
@@ -4305,9 +4410,7 @@ async function executeFnrhGuestOperation(guestId, operation, res, requestedTimes
 
   let recoverySituation = null;
   try {
-    recoverySituation = await confirmOfficialSituationForLocalGuest(stay, guest, {
-      persist: false
-    });
+    recoverySituation = await measureFnrhPhase(operation, "reconcile_get", () => confirmOfficialSituationForLocalGuest(stay, guest, { persist: false }));
   } catch (error) {
     logFnrhGuestOperationError(guest.id, stay.id, operation, error);
   }
