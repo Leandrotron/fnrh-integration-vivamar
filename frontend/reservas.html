@@ -4600,11 +4600,39 @@ João Silva"></textarea>
     let assistedGeneration = 0;
     let assistedBusy = false;
     let assistedQueriedCpf = "";
+    let assistedOfficialBirth = "";
+    let assistedResponsibleGuests = [];
+
+    function getAssistedAge(value, today = new Date()) {
+      const text = String(value || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+      const birth = new Date(`${text}T00:00:00Z`);
+      if (!Number.isFinite(+birth) || birth.toISOString().slice(0, 10) !== text || birth > today) return null;
+      let age = today.getUTCFullYear() - birth.getUTCFullYear();
+      if (today.getUTCMonth() < birth.getUTCMonth() || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age--;
+      return age;
+    }
+
+    function updateAssistedResponsible() {
+      const select = document.getElementById("assistedResponsible");
+      if (!select) return;
+      const age = getAssistedAge(assistedOfficialBirth || document.getElementById("assisted_data_nascimento").value);
+      const minor = age !== null && age < 18;
+      document.getElementById("assistedResponsibleField").hidden = !minor;
+      select.required = minor;
+      if (!minor) select.value = "";
+      document.getElementById("assistedResponsibleHint").textContent = minor && !assistedResponsibleGuests.length
+        ? "Primeiro vincule um adulto responsável à reserva com idade confirmada e consulte o CPF novamente." : "";
+      document.getElementById("assistedSubmit").disabled = assistedBusy || age === null ||
+        (minor && !assistedResponsibleGuests.some(g => g.fnrh_hospede_id === select.value));
+    }
 
     function resetAssistedForm() {
       assistedGeneration++;
       assistedBusy = false;
       assistedQueriedCpf = "";
+      assistedOfficialBirth = "";
+      assistedResponsibleGuests = [];
       document.getElementById("assistedForm").reset();
       document.getElementById("assistedFields").hidden = true;
       document.getElementById("assistedStatus").textContent = "";
@@ -4614,6 +4642,7 @@ João Silva"></textarea>
     function setAssistedBusy(busy) {
       assistedBusy = busy;
       document.querySelectorAll("#assistedForm input, #assistedForm select, #assistedForm button").forEach(el => { el.disabled = busy; });
+      updateAssistedResponsible();
     }
 
     function renderAssistedForm() {
@@ -4630,6 +4659,7 @@ João Silva"></textarea>
       ).join("")}</div>
       <button id="assistedCep" type="button" class="secondary">Consultar CEP</button>
       <label>Papel <select id="assistedRole"><option value="">Selecione</option><option value="main">Titular</option><option value="companion">Acompanhante</option></select></label>
+      <label id="assistedResponsibleField" hidden>Responsável * <select id="assistedResponsible"><option value="">Selecione o responsável</option></select><span id="assistedResponsibleHint" class="muted"></span></label>
       <p class="muted">Se já existir cadastro da pessoa, ele será reutilizado. As edições são usadas somente para criar um cadastro novo; esta opção não atualiza uma pessoa existente.</p>
       <p>Ao adicionar, será criado ou reutilizado o cadastro da pessoa e incluído um hóspede como PRECHECKIN_PENDENTE. Isso não realiza check-in nem garante pré-check-in realizado imediatamente.</p>
       <button id="assistedSubmit" type="submit">Adicionar hóspede à FNRH</button>`;
@@ -4637,6 +4667,9 @@ João Silva"></textarea>
         event.target.value = formatCPF(event.target.value);
         assistedGeneration++;
         assistedQueriedCpf = "";
+        assistedOfficialBirth = "";
+        assistedResponsibleGuests = [];
+        document.getElementById("assistedResponsible").value = "";
         document.getElementById("assistedFields").hidden = true;
         document.getElementById("assistedStatus").textContent = "Consulte o CPF para continuar.";
       });
@@ -4659,6 +4692,22 @@ João Silva"></textarea>
             field.required = !data.pessoa_id && ["nome", "data_nascimento", "genero_id", "PaisNacionalidade_id", "PaisResidencia_id", "cidade_id", "estado_id"].includes(key);
           }
           assistedQueriedCpf = cpf;
+          assistedOfficialBirth = data.fields?.data_nascimento || "";
+          assistedResponsibleGuests = [];
+          const responsibleSelect = document.getElementById("assistedResponsible");
+          responsibleSelect.innerHTML = '<option value="">Selecione o responsável</option>';
+          const age = getAssistedAge(assistedOfficialBirth);
+          if (age === null || age < 18) {
+            const official = await fetchJson(`${API_BASE}/stays/${encodeURIComponent(stayId)}/fnrh/hospedes-oficiais`);
+            if (generation !== assistedGeneration || String(selectedStay?.id) !== stayId) return;
+            assistedResponsibleGuests = (official.guests || []).filter(g => g.is_adult === true && isValidFnrhHospedeUuid(g.fnrh_hospede_id));
+            for (const guest of assistedResponsibleGuests) {
+              const option = document.createElement("option");
+              option.value = guest.fnrh_hospede_id;
+              option.textContent = [guest.full_name, guest.document_masked].filter(Boolean).join(" · ");
+              responsibleSelect.append(option);
+            }
+          }
           document.getElementById("assistedRole").value = "";
           document.getElementById("assistedFields").hidden = false;
           setStatus("assistedStatus", data.pessoa_id ? "Cadastro recuperado e reutilizável. Confira os dados." : "Consulta concluída. Confira os dados recuperados e complete os campos ausentes.");
@@ -4680,16 +4729,24 @@ João Silva"></textarea>
         } catch (error) { if (generation === assistedGeneration) setStatus("assistedStatus", error.message, "error"); }
         finally { if (generation === assistedGeneration) setAssistedBusy(false); }
       });
+      document.getElementById("assistedResponsible").addEventListener("change", updateAssistedResponsible);
+      document.getElementById("assisted_data_nascimento").addEventListener("input", updateAssistedResponsible);
       document.getElementById("assistedForm").addEventListener("submit", async event => {
         event.preventDefault();
         if (assistedBusy || !selectedStay?.fnrh_reserva_id) return;
         const cpf = onlyDigits(document.getElementById("assistedCpf").value);
         const role = document.getElementById("assistedRole").value;
         if (!assistedQueriedCpf || cpf !== assistedQueriedCpf || !role) { setStatus("assistedStatus", "Consulte o CPF e selecione titular ou acompanhante.", "error"); return; }
+        const age = getAssistedAge(assistedOfficialBirth || document.getElementById("assisted_data_nascimento").value);
+        const responsibleId = document.getElementById("assistedResponsible").value;
+        if (age === null || (age < 18 && !assistedResponsibleGuests.some(g => g.fnrh_hospede_id === responsibleId))) {
+          setStatus("assistedStatus", "Confira a data de nascimento e selecione um responsável adulto para o menor.", "error"); return;
+        }
         if (!window.confirm("Criar/reutilizar a pessoa e adicionar como PRECHECKIN_PENDENTE? Isso não realiza check-in nem garante conclusão imediata do pré-check-in.")) return;
         const generation = assistedGeneration;
         const stayId = String(selectedStay.id);
         const body = { cpf, is_principal: role === "main" };
+        if (age < 18) body.responsavel_id = responsibleId;
         for (const [key] of assistedFieldDefinitions) body[key] = document.getElementById(`assisted_${key}`).value.trim();
         setAssistedBusy(true);
         setStatus("assistedStatus", "Adicionando hóspede à FNRH...");

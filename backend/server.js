@@ -748,6 +748,16 @@ async function requestFnrhAssisted(pathname, method = "GET", body, responseMeta 
   }
 }
 
+function getFnrhAssistedAge(value, today = new Date()) {
+  const text = String(value || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const birth = new Date(`${text}T00:00:00Z`);
+  if (!Number.isFinite(+birth) || birth.toISOString().slice(0, 10) !== text || birth > today) return null;
+  let age = today.getUTCFullYear() - birth.getUTCFullYear();
+  if (today.getUTCMonth() < birth.getUTCMonth() || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age--;
+  return age;
+}
+
 async function lookupFnrhAssistedPerson(cpf) {
   const body = await requestFnrhAssisted(`/pessoas/documento/CPF/${cpf}`);
   const d = body?.dados;
@@ -848,12 +858,25 @@ app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req,
         (c.documentType === "CPF" && !isValidCPF(normalizeCPF(c.documentValue))))) throw assistedError("Lista oficial sem identificação suficiente para excluir duplicidade.", 409);
     const lookup = await lookupFnrhAssistedPerson(cpf);
     let pessoaId = lookup.pessoa_id || fnrhAssistedPeople.get(personKey);
+    const birthDate = lookup.fields?.data_nascimento || (!pessoaId ? req.body.data_nascimento : null);
+    const age = getFnrhAssistedAge(birthDate);
+    if (age === null) throw assistedError("Não foi possível confirmar a idade. Confira a data de nascimento.");
+    const responsibleId = normalizeFnrhUuid(req.body.responsavel_id);
+    if (age < 18) {
+      if (!isValidUuid(responsibleId)) throw assistedError("Selecione um responsável adulto da reserva.");
+      const responsible = candidates.filter(c => c.hospedeId === responsibleId);
+      const responsibleAge = responsible.length === 1 ? getFnrhAssistedAge(responsible[0].birthDate) : null;
+      if (responsible.length !== 1 || responsibleAge === null || responsibleAge < 18 ||
+          responsible[0].pessoaId === pessoaId || normalizeCPF(responsible[0].documentValue) === cpf) {
+        throw assistedError("O responsável deve ser outro hóspede adulto vinculado a esta reserva.");
+      }
+    }
     if (lookup.pessoa_id && fnrhAssistedPeople.has(personKey) && lookup.pessoa_id !== fnrhAssistedPeople.get(personKey)) throw assistedError("Identidade divergente. Confira a pessoa na FNRH.", 409);
     if (candidates.some(c => (pessoaId && c.pessoaId === pessoaId) ||
         (c.documentType === "CPF" && normalizeCPF(c.documentValue) === cpf))) throw assistedError("Esta pessoa já está na reserva FNRH. Atualize a lista oficial.", 409);
     if (req.body.is_principal && items.some(item => Number(item.hospede?.responsavel_quarto) === 1 || Number(item.hospede?.is_principal) === 1)) throw assistedError("A reserva já possui titular. Selecione acompanhante.", 409);
     if (!pessoaId) {
-      const person = buildFnrhAssistedPerson(req.body);
+      const person = buildFnrhAssistedPerson({ ...req.body, data_nascimento: birthDate });
       const created = await requestFnrhAssisted("/pessoas", "POST", { pessoa: person });
       pessoaId = created?.pessoa_id;
       if (!isValidUuid(pessoaId)) throw Object.assign(assistedError("Criação de pessoa sem ID confirmado. Não repita a inclusão.", 502), { uncertain: true });
@@ -861,7 +884,8 @@ app.post("/stays/:stayId/fnrh/hospede-assistido", guardFnrhAssisted, async (req,
     }
     const responseMeta = {};
     const added = await requestFnrhAssisted(`/reservas/${encodeURIComponent(stay.fnrh_reserva_id)}/hospedes`, "POST", {
-      pessoa_id: pessoaId, is_principal: req.body.is_principal, situacao_hospede_id: "PRECHECKIN_PENDENTE"
+      pessoa_id: pessoaId, is_principal: req.body.is_principal, situacao_hospede_id: "PRECHECKIN_PENDENTE",
+      ...(age < 18 ? { responsavel_id: responsibleId } : {})
     }, responseMeta);
     if (!isValidUuid(added?.hospede_id)) {
       console.log("[FNRH] fnrh_assisted_guest_uncertain_result", {
@@ -2067,6 +2091,7 @@ app.get("/stays/:stayId/fnrh/hospedes-oficiais", async (req, res) => {
       return {
         fnrh_hospede_id: candidate.hospedeId,
         full_name: candidate.fullName || null,
+        is_adult: getFnrhAssistedAge(candidate.birthDate) === null ? null : getFnrhAssistedAge(candidate.birthDate) >= 18,
         document_type: candidate.documentType || null,
         document_masked: maskFnrhOfficialDocument(candidate),
         situacao_hospede_id: candidate.situation || null,
